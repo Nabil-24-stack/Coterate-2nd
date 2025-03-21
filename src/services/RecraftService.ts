@@ -6,7 +6,8 @@
 import axios from 'axios';
 
 // API constants
-const RECRAFT_API_URL = 'https://api.recraft.ai/vectorize-image';
+// According to Recraft docs, the correct vectorize endpoint is:
+const RECRAFT_API_URL = 'https://external.api.recraft.ai/v1/images/vectorize';
 
 // This should be stored in environment variables for security
 // For development, you can use process.env.REACT_APP_RECRAFT_API_KEY
@@ -22,30 +23,47 @@ const getApiKey = () => {
  */
 export const vectorizeImage = async (imageData: string): Promise<string> => {
   try {
-    // Make sure image data is in the correct format
-    // If it's already a data URL, use it as is
-    // Otherwise, ensure it's properly formatted
-    const formattedImageData = imageData.startsWith('data:') 
-      ? imageData 
-      : `data:image/png;base64,${imageData}`;
-
     const apiKey = getApiKey();
     console.log('API Key exists:', !!apiKey); // Log if key exists, not the actual key
 
+    // Extract the base64 part if it's a data URL
+    let base64Data = imageData;
+    if (imageData.startsWith('data:')) {
+      base64Data = imageData.split(',')[1];
+    }
+
+    // Create a proper FormData object for file upload
+    const formData = new FormData();
+    
+    // Convert base64 to Blob
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/png' });
+    
+    // Append the blob as a file
+    formData.append('file', blob, 'image.png');
+    formData.append('response_format', 'b64_json');
+
+    // Following Recraft's documentation - they use Bearer token authentication
     const response = await axios.post(
       RECRAFT_API_URL,
-      { image: formattedImageData },
+      formData,
       {
         headers: {
-          'x-api-key': apiKey, // Try using x-api-key header instead of Authorization
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${apiKey}`,
+          // Content-Type is automatically set when using FormData
         }
       }
     );
 
-    // Check if the response contains the vectorized SVG
-    if (response.data && response.data.svg) {
-      return response.data.svg;
+    // According to Recraft docs, the response contains the SVG
+    if (response.data && response.data.image && response.data.image.b64_json) {
+      // Convert the base64 back to SVG string
+      return atob(response.data.image.b64_json);
     } else {
       throw new Error('Invalid response format from Recraft API');
     }
