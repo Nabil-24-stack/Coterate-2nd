@@ -57,7 +57,6 @@ export const signInWithFigma = async (): Promise<void> => {
         redirectTo: redirectUrl,
         // Enable PKCE flow for better security
         skipBrowserRedirect: false,
-        flowType: 'pkce',
         scopes: 'files:read'
       }
     });
