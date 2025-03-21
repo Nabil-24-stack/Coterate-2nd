@@ -25,7 +25,29 @@ const AuthCallback = () => {
       try {
         const supabase = getSupabase();
         
-        // Let Supabase handle the auth callback
+        // Get URL hash parameters
+        const hashParams = window.location.hash 
+          ? new URLSearchParams(window.location.hash.substring(1))
+          : new URLSearchParams(window.location.search);
+        
+        console.log('Auth callback triggered - checking for auth response');
+        
+        // First check if we have the access_token in the URL (Supabase OAuth flow)
+        if (hashParams.get('access_token')) {
+          console.log('Found access_token in URL, processing authentication...');
+        }
+        
+        // Let Supabase process the URL parameters
+        // This is needed even if getSession is called later
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        
+        if (authError) {
+          console.error('Error getting authenticated user:', authError);
+        } else if (authData && authData.user) {
+          console.log('Successfully authenticated user:', authData.user.id);
+        }
+        
+        // Get the session
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -40,7 +62,10 @@ const AuthCallback = () => {
           // Redirect to main app
           window.location.href = window.location.origin;
         } else {
-          setError('No session found after authentication attempt');
+          console.error('No session found after authentication attempt');
+          console.log('URL hash:', window.location.hash);
+          console.log('URL search:', window.location.search);
+          setError('No session found after authentication attempt. Please try again.');
         }
       } catch (err) {
         console.error('Auth callback error:', err);

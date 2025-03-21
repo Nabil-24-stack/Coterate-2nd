@@ -54,7 +54,11 @@ export const signInWithFigma = async (): Promise<void> => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'figma',
       options: {
-        redirectTo: redirectUrl
+        redirectTo: redirectUrl,
+        // Enable PKCE flow for better security
+        skipBrowserRedirect: false,
+        flowType: 'pkce',
+        scopes: 'files:read'
       }
     });
     
@@ -140,15 +144,30 @@ export const refreshAuthState = async (): Promise<{
     
     // Get the current session
     const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
+    
+    if (error) {
+      console.error('Error fetching session:', error);
+      return { isLoggedIn: false, user: null };
+    }
     
     // If we have a session, get the user
     if (session) {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      
-      console.log("Auth refreshed: User is logged in", user?.email);
-      return { isLoggedIn: true, user };
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError) {
+          console.error('Error fetching user:', userError);
+          return { isLoggedIn: true, user: session.user }; // Use session.user as fallback
+        }
+        
+        if (user) {
+          console.log("Auth refreshed: User is logged in", user?.email);
+          return { isLoggedIn: true, user };
+        }
+      } catch (userError) {
+        console.error('Exception fetching user:', userError);
+        return { isLoggedIn: true, user: session.user }; // Use session.user as fallback
+      }
     }
     
     console.log("Auth refreshed: No active session");
