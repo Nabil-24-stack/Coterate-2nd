@@ -88,6 +88,7 @@ export const getCurrentSession = async () => {
   try {
     const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
+    console.log("Current session:", data.session ? "Active" : "None");
     return data.session;
   } catch (error) {
     console.error('Error getting session:', error);
@@ -104,6 +105,10 @@ export const getCurrentUser = async () => {
   try {
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error) throw error;
+    if (user) {
+      console.log("Current user:", user.email);
+      console.log("User metadata:", user.user_metadata);
+    }
     return user;
   } catch (error) {
     console.error('Error getting user:', error);
@@ -116,7 +121,41 @@ export const getCurrentUser = async () => {
  */
 export const isAuthenticated = async (): Promise<boolean> => {
   const session = await getCurrentSession();
-  return !!session;
+  const isAuth = !!session;
+  console.log("Is authenticated:", isAuth);
+  return isAuth;
+};
+
+/**
+ * Refresh the authentication state
+ * Should be called on app initialization
+ */
+export const refreshAuthState = async (): Promise<{
+  isLoggedIn: boolean;
+  user: any | null;
+}> => {
+  try {
+    const supabase = getSupabase();
+    
+    // Get the current session
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    
+    // If we have a session, get the user
+    if (session) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      
+      console.log("Auth refreshed: User is logged in", user?.email);
+      return { isLoggedIn: true, user };
+    }
+    
+    console.log("Auth refreshed: No active session");
+    return { isLoggedIn: false, user: null };
+  } catch (error) {
+    console.error('Error refreshing auth state:', error);
+    return { isLoggedIn: false, user: null };
+  }
 };
 
 // Database Operations

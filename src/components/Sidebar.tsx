@@ -350,7 +350,7 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
 };
 
 export const Sidebar: React.FC = () => {
-  const { pages, currentPage, setCurrentPage, addPage, renamePage, isLoggedIn } = usePageContext();
+  const { pages, currentPage, setCurrentPage, addPage, renamePage, isLoggedIn, userProfile } = usePageContext();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [editingPageName, setEditingPageName] = useState('');
@@ -362,29 +362,22 @@ export const Sidebar: React.FC = () => {
   
   // Get user info when logged in
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      if (isLoggedIn) {
-        try {
-          const user = await getCurrentUser();
-          if (user) {
-            // Use real user data from Supabase/Figma
-            setUserName(user.user_metadata?.full_name || user.user_metadata?.name || 'Figma User');
-            setUserEmail(user.email || 'user@example.com');
-          }
-        } catch (error) {
-          console.error('Error fetching user info:', error);
-          // Fallback to defaults
-          setUserName('Figma User');
-          setUserEmail('user@example.com');
-        }
-      } else {
-        setUserName('');
-        setUserEmail('');
-      }
-    };
-    
-    fetchUserInfo();
-  }, [isLoggedIn]);
+    if (isLoggedIn && userProfile) {
+      // Get real user data from the user profile
+      const name = userProfile.user_metadata?.full_name || 
+                   userProfile.user_metadata?.name || 
+                   'Figma User';
+      
+      const email = userProfile.email || 'user@example.com';
+      
+      console.log('Setting user info from profile:', name, email);
+      setUserName(name);
+      setUserEmail(email);
+    } else {
+      setUserName('');
+      setUserEmail('');
+    }
+  }, [isLoggedIn, userProfile]);
   
   // Close user dropdown when clicking outside
   useEffect(() => {

@@ -453,7 +453,7 @@ const UrlInput = styled.input`
 `;
 
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage, analyzeFigmaDesign, isLoggedIn } = usePageContext();
+  const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage, analyzeFigmaDesign, isLoggedIn, userProfile } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -671,7 +671,7 @@ export const Canvas: React.FC = () => {
       await signInWithFigma();
     } catch (error) {
       console.error('Error signing in with Figma:', error);
-      alert('Error signing in with Figma. Please try again.');
+      setErrorMessage("Error signing in with Figma. Please try again.");
     }
   };
   
@@ -818,7 +818,7 @@ export const Canvas: React.FC = () => {
               fontSize: '14px'
             }}>
               <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>Error</p>
-              <p>{errorMessage}</p>
+              <p style={{ whiteSpace: 'pre-line', margin: 0 }}>{errorMessage}</p>
             </div>
           )}
           {!isLoggedIn && (
@@ -829,6 +829,13 @@ export const Canvas: React.FC = () => {
               <ActionButton onClick={handleFigmaLogin}>
                 Login with Figma
               </ActionButton>
+            </div>
+          )}
+          {isLoggedIn && userProfile && (
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <p style={{ marginBottom: '10px', color: '#4CAF50' }}>
+                Logged in as {userProfile.user_metadata?.name || userProfile.email}
+              </p>
             </div>
           )}
         </DesignCard>

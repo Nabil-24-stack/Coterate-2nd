@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Page, PageContextType, UIComponent, UIAnalysis } from '../types';
 import { analyzeImageWithGPT4Vision, generateImprovementSuggestions } from '../services/ImageAnalysisService';
 import { importFigmaDesign, isFigmaApiConfigured } from '../services/FigmaService';
-import { isAuthenticated, getPages, savePage, deletePage as deletePageFromDB } from '../services/SupabaseService';
+import { isAuthenticated, getPages, savePage, deletePage as deletePageFromDB, refreshAuthState } from '../services/SupabaseService';
+import { getSupabase } from '../services/SupabaseService';
 
 // Simple function to generate a UUID
 const generateUUID = (): string => {
@@ -52,15 +53,19 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   // State for authentication status
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   // Check authentication status and load user's pages on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const authenticated = await isAuthenticated();
-      setIsLoggedIn(authenticated);
+      const { isLoggedIn, user } = await refreshAuthState();
+      
+      console.log("Auth state refreshed:", isLoggedIn ? "Logged in" : "Not logged in");
+      setIsLoggedIn(isLoggedIn);
+      setUserProfile(user);
       
       // If logged in, load pages from Supabase
-      if (authenticated) {
+      if (isLoggedIn) {
         try {
           const userPages = await getPages();
           if (userPages.length > 0) {
@@ -74,6 +79,53 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     
     checkAuth();
+    
+    // Set up auth state change listener
+    const supabase = getSupabase();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("Auth state change event:", event);
+        
+        if (event === 'SIGNED_IN') {
+          console.log("User signed in!");
+          const { data: { user }, error } = await supabase.auth.getUser();
+          if (!error && user) {
+            setIsLoggedIn(true);
+            setUserProfile(user);
+            
+            // Load user's pages
+            try {
+              const userPages = await getPages();
+              if (userPages.length > 0) {
+                setPages(userPages);
+                setCurrentPage(userPages[0]);
+              }
+            } catch (error) {
+              console.error('Error loading pages after sign in:', error);
+            }
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log("User signed out!");
+          setIsLoggedIn(false);
+          setUserProfile(null);
+          
+          // Reset to default page
+          const defaultPage: Page = {
+            id: generateUUID(),
+            name: 'Default Page',
+            baseImage: '',
+            showOriginalWithAnalysis: false,
+            isAnalyzing: false
+          };
+          setPages([defaultPage]);
+          setCurrentPage(defaultPage);
+        }
+      }
+    );
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
   
   // Add a new page
@@ -282,6 +334,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         analyzeAndVectorizeImage,
         toggleOriginalImage,
         isLoggedIn,
+        userProfile,
       }}
     >
       {children}

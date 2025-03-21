@@ -29,6 +29,7 @@ export interface PageContextType {
   analyzeAndVectorizeImage?: () => Promise<void>;
   toggleOriginalImage?: () => void;
   isLoggedIn: boolean;
+  userProfile?: any;
 }
 
 // UI Component Analysis Types
