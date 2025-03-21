@@ -12,18 +12,33 @@ const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 
   process.env.SUPABASE_URL || 
   process.env.REACT_APP_SUPABASE_URL || 
-  '';
+  'https://tsqfwommnuhtbeupuwwm.supabase.co'; // Fallback to known URL
 
-const supabaseAnonKey = 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-  process.env.SUPABASE_ANON_KEY || 
-  process.env.REACT_APP_SUPABASE_ANON_KEY || 
-  // Additional environment variable names that might be used in Vercel
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_KEY ||
-  '';
+// For the anon key, check all possible environment variable names
+// This accommodates different naming conventions in different environments
+const possibleKeyNames = [
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_ANON_KEY',
+  'REACT_APP_SUPABASE_ANON_KEY',
+  'SUPABASE_KEY',
+  'NEXT_PUBLIC_SUPABASE_KEY'
+];
+
+let supabaseAnonKey = '';
+for (const keyName of possibleKeyNames) {
+  if (process.env[keyName] && process.env[keyName] !== 'replace_with_your_key') {
+    supabaseAnonKey = process.env[keyName] || '';
+    console.log(`Found key in ${keyName}`);
+    break;
+  }
+}
+
+// If we couldn't find a key in the environment, use a hardcoded key as last resort
+// This is not ideal, but prevents the app from failing completely during development
+if (!supabaseAnonKey) {
+  console.warn('No API key found in environment variables, using hardcoded key');
+  supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbnVodGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDE1NTAyODEsImV4cCI6MjAxNzEyNjI4MX0.w9GgDWWdWLbr31l03oWf7qP40z05P8EptXBgrA_1RJ4';
+}
 
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -34,18 +49,10 @@ export const getSupabase = (): SupabaseClient => {
       console.error('Supabase configuration error: Missing URL or anon key');
       console.log('URL configured:', Boolean(supabaseUrl));
       console.log('Key configured:', Boolean(supabaseAnonKey));
-      // Log all possible environment variable names for debugging
-      console.log('Checking environment variables:');
-      console.log('NEXT_PUBLIC_SUPABASE_URL:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL));
-      console.log('SUPABASE_URL:', Boolean(process.env.SUPABASE_URL));
-      console.log('REACT_APP_SUPABASE_URL:', Boolean(process.env.REACT_APP_SUPABASE_URL));
-      console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
-      console.log('SUPABASE_ANON_KEY:', Boolean(process.env.SUPABASE_ANON_KEY));
-      console.log('REACT_APP_SUPABASE_ANON_KEY:', Boolean(process.env.REACT_APP_SUPABASE_ANON_KEY));
       throw new Error('Supabase URL and anon key must be provided');
     }
     
-    // Check if keys are placeholder values
+    // Check if keys are still placeholder values
     if (supabaseAnonKey === 'replace_with_your_key') {
       console.error('Supabase configuration error: Using placeholder API key');
       throw new Error('Invalid Supabase API key (placeholder detected)');
@@ -59,7 +66,14 @@ export const getSupabase = (): SupabaseClient => {
       console.log('Using API key (masked):', maskedKey);
     }
     
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    // Create the Supabase client with the URL and key
+    try {
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+      console.log('Supabase client created successfully');
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      throw new Error(`Failed to create Supabase client: ${error.message || 'Unknown error'}`);
+    }
   }
   return supabaseInstance;
 };
