@@ -3,6 +3,7 @@ export interface Page {
   id: string;
   name: string;
   baseImage?: string;
+  vectorizedSvg?: string;
   user_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -17,4 +18,5 @@ export interface PageContextType {
   deletePage: (id: string) => void;
   setCurrentPage: (page: Page) => void;
   renamePage: (id: string, newName: string) => void;
+  vectorizeCurrentPage?: () => Promise<void>;
 } 

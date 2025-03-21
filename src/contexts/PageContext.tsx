@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { Page, PageContextType } from '../types';
+import { vectorizeImage, isRecraftConfigured } from '../services/RecraftService';
 
 // Simple function to generate a UUID
 const generateUUID = (): string => {
@@ -18,7 +19,8 @@ const PageContext = createContext<PageContextType>({
   updatePage: () => {},
   deletePage: () => {},
   setCurrentPage: () => {},
-  renamePage: () => {}
+  renamePage: () => {},
+  vectorizeCurrentPage: async () => {}
 });
 
 // Custom hook to use the context
@@ -90,6 +92,33 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const renamePage = (id: string, newName: string) => {
     updatePage(id, { name: newName });
   };
+
+  // Vectorize the current page's image
+  const vectorizeCurrentPage = async () => {
+    // Check if API is configured
+    if (!isRecraftConfigured()) {
+      console.error('Recraft API key not configured');
+      return;
+    }
+
+    // Check if we have a current page and it has an image
+    if (!currentPage || !currentPage.baseImage) {
+      console.error('No image available to vectorize');
+      return;
+    }
+
+    try {
+      // Call the Recraft API to vectorize the image
+      const svgData = await vectorizeImage(currentPage.baseImage);
+      
+      // Update the current page with the vectorized SVG
+      if (svgData) {
+        updatePage(currentPage.id, { vectorizedSvg: svgData });
+      }
+    } catch (error) {
+      console.error('Error vectorizing image:', error);
+    }
+  };
   
   return (
     <PageContext.Provider
@@ -100,7 +129,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePage,
         deletePage,
         setCurrentPage,
-        renamePage
+        renamePage,
+        vectorizeCurrentPage
       }}
     >
       {children}

@@ -108,6 +108,24 @@ const ActionButton = styled.button`
   &:hover {
     background-color: #f5f5f5;
   }
+
+  &.primary {
+    background-color: #4A90E2;
+    color: white;
+    
+    &:hover {
+      background-color: #3A80D2;
+    }
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    
+    &:hover {
+      background-color: white;
+    }
+  }
 `;
 
 // Infinite Canvas
@@ -201,6 +219,14 @@ const DesignImage = styled.img`
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 `;
 
+// SVG container for vectorized content
+const VectorizedSvgContainer = styled.div`
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+`;
+
 // Add the EmptyCanvas component
 const EmptyCanvasMessage = styled.div`
   display: flex;
@@ -215,14 +241,35 @@ const EmptyCanvasMessage = styled.div`
   line-height: 1.5;
 `;
 
+// Loading indicator
+const LoadingIndicator = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 20px 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+`;
+
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage } = usePageContext();
+  const { currentPage, updatePage, vectorizeCurrentPage } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isVectorizing, setIsVectorizing] = useState(false);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   
@@ -325,7 +372,10 @@ export const Canvas: React.FC = () => {
           reader.onload = (event) => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
-              updatePage(currentPage.id, { baseImage: imageUrl });
+              updatePage(currentPage.id, { 
+                baseImage: imageUrl,
+                vectorizedSvg: undefined // Clear any previous vectorized SVG when a new image is pasted
+              });
             }
           };
           reader.readAsDataURL(blob);
@@ -339,6 +389,20 @@ export const Canvas: React.FC = () => {
       document.removeEventListener('paste', handlePaste);
     };
   }, [currentPage, updatePage]);
+
+  // Handle vectorization
+  const handleVectorize = async () => {
+    if (!currentPage || !currentPage.baseImage || !vectorizeCurrentPage) return;
+    
+    try {
+      setIsVectorizing(true);
+      await vectorizeCurrentPage();
+    } catch (error) {
+      console.error('Error vectorizing image:', error);
+    } finally {
+      setIsVectorizing(false);
+    }
+  };
   
   return (
     <>
@@ -355,6 +419,13 @@ export const Canvas: React.FC = () => {
           <HeaderActions>
             <ActionButton onClick={resetCanvas}>
               Reset View
+            </ActionButton>
+            <ActionButton 
+              className={`primary ${(!currentPage || !currentPage.baseImage) ? 'disabled' : ''}`}
+              onClick={handleVectorize}
+              disabled={!currentPage || !currentPage.baseImage || isVectorizing}
+            >
+              {isVectorizing ? 'Vectorizing...' : 'Vectorize Image'}
             </ActionButton>
           </HeaderActions>
         </CanvasHeader>
@@ -374,7 +445,17 @@ export const Canvas: React.FC = () => {
             scale={scale}
           >
             <DesignContainer>
-              {currentPage && currentPage.baseImage ? (
+              {isVectorizing && (
+                <LoadingIndicator>
+                  Vectorizing image...
+                </LoadingIndicator>
+              )}
+              
+              {currentPage && currentPage.vectorizedSvg ? (
+                <DesignCard>
+                  <VectorizedSvgContainer dangerouslySetInnerHTML={{ __html: currentPage.vectorizedSvg }} />
+                </DesignCard>
+              ) : currentPage && currentPage.baseImage ? (
                 <DesignCard>
                   <DesignImage 
                     src={currentPage.baseImage} 
