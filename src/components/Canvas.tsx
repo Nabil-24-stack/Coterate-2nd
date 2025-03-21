@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, MouseEvent } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
+// Import the logo directly from assets
+import logo from '../assets/coterate-logo.svg';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -344,7 +346,7 @@ export const Canvas: React.FC = () => {
       <CanvasContainer>
         <CanvasHeader>
           <Logo>
-            <LogoImage src={`${process.env.PUBLIC_URL}/coterate-logo.svg`} alt="Coterate Logo" />
+            <LogoImage src={logo} alt="Coterate Logo" />
             Coterate UI
           </Logo>
           
