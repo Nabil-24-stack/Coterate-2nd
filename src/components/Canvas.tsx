@@ -4,6 +4,8 @@ import { usePageContext } from '../contexts/PageContext';
 // Import the logo directly from assets
 import logo from '../assets/coterate-logo.svg';
 import { UIComponent } from '../types';
+import { signInWithFigma, isAuthenticated } from '../services/SupabaseService';
+import { parseFigmaUrl } from '../services/FigmaService';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -427,6 +429,29 @@ const LoadingIndicator = styled.div`
   z-index: 1000;
 `;
 
+// Add this for Figma URL input
+const FigmaUrlInput = styled.div`
+  display: flex;
+  gap: 10px;
+  margin: 0 auto;
+  max-width: 600px;
+`;
+
+const UrlInput = styled.input`
+  flex: 1;
+  padding: 8px 16px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid #E3E6EA;
+  color: #333;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  
+  &:focus {
+    outline: none;
+    border-color: #4A90E2;
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage } = usePageContext();
   
@@ -439,6 +464,11 @@ export const Canvas: React.FC = () => {
   const [selectedComponent, setSelectedComponent] = useState<UIComponent | null>(null);
   
   const canvasRef = useRef<HTMLDivElement>(null);
+  
+  // Add these state variables
+  const [figmaUrl, setFigmaUrl] = useState<string>('');
+  const [isValidUrl, setIsValidUrl] = useState<boolean>(true);
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
@@ -557,6 +587,14 @@ export const Canvas: React.FC = () => {
           break;
         }
       }
+      
+      // Check if the pasted content is a Figma URL
+      const clipboardText = e.clipboardData?.getData('text');
+      if (clipboardText && validateFigmaUrl(clipboardText) && currentPage.analyzeFigmaDesign) {
+        e.preventDefault();
+        currentPage.analyzeFigmaDesign(clipboardText);
+        return;
+      }
     };
     
     document.addEventListener('paste', handlePaste);
@@ -565,15 +603,81 @@ export const Canvas: React.FC = () => {
     };
   }, [currentPage, updatePage]);
 
-  // Handle analyze and vectorize
-  const handleAnalyzeAndVectorize = async () => {
-    if (!currentPage || !currentPage.baseImage || !analyzeAndVectorizeImage) return;
+  // Add this function to validate Figma URL
+  const validateFigmaUrl = (url: string): boolean => {
+    if (!url) return false;
     
     try {
-      await analyzeAndVectorizeImage();
-      setShowAnalysisPanel(true);
+      parseFigmaUrl(url);
+      return true;
     } catch (error) {
-      console.error('Error analyzing and vectorizing image:', error);
+      console.error('Invalid Figma URL:', error);
+      return false;
+    }
+  };
+  
+  // Add function to handle Figma URL input change
+  const handleFigmaUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setFigmaUrl(url);
+    
+    // Only validate if there's a URL entered
+    if (url) {
+      setIsValidUrl(validateFigmaUrl(url));
+    } else {
+      setIsValidUrl(true); // Reset validation when empty
+    }
+  };
+  
+  // Add function to handle Figma URL submission
+  const handleFigmaUrlSubmit = async () => {
+    if (!validateFigmaUrl(figmaUrl)) {
+      setIsValidUrl(false);
+      return;
+    }
+    
+    try {
+      // Analyze the Figma design using the context function
+      if (currentPage.analyzeFigmaDesign) {
+        await currentPage.analyzeFigmaDesign(figmaUrl);
+        
+        // Reset the UI after processing
+        setFigmaUrl('');
+        setShowUrlInput(false);
+      }
+    } catch (error) {
+      console.error('Error analyzing Figma design:', error);
+      alert('Error analyzing Figma design. Please check the URL and try again.');
+    }
+  };
+  
+  // Add function to handle Figma login
+  const handleFigmaLogin = async () => {
+    try {
+      await signInWithFigma();
+    } catch (error) {
+      console.error('Error signing in with Figma:', error);
+      alert('Error signing in with Figma. Please try again.');
+    }
+  };
+  
+  // Handle analyze and vectorize
+  const handleAnalyzeAndVectorize = async () => {
+    if (!currentPage?.baseImage && !showUrlInput) {
+      // If no image is loaded and URL input isn't showing, show the URL input
+      setShowUrlInput(true);
+      return;
+    }
+    
+    if (showUrlInput) {
+      // If URL input is showing, hide it
+      setShowUrlInput(false);
+      return;
+    }
+    
+    // Proceed with existing image analysis if available
+    if (currentPage?.baseImage && currentPage.analyzeAndVectorizeImage) {
+      await currentPage.analyzeAndVectorizeImage();
     }
   };
 
@@ -591,7 +695,7 @@ export const Canvas: React.FC = () => {
   // Determine if analysis mode is active
   const isAnalysisMode = currentPage?.uiComponents && currentPage.uiComponents.length > 0;
   
-  // Determine what to display based on current state and settings
+  // Modify the render content function to include Figma URL input
   const renderContent = () => {
     // No content to show
     if (!currentPage) {
@@ -663,6 +767,51 @@ export const Canvas: React.FC = () => {
       </DesignCard>
     );
   };
+  
+  // Add this before the return statement
+  if (showUrlInput) {
+    return (
+      <DesignContainer>
+        <DesignCard style={{ padding: '20px', minWidth: '600px' }}>
+          <h3 style={{ marginBottom: '20px' }}>Import Figma Design</h3>
+          <p style={{ marginBottom: '20px' }}>
+            Paste a "Copy link to selection" URL from Figma to analyze and improve the design.
+          </p>
+          <FigmaUrlInput>
+            <UrlInput
+              type="text"
+              placeholder="Paste Figma URL here..."
+              value={figmaUrl}
+              onChange={handleFigmaUrlChange}
+              style={isValidUrl ? {} : { borderColor: '#e74c3c' }}
+            />
+            <ActionButton
+              className="primary"
+              onClick={handleFigmaUrlSubmit}
+              disabled={!isValidUrl || !figmaUrl}
+            >
+              Import
+            </ActionButton>
+          </FigmaUrlInput>
+          {!isValidUrl && (
+            <p style={{ color: '#e74c3c', marginTop: '10px', fontSize: '14px' }}>
+              Please enter a valid Figma URL (Copy link to selection format).
+            </p>
+          )}
+          {!currentPage.isLoggedIn && (
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <p style={{ marginBottom: '10px' }}>
+                Login with Figma to access your designs:
+              </p>
+              <ActionButton onClick={handleFigmaLogin}>
+                Login with Figma
+              </ActionButton>
+            </div>
+          )}
+        </DesignCard>
+      </DesignContainer>
+    );
+  }
   
   return (
     <>

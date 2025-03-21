@@ -3,6 +3,9 @@ export interface Page {
   id: string;
   name: string;
   baseImage?: string;
+  figmaUrl?: string;
+  figmaFileId?: string;
+  figmaNodeId?: string;
   vectorizedSvg?: string;
   showOriginalWithAnalysis?: boolean;
   isAnalyzing?: boolean;
@@ -22,13 +25,16 @@ export interface PageContextType {
   deletePage: (id: string) => void;
   setCurrentPage: (page: Page) => void;
   renamePage: (id: string, newName: string) => void;
+  analyzeFigmaDesign?: (figmaUrl: string) => Promise<void>;
   analyzeAndVectorizeImage?: () => Promise<void>;
   toggleOriginalImage?: () => void;
+  isLoggedIn: boolean;
 }
 
 // UI Component Analysis Types
 export interface UIComponent {
   id: string;
+  figmaId?: string;
   type: 'button' | 'text_field' | 'icon' | 'image' | 'text' | 'container' | 'unknown';
   position: {
     x: number;
@@ -69,4 +75,14 @@ export interface UIAnalysis {
     component: string;
     suggestions: string[];
   }[];
+}
+
+// Figma API Types
+export interface FigmaDesignData {
+  fileData: any;
+  nodeId: string;
+  fileId: string;
+  components: UIComponent[];
+  imageData: string;
+  figmaUrl: string;
 } 

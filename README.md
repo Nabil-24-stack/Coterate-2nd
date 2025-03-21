@@ -1,13 +1,16 @@
 # Coterate UI Simplified
 
-A simplified version of the Coterate UI design tool that focuses only on the UI and page management functionality without any AI integrations.
+A UI design analysis and iteration tool that uses Figma API and GPT-4o to identify UI components and provide improvement suggestions.
 
 ## Features
 
 - **Page Management**: Create, rename, and delete pages to organize your UI designs
-- **UI Pasting**: Paste UI mockups from your clipboard directly into the canvas
+- **Figma Design Import**: Paste a "Copy link to selection" URL from Figma to analyze UI designs
+- **Authentication**: Login with Figma to access your designs directly
 - **Canvas Manipulation**: Pan and zoom the canvas for better viewing and manipulation of designs
-- **Image Vectorization**: Convert pasted UI mockups into SVG vector images using Recraft AI
+- **Component Identification**: Automatically identifies UI components like buttons, text fields, and more
+- **Design Analysis**: Uses GPT-4o to analyze components and suggest improvements
+- **Data Persistence**: Save your designs in Supabase database
 
 ## Getting Started
 
@@ -15,7 +18,9 @@ A simplified version of the Coterate UI design tool that focuses only on the UI 
 
 - Node.js (v14 or higher)
 - npm (v6 or higher)
-- Recraft API Key (for vectorization feature)
+- Supabase account
+- Figma developer account
+- OpenAI API key (for GPT-4o access)
 
 ### Installation
 
@@ -32,7 +37,9 @@ A simplified version of the Coterate UI design tool that focuses only on the UI 
 
 3. Set up environment variables:
    - Create a `.env` file based on `.env.example`
-   - Add your Recraft API key to the `.env` file
+   - Add your Supabase URL and anon key
+   - Add your Figma access token
+   - Add OpenAI API key for GPT-4o
 
 4. Start the development server:
    ```
@@ -41,7 +48,26 @@ A simplified version of the Coterate UI design tool that focuses only on the UI 
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+## Application Flow
+
+1. **Input & Design Import**
+   - User pastes a Figma URL or image into Coterate
+   - Figma API fetches structured design data
+
+2. **Preprocessing & Component Identification**
+   - Process imported data to identify UI components
+   - Map components to internal data model
+
+3. **Generating Improvement Instructions with GPT-4o**
+   - GPT-4o analyzes the design and suggests improvements
+   - Generates a detailed "improvement blueprint"
+
 ## Usage
+
+### Authentication
+
+- Click "Sign In with Figma" in the sidebar to authenticate with Figma
+- This enables direct access to your Figma designs via the API
 
 ### Adding Pages
 
@@ -55,11 +81,12 @@ Click the "•••" menu on any page and select "Rename Page".
 
 Click the "•••" menu on any page and select "Delete Page".
 
-### Pasting UI Designs
+### Importing Figma Designs
 
-1. Copy a UI design to your clipboard (from Figma, Sketch, or any other design tool)
-2. Click on the current page in the app
-3. Paste (Ctrl+V or Cmd+V) the design into the app
+1. Copy a "Copy link to selection" URL from Figma
+2. Click the "Analyze Design" button in Coterate
+3. Paste the Figma URL and click "Import"
+4. Wait for the design to be processed and analyzed
 
 ### Canvas Navigation
 
@@ -67,18 +94,29 @@ Click the "•••" menu on any page and select "Delete Page".
 - **Zoom**: Use the mouse wheel to zoom in and out
 - **Reset View**: Click the "Reset View" button in the top-right corner
 
-### Vectorizing Images
+## Supabase Setup
 
-1. Paste a UI design into the canvas
-2. Click the "Vectorize Image" button in the top-right corner
-3. Wait for the vectorization process to complete
-4. The vectorized SVG will replace the original image on the canvas
+1. Create a Supabase project
+2. Set up Figma OAuth provider in Supabase Authentication settings
+3. Use this callback URL: `https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback`
+4. Create a 'pages' table with the following schema:
+   - id (uuid, primary key)
+   - name (text)
+   - user_id (uuid, foreign key to auth.users)
+   - baseImage (text)
+   - figmaUrl (text)
+   - figmaFileId (text)
+   - figmaNodeId (text)
+   - uiComponents (jsonb)
+   - uiAnalysis (jsonb)
+   - created_at (timestamp)
+   - updated_at (timestamp)
 
 ## Project Structure
 
 - `src/components/`: UI components
 - `src/contexts/`: React context providers
-- `src/services/`: API services including Recraft integration
+- `src/services/`: API services including Figma, Supabase and GPT-4o integrations
 - `src/types/`: TypeScript type definitions
 
 ## Deployment with Vercel
@@ -87,8 +125,22 @@ This project is configured for easy deployment with Vercel:
 
 1. Push your code to a GitHub repository
 2. Import the project in Vercel
-3. Set up the environment variable `REACT_APP_RECRAFT_API_KEY` in the Vercel dashboard
+3. Set up the environment variables in the Vercel dashboard
 4. Deploy!
+
+## Next Steps for Implementation
+
+1. **Add UI Iteration via AI-Powered Generation**
+   - Implement image generation using stable diffusion models
+   - Ensure generated UIs preserve original structure and components
+
+2. **Implement Post-Processing & Quality Assurance**
+   - Validate generated UIs against original component map
+   - Add refinement loop for correcting issues
+
+3. **Enhance UI Reassembly & Display**
+   - Show both original and iterated UI side by side
+   - Add interactive features for further iteration
 
 ## Built With
 
@@ -96,4 +148,6 @@ This project is configured for easy deployment with Vercel:
 - [TypeScript](https://www.typescriptlang.org/) - Type safety
 - [Styled Components](https://styled-components.com/) - Styling
 - [React Router](https://reactrouter.com/) - Routing
-- [Recraft AI](https://recraft.ai) - Image vectorization
+- [Supabase](https://supabase.io/) - Authentication and database
+- [Figma API](https://www.figma.com/developers) - Design import
+- [OpenAI GPT-4o](https://openai.com/) - AI analysis

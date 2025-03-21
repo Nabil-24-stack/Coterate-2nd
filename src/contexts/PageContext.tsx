@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Page, PageContextType, UIComponent, UIAnalysis } from '../types';
-import { vectorizeImage, vectorizeAllComponents, isRecraftConfigured } from '../services/RecraftService';
 import { analyzeImageWithGPT4Vision, generateImprovementSuggestions } from '../services/ImageAnalysisService';
+import { importFigmaDesign, isFigmaApiConfigured } from '../services/FigmaService';
+import { isAuthenticated, getPages, savePage, deletePage as deletePageFromDB } from '../services/SupabaseService';
 
 // Simple function to generate a UUID
 const generateUUID = (): string => {
@@ -21,8 +22,10 @@ const PageContext = createContext<PageContextType>({
   deletePage: () => {},
   setCurrentPage: () => {},
   renamePage: () => {},
+  analyzeFigmaDesign: async () => {},
   analyzeAndVectorizeImage: async () => {},
-  toggleOriginalImage: () => {}
+  toggleOriginalImage: () => {},
+  isLoggedIn: false,
 });
 
 // Custom hook to use the context
@@ -47,8 +50,34 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // State for current page
   const [currentPage, setCurrentPage] = useState<Page | null>(() => pages[0]);
   
+  // State for authentication status
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  
+  // Check authentication status and load user's pages on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const authenticated = await isAuthenticated();
+      setIsLoggedIn(authenticated);
+      
+      // If logged in, load pages from Supabase
+      if (authenticated) {
+        try {
+          const userPages = await getPages();
+          if (userPages.length > 0) {
+            setPages(userPages);
+            setCurrentPage(userPages[0]);
+          }
+        } catch (error) {
+          console.error('Error loading pages:', error);
+        }
+      }
+    };
+    
+    checkAuth();
+  }, []);
+  
   // Add a new page
-  const addPage = (name: string) => {
+  const addPage = async (name: string) => {
     const newPage: Page = {
       id: generateUUID(),
       name: name || `Page ${pages.length + 1}`,
@@ -59,15 +88,31 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     setPages(prevPages => [...prevPages, newPage]);
     setCurrentPage(newPage);
+    
+    // Save to Supabase if logged in
+    if (isLoggedIn) {
+      try {
+        await savePage(newPage);
+      } catch (error) {
+        console.error('Error saving new page:', error);
+      }
+    }
   };
   
   // Update a page
-  const updatePage = (id: string, updates: Partial<Page>) => {
-    setPages(prevPages => 
-      prevPages.map(page => 
-        page.id === id ? { ...page, ...updates } : page
-      )
-    );
+  const updatePage = async (id: string, updates: Partial<Page>) => {
+    let updatedPage: Page | null = null;
+    
+    setPages(prevPages => {
+      const newPages = prevPages.map(page => {
+        if (page.id === id) {
+          updatedPage = { ...page, ...updates };
+          return updatedPage;
+        }
+        return page;
+      });
+      return newPages;
+    });
     
     // Update current page if it's the one being updated
     if (currentPage && currentPage.id === id) {
@@ -76,10 +121,19 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...updates
       }));
     }
+    
+    // Save to Supabase if logged in
+    if (isLoggedIn && updatedPage) {
+      try {
+        await savePage(updatedPage);
+      } catch (error) {
+        console.error('Error updating page:', error);
+      }
+    }
   };
   
   // Delete a page
-  const deletePage = (id: string) => {
+  const deletePage = async (id: string) => {
     // Remove from local state
     const newPages = pages.filter(page => page.id !== id);
     setPages(newPages);
@@ -92,14 +146,23 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentPage(null);
       }
     }
+    
+    // Delete from Supabase if logged in
+    if (isLoggedIn) {
+      try {
+        await deletePageFromDB(id);
+      } catch (error) {
+        console.error('Error deleting page:', error);
+      }
+    }
   };
   
   // Rename a page
-  const renamePage = (id: string, newName: string) => {
-    updatePage(id, { name: newName });
+  const renamePage = async (id: string, newName: string) => {
+    await updatePage(id, { name: newName });
   };
 
-  // Toggle between original image and vectorized SVG
+  // Toggle between original image and analysis view
   const toggleOriginalImage = () => {
     if (!currentPage) return;
     
@@ -108,7 +171,57 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // Single function to analyze the image, identify components, and vectorize them
+  // Analyze Figma design
+  const analyzeFigmaDesign = async (figmaUrl: string) => {
+    if (!currentPage) {
+      console.error('No current page to add design to');
+      return;
+    }
+
+    try {
+      // Set the analyzing state to show loading
+      updatePage(currentPage.id, { isAnalyzing: true });
+
+      // Step 1: Check if Figma API is configured
+      const figmaConfigured = await isFigmaApiConfigured();
+      if (!figmaConfigured) {
+        throw new Error('Figma API is not configured. Please login with Figma first.');
+      }
+
+      // Step 2: Import the Figma design
+      console.log('Importing Figma design...');
+      const {
+        components,
+        imageData,
+        fileId,
+        nodeId,
+      } = await importFigmaDesign(figmaUrl);
+
+      // Step 3: Generate improvement suggestions with GPT-4o
+      console.log('Generating improvement suggestions...');
+      const analysis = await generateImprovementSuggestions(components, imageData);
+
+      // Step 4: Update the page with all the results
+      updatePage(currentPage.id, {
+        figmaUrl,
+        figmaFileId: fileId,
+        figmaNodeId: nodeId,
+        baseImage: imageData,
+        uiComponents: components,
+        uiAnalysis: analysis,
+        showOriginalWithAnalysis: true,
+        isAnalyzing: false
+      });
+
+      console.log('Figma design analysis complete!');
+    } catch (error) {
+      console.error('Error analyzing Figma design:', error);
+      // Reset the analyzing state
+      updatePage(currentPage.id, { isAnalyzing: false });
+    }
+  };
+
+  // Keep the legacy image analysis for backward compatibility
   const analyzeAndVectorizeImage = async () => {
     // Check if we have a current page and it has an image
     if (!currentPage || !currentPage.baseImage) {
@@ -134,40 +247,15 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Generating improvement suggestions...');
       const analysis = await generateImprovementSuggestions(components, currentPage.baseImage);
       
-      // Step 3: Vectorize all components
-      console.log('Vectorizing components...');
-      
-      // Check if Recraft API is configured
-      if (!isRecraftConfigured()) {
-        console.error('Recraft API key not configured');
-        
-        // Still update with the analysis results without vectorization
-        updatePage(currentPage.id, {
-          uiComponents: components,
-          uiAnalysis: analysis,
-          showOriginalWithAnalysis: true,
-          isAnalyzing: false
-        });
-        
-        return;
-      }
-      
-      // Vectorize all components
-      const vectorizedComponents = await vectorizeAllComponents(currentPage.baseImage, components);
-      
-      // Generate a full vectorized version as well for context
-      const fullVectorizedSvg = await vectorizeImage(currentPage.baseImage, true);
-      
-      // Step 4: Update the page with all the results
+      // Step 3: Update the page with the results (no vectorization)
       updatePage(currentPage.id, {
-        vectorizedSvg: fullVectorizedSvg,
-        uiComponents: vectorizedComponents,
+        uiComponents: components,
         uiAnalysis: analysis,
-        showOriginalWithAnalysis: true, // Start with showing original image with overlays
+        showOriginalWithAnalysis: true,
         isAnalyzing: false
       });
     } catch (error) {
-      console.error('Error in analyze and vectorize process:', error);
+      console.error('Error in analyze process:', error);
       // Reset the analyzing state
       updatePage(currentPage.id, { isAnalyzing: false });
     }
@@ -183,8 +271,10 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deletePage,
         setCurrentPage,
         renamePage,
+        analyzeFigmaDesign,
         analyzeAndVectorizeImage,
-        toggleOriginalImage
+        toggleOriginalImage,
+        isLoggedIn,
       }}
     >
       {children}

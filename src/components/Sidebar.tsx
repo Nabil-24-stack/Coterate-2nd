@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
+import { signInWithFigma, signOut } from '../services/SupabaseService';
 
 // Logo component
 const Logo = styled.div`
@@ -175,6 +176,65 @@ const EditInput = styled.input`
   }
 `;
 
+// Add new styled components for auth
+const UserSection = styled.div`
+  padding: 16px;
+  border-top: 1px solid #E3E6EA;
+  margin-top: auto;
+`;
+
+const AuthButton = styled.button`
+  width: 100%;
+  padding: 8px 12px;
+  background-color: ${props => props.theme === 'primary' ? '#4A90E2' : 'white'};
+  color: ${props => props.theme === 'primary' ? 'white' : '#333'};
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s;
+  text-align: center;
+  border: 1px solid ${props => props.theme === 'primary' ? '#4A90E2' : '#E3E6EA'};
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  margin-bottom: 8px;
+  
+  &:hover {
+    background-color: ${props => props.theme === 'primary' ? '#3A80D2' : '#f5f5f5'};
+  }
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+`;
+
+const Avatar = styled.div`
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: #e0e0e0;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #333;
+`;
+
+const UserName = styled.div`
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+`;
+
+const UserEmail = styled.div`
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 12px;
+`;
+
 interface DropdownProps {
   pageId: string;
   pageName: string;
@@ -222,11 +282,26 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
 };
 
 export const Sidebar: React.FC = () => {
-  const { pages, currentPage, setCurrentPage, addPage, renamePage } = usePageContext();
+  const { pages, currentPage, setCurrentPage, addPage, renamePage, isLoggedIn } = usePageContext();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [editingPageName, setEditingPageName] = useState('');
+  const [userName, setUserName] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get user info when logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      // For demo purposes, we're using hardcoded values
+      // In a real app, you would get this from Supabase
+      setUserName('Figma User');
+      setUserEmail('user@example.com');
+    } else {
+      setUserName('');
+      setUserEmail('');
+    }
+  }, [isLoggedIn]);
   
   const toggleMenu = (pageId: string) => {
     setOpenMenuId(openMenuId === pageId ? null : pageId);
@@ -291,47 +366,52 @@ export const Sidebar: React.FC = () => {
     };
   }, [editingPageId, editingPageName, savePageName]);
   
+  // Add new functions for auth
+  const handleSignIn = async () => {
+    try {
+      await signInWithFigma();
+    } catch (error) {
+      console.error('Error signing in with Figma:', error);
+    }
+  };
+  
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+  
   return (
     <SidebarContainer>
-      <SectionTitle>Pages</SectionTitle>
-      
-      <NewPageButton onClick={handleAddPage}>
-        + New Page
-      </NewPageButton>
-      
+      <Header>
+        <Title>Pages</Title>
+      </Header>
+      <NewPageButton onClick={handleAddPage}>+ New Page</NewPageButton>
       <PageList>
-        {pages.map(page => (
-          <PageItem 
+        {pages.map((page) => (
+          <PageItem
             key={page.id}
             isActive={currentPage?.id === page.id}
             onClick={(e) => handlePageClick(e, page)}
           >
-            <PageName>
-              {editingPageId === page.id ? (
-                <EditInput 
-                  ref={editInputRef}
-                  value={editingPageName} 
-                  onChange={(e) => setEditingPageName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') savePageName();
-                    if (e.key === 'Escape') cancelEditing();
-                  }}
-                />
-              ) : page.name}
-              
-              {editingPageId !== page.id && (
+            {editingPageId === page.id ? (
+              <EditInput
+                ref={editInputRef}
+                value={editingPageName}
+                onChange={(e) => setEditingPageName(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                onBlur={savePageName}
+                autoFocus
+              />
+            ) : (
+              <PageName>
+                {page.name}
                 <MoreButtonContainer>
-                  <MoreButton 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleMenu(page.id);
-                    }}
-                  >
-                    •••
-                  </MoreButton>
-                  
+                  <MoreButton onClick={() => toggleMenu(page.id)}>•••</MoreButton>
                   {openMenuId === page.id && (
-                    <Dropdown 
+                    <Dropdown
                       pageId={page.id}
                       pageName={page.name}
                       onClose={closeMenu}
@@ -339,11 +419,33 @@ export const Sidebar: React.FC = () => {
                     />
                   )}
                 </MoreButtonContainer>
-              )}
-            </PageName>
+              </PageName>
+            )}
           </PageItem>
         ))}
       </PageList>
+      
+      {/* Add User Section with Auth */}
+      <UserSection>
+        {isLoggedIn ? (
+          <>
+            <UserInfo>
+              <Avatar>
+                {userName ? userName.charAt(0).toUpperCase() : 'U'}
+              </Avatar>
+              <UserName>{userName}</UserName>
+              <UserEmail>{userEmail}</UserEmail>
+            </UserInfo>
+            <AuthButton theme="secondary" onClick={handleSignOut}>
+              Sign Out
+            </AuthButton>
+          </>
+        ) : (
+          <AuthButton theme="primary" onClick={handleSignIn}>
+            Sign In with Figma
+          </AuthButton>
+        )}
+      </UserSection>
     </SidebarContainer>
   );
 }; 
