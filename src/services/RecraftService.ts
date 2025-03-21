@@ -29,12 +29,15 @@ export const vectorizeImage = async (imageData: string): Promise<string> => {
       ? imageData 
       : `data:image/png;base64,${imageData}`;
 
+    const apiKey = getApiKey();
+    console.log('API Key exists:', !!apiKey); // Log if key exists, not the actual key
+
     const response = await axios.post(
       RECRAFT_API_URL,
       { image: formattedImageData },
       {
         headers: {
-          'Authorization': `Bearer ${getApiKey()}`,
+          'x-api-key': apiKey, // Try using x-api-key header instead of Authorization
           'Content-Type': 'application/json'
         }
       }
