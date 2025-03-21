@@ -67,28 +67,51 @@ export const isFigmaApiConfigured = async (): Promise<boolean> => {
  */
 export const importFigmaDesign = async (figmaUrl: string) => {
   try {
-    // Step 1: Fetch the Figma design data
+    // Step 1: Check if we have a valid Figma token
+    const apiKey = await getFigmaApiKey();
+    if (!apiKey) {
+      throw new Error('You need to log in with Figma to access this design. Please sign in using the Figma authentication.');
+    }
+    
+    // Step 2: Parse the Figma URL to extract file and node IDs
+    console.log('Parsing Figma URL...');
+    const { fileId, nodeId } = parseFigmaUrl(figmaUrl);
+    
+    // Step 3: Fetch the Figma design data
     console.log('Fetching Figma design data...');
-    const { fileData, nodeId } = await fetchFigmaDesign(figmaUrl);
-    
-    // Step 2: Extract components from the Figma data
-    console.log('Extracting components from Figma data...');
-    const components = extractComponentsFromFigma(fileData, nodeId);
-    
-    // Step 3: Fetch the image for the selected node
-    console.log('Fetching node image...');
-    const { fileId } = parseFigmaUrl(figmaUrl);
-    const imageData = await fetchFigmaNodeImage(fileId, nodeId);
-    
-    // Return the complete Figma design data
-    return {
-      fileData,
-      nodeId,
-      fileId,
-      components,
-      imageData,
-      figmaUrl
-    };
+    try {
+      const { fileData } = await fetchFigmaDesign(figmaUrl);
+      
+      // Step 4: Extract components from the Figma data
+      console.log('Extracting components from Figma data...');
+      const components = extractComponentsFromFigma(fileData, nodeId);
+      
+      // Step 5: Fetch the image for the selected node
+      console.log('Fetching node image...');
+      const imageData = await fetchFigmaNodeImage(fileId, nodeId);
+      
+      // Return the complete Figma design data
+      return {
+        fileData,
+        nodeId,
+        fileId,
+        components,
+        imageData,
+        figmaUrl
+      };
+    } catch (error: any) {
+      // Handle specific API errors
+      if (error.response) {
+        if (error.response.status === 403) {
+          throw new Error('Access denied to this Figma file. Make sure you have permission to view this file or you are logged in with the right Figma account.');
+        } else if (error.response.status === 404) {
+          throw new Error('Figma file not found. The file may have been deleted or you don\'t have access to it.');
+        } else {
+          throw new Error(`Figma API error: ${error.response.data?.message || error.response.statusText || 'Unknown error'}`);
+        }
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Error importing Figma design:', error);
     throw error;
@@ -104,7 +127,7 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
   try {
     const apiKey = await getFigmaApiKey();
     if (!apiKey) {
-      throw new Error('Figma API key not configured');
+      throw new Error('Figma API key not configured. Please log in with Figma.');
     }
     
     // Parse the Figma URL to get file ID and node ID

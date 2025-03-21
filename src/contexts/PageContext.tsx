@@ -174,8 +174,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Analyze Figma design
   const analyzeFigmaDesign = async (figmaUrl: string) => {
     if (!currentPage) {
-      console.error('No current page to add design to');
-      return;
+      throw new Error('No current page to add design to');
     }
 
     try {
@@ -190,34 +189,42 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Step 2: Import the Figma design
       console.log('Importing Figma design...');
-      const {
-        components,
-        imageData,
-        fileId,
-        nodeId,
-      } = await importFigmaDesign(figmaUrl);
+      try {
+        const {
+          components,
+          imageData,
+          fileId,
+          nodeId,
+        } = await importFigmaDesign(figmaUrl);
 
-      // Step 3: Generate improvement suggestions with GPT-4o
-      console.log('Generating improvement suggestions...');
-      const analysis = await generateImprovementSuggestions(components, imageData);
+        // Step 3: Generate improvement suggestions with GPT-4o
+        console.log('Generating improvement suggestions...');
+        const analysis = await generateImprovementSuggestions(components, imageData);
 
-      // Step 4: Update the page with all the results
-      updatePage(currentPage.id, {
-        figmaUrl,
-        figmaFileId: fileId,
-        figmaNodeId: nodeId,
-        baseImage: imageData,
-        uiComponents: components,
-        uiAnalysis: analysis,
-        showOriginalWithAnalysis: true,
-        isAnalyzing: false
-      });
+        // Step 4: Update the page with all the results
+        updatePage(currentPage.id, {
+          figmaUrl,
+          figmaFileId: fileId,
+          figmaNodeId: nodeId,
+          baseImage: imageData,
+          uiComponents: components,
+          uiAnalysis: analysis,
+          showOriginalWithAnalysis: true,
+          isAnalyzing: false
+        });
 
-      console.log('Figma design analysis complete!');
+        console.log('Figma design analysis complete!');
+      } catch (error) {
+        // Reset the analyzing state and rethrow the error to propagate it
+        updatePage(currentPage.id, { isAnalyzing: false });
+        throw error;
+      }
     } catch (error) {
       console.error('Error analyzing Figma design:', error);
       // Reset the analyzing state
       updatePage(currentPage.id, { isAnalyzing: false });
+      // Rethrow the error to be handled by the UI layer
+      throw error;
     }
   };
 

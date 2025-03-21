@@ -469,6 +469,7 @@ export const Canvas: React.FC = () => {
   const [figmaUrl, setFigmaUrl] = useState<string>('');
   const [isValidUrl, setIsValidUrl] = useState<boolean>(true);
   const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
@@ -633,8 +634,12 @@ export const Canvas: React.FC = () => {
   const handleFigmaUrlSubmit = async () => {
     if (!validateFigmaUrl(figmaUrl)) {
       setIsValidUrl(false);
+      setErrorMessage("Please enter a valid Figma URL (Copy link to selection format).");
       return;
     }
+    
+    // Clear previous error messages
+    setErrorMessage(null);
     
     try {
       // Analyze the Figma design using the context function
@@ -645,9 +650,18 @@ export const Canvas: React.FC = () => {
         setFigmaUrl('');
         setShowUrlInput(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing Figma design:', error);
-      alert('Error analyzing Figma design. Please check the URL and try again.');
+      // Provide a helpful error message based on the error received
+      if (error.message.includes('Access denied') || error.message.includes('permission')) {
+        setErrorMessage("Access denied to this Figma file. Please make sure you have permission to view it and you're logged in with the correct Figma account.");
+      } else if (error.message.includes('not found')) {
+        setErrorMessage("Figma file not found. The file may have been deleted or the URL is incorrect.");
+      } else if (error.message.includes('log in with Figma')) {
+        setErrorMessage("You need to log in with Figma first to access this design.");
+      } else {
+        setErrorMessage(`Error importing from Figma: ${error.message || 'Unknown error'}`);
+      }
     }
   };
   
@@ -783,7 +797,7 @@ export const Canvas: React.FC = () => {
               placeholder="Paste Figma URL here..."
               value={figmaUrl}
               onChange={handleFigmaUrlChange}
-              style={isValidUrl ? {} : { borderColor: '#e74c3c' }}
+              style={!isValidUrl || errorMessage ? { borderColor: '#e74c3c' } : {}}
             />
             <ActionButton
               className="primary"
@@ -793,10 +807,19 @@ export const Canvas: React.FC = () => {
               Import
             </ActionButton>
           </FigmaUrlInput>
-          {!isValidUrl && (
-            <p style={{ color: '#e74c3c', marginTop: '10px', fontSize: '14px' }}>
-              Please enter a valid Figma URL (Copy link to selection format).
-            </p>
+          {errorMessage && (
+            <div style={{ 
+              backgroundColor: '#fff3f3', 
+              border: '1px solid #e74c3c', 
+              borderRadius: '4px',
+              padding: '10px 15px', 
+              marginTop: '12px', 
+              color: '#e74c3c', 
+              fontSize: '14px'
+            }}>
+              <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>Error</p>
+              <p>{errorMessage}</p>
+            </div>
           )}
           {!isLoggedIn && (
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
