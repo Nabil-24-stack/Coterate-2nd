@@ -29,10 +29,13 @@ const AuthCallback = () => {
         
         // If there's an access_token, it's a successful auth
         if (params.get('access_token')) {
+          // Get the current origin as the base URL
+          const baseUrl = window.location.origin;
+          
           setLoading(false);
           // Redirect to main app after a short delay
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = baseUrl;
           }, 1000);
         } else if (params.get('error')) {
           setError(params.get('error_description') || 'Authentication failed');

@@ -47,10 +47,13 @@ export const signInWithFigma = async (): Promise<void> => {
   const supabase = getSupabase();
   
   try {
+    // Get the current origin for the redirect
+    const redirectUrl = window.location.origin;
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'figma',
       options: {
-        redirectTo: window.location.origin
+        redirectTo: redirectUrl
       }
     });
     
