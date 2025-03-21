@@ -4,7 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import { PageProvider } from './contexts/PageContext';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { getSupabase, isAuthenticated } from './services/SupabaseService';
+import { getSupabase, isAuthenticated, refreshAuthState } from './services/SupabaseService';
 
 const AppContainer = styled.div`
   display: flex;
@@ -20,30 +20,32 @@ const AuthCallback = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Handle the auth callback
+    // Handle the auth callback using Supabase
     const handleAuthCallback = async () => {
       try {
-        // Get the URL hash parameters
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
+        const supabase = getSupabase();
         
-        // If there's an access_token, it's a successful auth
-        if (params.get('access_token')) {
-          // Get the current origin as the base URL
-          const baseUrl = window.location.origin;
+        // Let Supabase handle the auth callback
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Supabase auth error:', error);
+          setError('Authentication failed: ' + error.message);
+        } else if (data && data.session) {
+          console.log('Authentication successful!', data.session.user);
           
-          setLoading(false);
-          // Redirect to main app after a short delay
-          setTimeout(() => {
-            window.location.href = baseUrl;
-          }, 1000);
-        } else if (params.get('error')) {
-          setError(params.get('error_description') || 'Authentication failed');
-          setLoading(false);
+          // Explicitly refresh the auth state to ensure it's updated
+          await refreshAuthState();
+          
+          // Redirect to main app
+          window.location.href = window.location.origin;
+        } else {
+          setError('No session found after authentication attempt');
         }
       } catch (err) {
         console.error('Auth callback error:', err);
         setError('An error occurred during authentication');
+      } finally {
         setLoading(false);
       }
     };
@@ -52,14 +54,67 @@ const AuthCallback = () => {
   }, []);
 
   if (loading) {
-    return <div>Loading authentication...</div>;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100vh',
+        fontFamily: 'Plus Jakarta Sans, sans-serif'
+      }}>
+        <h2>Finalizing authentication...</h2>
+        <p>Please wait while we complete the sign-in process.</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <div>Error: {error}</div>;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100vh',
+        fontFamily: 'Plus Jakarta Sans, sans-serif',
+        color: '#e53935'
+      }}>
+        <h2>Authentication Error</h2>
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.href = window.location.origin}
+          style={{
+            marginTop: '20px',
+            padding: '10px 20px',
+            background: '#4A90E2',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Return to Application
+        </button>
+      </div>
+    );
   }
 
-  return <div>Authentication successful. Redirecting...</div>;
+  return (
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100vh',
+      fontFamily: 'Plus Jakarta Sans, sans-serif',
+      color: '#4caf50'
+    }}>
+      <h2>Authentication Successful</h2>
+      <p>You have successfully logged in with Figma.</p>
+      <p>Redirecting you to the application...</p>
+    </div>
+  );
 };
 
 function App() {

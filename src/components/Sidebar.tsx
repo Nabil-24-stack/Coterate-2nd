@@ -360,29 +360,35 @@ export const Sidebar: React.FC = () => {
   const editInputRef = useRef<HTMLInputElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   
-  // Get user info when logged in
+  // Handle user info when authentication state changes
   useEffect(() => {
     if (isLoggedIn && userProfile) {
-      // Get real user data from the user profile
+      console.log('User profile in Sidebar:', userProfile);
+      
+      // Get name from user metadata or use default
       const name = userProfile.user_metadata?.full_name || 
                    userProfile.user_metadata?.name || 
                    'Figma User';
       
-      const email = userProfile.email || 'user@example.com';
+      // Get email or use default
+      const email = userProfile.email || '';
       
-      console.log('Setting user info from profile:', name, email);
       setUserName(name);
       setUserEmail(email);
     } else {
+      // Reset user info when logged out
       setUserName('');
       setUserEmail('');
     }
   }, [isLoggedIn, userProfile]);
   
-  // Close user dropdown when clicking outside
+  // Handle click outside user dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+      if (
+        userDropdownRef.current && 
+        !userDropdownRef.current.contains(event.target as Node)
+      ) {
         setShowUserDropdown(false);
       }
     };
@@ -465,7 +471,12 @@ export const Sidebar: React.FC = () => {
     };
   }, [editingPageId, editingPageName, savePageName]);
   
-  // Add new functions for auth
+  // Toggle user dropdown
+  const toggleUserDropdown = () => {
+    setShowUserDropdown(!showUserDropdown);
+  };
+  
+  // Handle sign in with Figma
   const handleSignIn = async () => {
     try {
       await signInWithFigma();
@@ -474,6 +485,7 @@ export const Sidebar: React.FC = () => {
     }
   };
   
+  // Handle sign out
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -483,20 +495,16 @@ export const Sidebar: React.FC = () => {
     }
   };
   
-  const toggleUserDropdown = () => {
-    setShowUserDropdown(prev => !prev);
-  };
-  
-  // Render the user section with the new UI
+  // Render the user section
   const renderUserSection = () => {
-    if (isLoggedIn) {
+    if (isLoggedIn && userProfile) {
       return (
         <UserSection>
           <UserProfileButton onClick={toggleUserDropdown}>
             <FigmaIcon>F</FigmaIcon>
             <ProfileInfo>
               <ProfileName>{userName}</ProfileName>
-              <ProfileEmail>{userEmail}</ProfileEmail>
+              {userEmail && <ProfileEmail>{userEmail}</ProfileEmail>}
             </ProfileInfo>
           </UserProfileButton>
           
@@ -514,7 +522,7 @@ export const Sidebar: React.FC = () => {
     return (
       <UserSection>
         <SignInButton onClick={handleSignIn}>
-          <svg viewBox="0 0 24 24" fill="currentColor">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
           Sign In with Figma
@@ -526,9 +534,16 @@ export const Sidebar: React.FC = () => {
   return (
     <SidebarContainer>
       <Header>
-        <Title>Pages</Title>
+        <Logo>
+          <LogoImage src={`${process.env.PUBLIC_URL}/logo192.png`} alt="Coterate Logo" />
+          Coterate
+        </Logo>
       </Header>
-      <NewPageButton onClick={handleAddPage}>+ New Page</NewPageButton>
+      
+      <NewPageButton onClick={() => addPage('')}>+ New Page</NewPageButton>
+      
+      <SectionTitle>Pages</SectionTitle>
+      
       <PageList>
         {pages.map((page) => (
           <PageItem
@@ -565,7 +580,6 @@ export const Sidebar: React.FC = () => {
         ))}
       </PageList>
       
-      {/* Render the enhanced user section */}
       {renderUserSection()}
     </SidebarContainer>
   );
