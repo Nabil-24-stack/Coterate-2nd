@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
-import { signInWithFigma, signOut } from '../services/SupabaseService';
+import { signInWithFigma, signOut, getCurrentUser } from '../services/SupabaseService';
 
 // Logo component
 const Logo = styled.div`
@@ -176,67 +176,131 @@ const EditInput = styled.input`
   }
 `;
 
-// Add new styled components for auth
+// Enhanced user section styling
 const UserSection = styled.div`
   padding: 16px;
   border-top: 1px solid #E3E6EA;
   margin-top: auto;
 `;
 
-interface AuthButtonProps {
-  buttonTheme?: 'primary' | 'secondary';
-}
-
-const AuthButton = styled.button<AuthButtonProps>`
-  width: 100%;
+const UserProfileButton = styled.div`
+  display: flex;
+  align-items: center;
   padding: 8px 12px;
-  background-color: ${props => props.buttonTheme === 'primary' ? '#4A90E2' : 'white'};
-  color: ${props => props.buttonTheme === 'primary' ? 'white' : '#333'};
+  background-color: white;
   border-radius: 8px;
-  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #E3E6EA;
+  position: relative;
   transition: all 0.2s;
-  text-align: center;
-  border: 1px solid ${props => props.buttonTheme === 'primary' ? '#4A90E2' : '#E3E6EA'};
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 14px;
-  margin-bottom: 8px;
   
   &:hover {
-    background-color: ${props => props.buttonTheme === 'primary' ? '#3A80D2' : '#f5f5f5'};
+    background-color: #f5f5f5;
   }
 `;
 
-const UserInfo = styled.div`
+const ProfileInfo = styled.div`
+  flex: 1;
+  margin-left: 12px;
+  overflow: hidden;
+`;
+
+const ProfileName = styled.div`
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const ProfileEmail = styled.div`
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const FigmaIcon = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background-color: #000;
+  color: #fff;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  margin-bottom: 16px;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
 `;
 
 const Avatar = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
-  background-color: #e0e0e0;
-  margin-bottom: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: #4A90E2;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  color: #333;
-`;
-
-const UserName = styled.div`
+  color: white;
   font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 4px;
 `;
 
-const UserEmail = styled.div`
-  font-size: 12px;
-  color: #888;
-  margin-bottom: 12px;
+const UserDropdownMenu = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+`;
+
+const UserDropdownItem = styled.div`
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
+  
+  &.danger {
+    color: #e53935;
+    
+    &:hover {
+      background-color: #ffebee;
+    }
+  }
+`;
+
+const SignInButton = styled.button`
+  width: 100%;
+  padding: 10px 0;
+  background-color: #4A90E2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: #3A80D2;
+  }
+  
+  svg {
+    width: 18px;
+    height: 18px;
+  }
 `;
 
 interface DropdownProps {
@@ -292,20 +356,49 @@ export const Sidebar: React.FC = () => {
   const [editingPageName, setEditingPageName] = useState('');
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
   
   // Get user info when logged in
   useEffect(() => {
-    if (isLoggedIn) {
-      // For demo purposes, we're using hardcoded values
-      // In a real app, you would get this from Supabase
-      setUserName('Figma User');
-      setUserEmail('user@example.com');
-    } else {
-      setUserName('');
-      setUserEmail('');
-    }
+    const fetchUserInfo = async () => {
+      if (isLoggedIn) {
+        try {
+          const user = await getCurrentUser();
+          if (user) {
+            // Use real user data from Supabase/Figma
+            setUserName(user.user_metadata?.full_name || user.user_metadata?.name || 'Figma User');
+            setUserEmail(user.email || 'user@example.com');
+          }
+        } catch (error) {
+          console.error('Error fetching user info:', error);
+          // Fallback to defaults
+          setUserName('Figma User');
+          setUserEmail('user@example.com');
+        }
+      } else {
+        setUserName('');
+        setUserEmail('');
+      }
+    };
+    
+    fetchUserInfo();
   }, [isLoggedIn]);
+  
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   
   const toggleMenu = (pageId: string) => {
     setOpenMenuId(openMenuId === pageId ? null : pageId);
@@ -391,9 +484,50 @@ export const Sidebar: React.FC = () => {
   const handleSignOut = async () => {
     try {
       await signOut();
+      setShowUserDropdown(false);
     } catch (error) {
       console.error('Error signing out:', error);
     }
+  };
+  
+  const toggleUserDropdown = () => {
+    setShowUserDropdown(prev => !prev);
+  };
+  
+  // Render the user section with the new UI
+  const renderUserSection = () => {
+    if (isLoggedIn) {
+      return (
+        <UserSection>
+          <UserProfileButton onClick={toggleUserDropdown}>
+            <FigmaIcon>F</FigmaIcon>
+            <ProfileInfo>
+              <ProfileName>{userName}</ProfileName>
+              <ProfileEmail>{userEmail}</ProfileEmail>
+            </ProfileInfo>
+          </UserProfileButton>
+          
+          {showUserDropdown && (
+            <UserDropdownMenu ref={userDropdownRef}>
+              <UserDropdownItem className="danger" onClick={handleSignOut}>
+                Sign Out
+              </UserDropdownItem>
+            </UserDropdownMenu>
+          )}
+        </UserSection>
+      );
+    }
+    
+    return (
+      <UserSection>
+        <SignInButton onClick={handleSignIn}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          </svg>
+          Sign In with Figma
+        </SignInButton>
+      </UserSection>
+    );
   };
   
   return (
@@ -438,27 +572,8 @@ export const Sidebar: React.FC = () => {
         ))}
       </PageList>
       
-      {/* Add User Section with Auth */}
-      <UserSection>
-        {isLoggedIn ? (
-          <>
-            <UserInfo>
-              <Avatar>
-                {userName ? userName.charAt(0).toUpperCase() : 'U'}
-              </Avatar>
-              <UserName>{userName}</UserName>
-              <UserEmail>{userEmail}</UserEmail>
-            </UserInfo>
-            <AuthButton buttonTheme="secondary" onClick={handleSignOut}>
-              Sign Out
-            </AuthButton>
-          </>
-        ) : (
-          <AuthButton buttonTheme="primary" onClick={handleSignIn}>
-            Sign In with Figma
-          </AuthButton>
-        )}
-      </UserSection>
+      {/* Render the enhanced user section */}
+      {renderUserSection()}
     </SidebarContainer>
   );
 }; 
