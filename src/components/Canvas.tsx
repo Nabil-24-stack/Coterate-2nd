@@ -453,7 +453,7 @@ const UrlInput = styled.input`
 `;
 
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage } = usePageContext();
+  const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage, analyzeFigmaDesign, isLoggedIn } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -590,9 +590,9 @@ export const Canvas: React.FC = () => {
       
       // Check if the pasted content is a Figma URL
       const clipboardText = e.clipboardData?.getData('text');
-      if (clipboardText && validateFigmaUrl(clipboardText) && currentPage.analyzeFigmaDesign) {
+      if (clipboardText && validateFigmaUrl(clipboardText) && analyzeFigmaDesign) {
         e.preventDefault();
-        currentPage.analyzeFigmaDesign(clipboardText);
+        analyzeFigmaDesign(clipboardText);
         return;
       }
     };
@@ -601,7 +601,7 @@ export const Canvas: React.FC = () => {
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage, updatePage]);
+  }, [currentPage, updatePage, analyzeFigmaDesign]);
 
   // Add this function to validate Figma URL
   const validateFigmaUrl = (url: string): boolean => {
@@ -638,8 +638,8 @@ export const Canvas: React.FC = () => {
     
     try {
       // Analyze the Figma design using the context function
-      if (currentPage.analyzeFigmaDesign) {
-        await currentPage.analyzeFigmaDesign(figmaUrl);
+      if (analyzeFigmaDesign) {
+        await analyzeFigmaDesign(figmaUrl);
         
         // Reset the UI after processing
         setFigmaUrl('');
@@ -798,7 +798,7 @@ export const Canvas: React.FC = () => {
               Please enter a valid Figma URL (Copy link to selection format).
             </p>
           )}
-          {!currentPage.isLoggedIn && (
+          {!isLoggedIn && (
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
               <p style={{ marginBottom: '10px' }}>
                 Login with Figma to access your designs:
