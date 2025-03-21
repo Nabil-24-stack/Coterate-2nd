@@ -29,9 +29,9 @@ const AuthCallback = () => {
         try {
           const supabase = getSupabase();
           console.log('Supabase client created successfully');
-        } catch (configError) {
+        } catch (configError: any) {
           console.error('Supabase configuration error:', configError);
-          setError(`Supabase configuration error: ${configError.message}. Please check your API keys in the environment variables.`);
+          setError(`Supabase configuration error: ${configError.message || 'Unknown error'}. Please check your API keys in the environment variables.`);
           setLoading(false);
           return;
         }
@@ -99,7 +99,7 @@ const AuthCallback = () => {
                   }
                 }
               }
-            } catch (err) {
+            } catch (err: any) {
               console.error('Error processing hash params:', err);
             }
             
@@ -109,9 +109,9 @@ const AuthCallback = () => {
           console.error('No auth tokens found in URL');
           setError('No authentication tokens found in URL');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Auth callback error:', err);
-        setError(`An error occurred during authentication: ${err.message}`);
+        setError(`An error occurred during authentication: ${err.message || 'Unknown error'}`);
       } finally {
         setLoading(false);
       }

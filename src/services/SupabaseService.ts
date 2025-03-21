@@ -18,6 +18,11 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
   process.env.SUPABASE_ANON_KEY || 
   process.env.REACT_APP_SUPABASE_ANON_KEY || 
+  // Additional environment variable names that might be used in Vercel
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_KEY ||
   '';
 
 let supabaseInstance: SupabaseClient | null = null;
@@ -29,6 +34,14 @@ export const getSupabase = (): SupabaseClient => {
       console.error('Supabase configuration error: Missing URL or anon key');
       console.log('URL configured:', Boolean(supabaseUrl));
       console.log('Key configured:', Boolean(supabaseAnonKey));
+      // Log all possible environment variable names for debugging
+      console.log('Checking environment variables:');
+      console.log('NEXT_PUBLIC_SUPABASE_URL:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL));
+      console.log('SUPABASE_URL:', Boolean(process.env.SUPABASE_URL));
+      console.log('REACT_APP_SUPABASE_URL:', Boolean(process.env.REACT_APP_SUPABASE_URL));
+      console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
+      console.log('SUPABASE_ANON_KEY:', Boolean(process.env.SUPABASE_ANON_KEY));
+      console.log('REACT_APP_SUPABASE_ANON_KEY:', Boolean(process.env.REACT_APP_SUPABASE_ANON_KEY));
       throw new Error('Supabase URL and anon key must be provided');
     }
     
@@ -39,6 +52,13 @@ export const getSupabase = (): SupabaseClient => {
     }
     
     console.log('Creating Supabase client with URL:', supabaseUrl);
+    // Show a masked version of the key for debugging
+    if (supabaseAnonKey.length > 10) {
+      const maskedKey = supabaseAnonKey.substring(0, 4) + '...' + 
+        supabaseAnonKey.substring(supabaseAnonKey.length - 4);
+      console.log('Using API key (masked):', maskedKey);
+    }
+    
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
   }
   return supabaseInstance;
