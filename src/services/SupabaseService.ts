@@ -26,8 +26,19 @@ let supabaseInstance: SupabaseClient | null = null;
 export const getSupabase = (): SupabaseClient => {
   if (!supabaseInstance) {
     if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase configuration error: Missing URL or anon key');
+      console.log('URL configured:', Boolean(supabaseUrl));
+      console.log('Key configured:', Boolean(supabaseAnonKey));
       throw new Error('Supabase URL and anon key must be provided');
     }
+    
+    // Check if keys are placeholder values
+    if (supabaseAnonKey === 'replace_with_your_key') {
+      console.error('Supabase configuration error: Using placeholder API key');
+      throw new Error('Invalid Supabase API key (placeholder detected)');
+    }
+    
+    console.log('Creating Supabase client with URL:', supabaseUrl);
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
   }
   return supabaseInstance;

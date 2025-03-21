@@ -25,6 +25,17 @@ const AuthCallback = () => {
       try {
         console.log('Auth callback triggered');
         
+        // First, verify Supabase configuration
+        try {
+          const supabase = getSupabase();
+          console.log('Supabase client created successfully');
+        } catch (configError) {
+          console.error('Supabase configuration error:', configError);
+          setError(`Supabase configuration error: ${configError.message}. Please check your API keys in the environment variables.`);
+          setLoading(false);
+          return;
+        }
+        
         // Check for access_token in the URL hash
         if (window.location.hash && window.location.hash.includes('access_token')) {
           console.log('Found auth tokens in URL hash - processing...');
@@ -41,7 +52,7 @@ const AuthCallback = () => {
           
           if (error) {
             console.error('Supabase auth error:', error);
-            setError('Authentication failed: ' + error.message);
+            setError(`Authentication failed: ${error.message}. This may be due to invalid API keys.`);
           } else if (data && data.session) {
             console.log('Authentication successful!', data.session.user);
             
@@ -76,7 +87,7 @@ const AuthCallback = () => {
                 
                 if (signInError) {
                   console.error('Error setting session:', signInError);
-                  setError('Error processing authentication tokens');
+                  setError(`Error processing authentication tokens: ${signInError.message}. This may be due to invalid API keys.`);
                 } else {
                   // Check if we have a session now
                   const { data: sessionData } = await supabase.auth.getSession();
@@ -92,7 +103,7 @@ const AuthCallback = () => {
               console.error('Error processing hash params:', err);
             }
             
-            setError('No session found after authentication attempt. Please try again.');
+            setError('No session found after authentication attempt. Please check your Supabase API keys and try again.');
           }
         } else {
           console.error('No auth tokens found in URL');
@@ -100,7 +111,7 @@ const AuthCallback = () => {
         }
       } catch (err) {
         console.error('Auth callback error:', err);
-        setError('An error occurred during authentication');
+        setError(`An error occurred during authentication: ${err.message}`);
       } finally {
         setLoading(false);
       }
