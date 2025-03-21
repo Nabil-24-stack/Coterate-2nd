@@ -183,23 +183,27 @@ const UserSection = styled.div`
   margin-top: auto;
 `;
 
-const AuthButton = styled.button`
+interface AuthButtonProps {
+  buttonTheme?: 'primary' | 'secondary';
+}
+
+const AuthButton = styled.button<AuthButtonProps>`
   width: 100%;
   padding: 8px 12px;
-  background-color: ${props => props.theme === 'primary' ? '#4A90E2' : 'white'};
-  color: ${props => props.theme === 'primary' ? 'white' : '#333'};
+  background-color: ${props => props.buttonTheme === 'primary' ? '#4A90E2' : 'white'};
+  color: ${props => props.buttonTheme === 'primary' ? 'white' : '#333'};
   border-radius: 8px;
   font-weight: 600;
   transition: all 0.2s;
   text-align: center;
-  border: 1px solid ${props => props.theme === 'primary' ? '#4A90E2' : '#E3E6EA'};
+  border: 1px solid ${props => props.buttonTheme === 'primary' ? '#4A90E2' : '#E3E6EA'};
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 14px;
   margin-bottom: 8px;
   
   &:hover {
-    background-color: ${props => props.theme === 'primary' ? '#3A80D2' : '#f5f5f5'};
+    background-color: ${props => props.buttonTheme === 'primary' ? '#3A80D2' : '#f5f5f5'};
   }
 `;
 
@@ -436,12 +440,12 @@ export const Sidebar: React.FC = () => {
               <UserName>{userName}</UserName>
               <UserEmail>{userEmail}</UserEmail>
             </UserInfo>
-            <AuthButton theme="secondary" onClick={handleSignOut}>
+            <AuthButton buttonTheme="secondary" onClick={handleSignOut}>
               Sign Out
             </AuthButton>
           </>
         ) : (
-          <AuthButton theme="primary" onClick={handleSignIn}>
+          <AuthButton buttonTheme="primary" onClick={handleSignIn}>
             Sign In with Figma
           </AuthButton>
         )}
