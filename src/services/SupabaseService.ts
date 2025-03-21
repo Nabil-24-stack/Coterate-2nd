@@ -7,8 +7,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Page } from '../types';
 
 // Initialize Supabase client with environment variables
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+// Support both React and Next.js style environment variables
+const supabaseUrl = 
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 
+  process.env.SUPABASE_URL || 
+  process.env.REACT_APP_SUPABASE_URL || 
+  '';
+
+const supabaseAnonKey = 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+  process.env.SUPABASE_ANON_KEY || 
+  process.env.REACT_APP_SUPABASE_ANON_KEY || 
+  '';
 
 let supabaseInstance: SupabaseClient | null = null;
 

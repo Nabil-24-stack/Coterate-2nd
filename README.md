@@ -128,6 +128,42 @@ This project is configured for easy deployment with Vercel:
 3. Set up the environment variables in the Vercel dashboard
 4. Deploy!
 
+## Environment Variables
+
+The application supports both React-style and Next.js/Vercel-style environment variables:
+
+### React-style (for local development)
+```
+# Supabase configuration
+REACT_APP_SUPABASE_URL=your_supabase_url_here
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# Figma API Key
+REACT_APP_FIGMA_ACCESS_TOKEN=your_figma_access_token_here
+
+# OpenAI API Key
+REACT_APP_OPENAI_API_KEY=your_openai_api_key_here
+```
+
+### Next.js/Vercel-style
+```
+# Supabase configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_URL=your_supabase_url_here
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# Figma API Key
+NEXT_PUBLIC_FIGMA_ACCESS_TOKEN=your_figma_access_token_here
+FIGMA_ACCESS_TOKEN=your_figma_access_token_here
+
+# OpenAI API Key
+NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+If you're deploying to Vercel, Vercel automatically adds environment variables for Supabase integration when you connect your Supabase project.
+
 ## Next Steps for Implementation
 
 1. **Add UI Iteration via AI-Powered Generation**

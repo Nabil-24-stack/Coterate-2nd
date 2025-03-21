@@ -12,7 +12,12 @@ const OPENAI_MODEL = 'gpt-4o';
 
 // Get the OpenAI API key from environment variables
 const getOpenAIApiKey = () => {
-  return process.env.REACT_APP_OPENAI_API_KEY || '';
+  return (
+    process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.REACT_APP_OPENAI_API_KEY || 
+    ''
+  );
 };
 
 /**

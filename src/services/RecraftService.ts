@@ -11,10 +11,13 @@ import { UIComponent } from '../types';
 const RECRAFT_API_URL = 'https://external.api.recraft.ai/v1/images/vectorize';
 
 // This should be stored in environment variables for security
-// For development, you can use process.env.REACT_APP_RECRAFT_API_KEY
-// In production with Vercel, set this in the Vercel environment variables
+// Support both React and Next.js environment variable formats
 const getApiKey = () => {
-  return process.env.REACT_APP_RECRAFT_API_KEY || '';
+  return (
+    process.env.NEXT_PUBLIC_REACT_APP_RECRAFT_API_KEY || 
+    process.env.REACT_APP_RECRAFT_API_KEY || 
+    ''
+  );
 };
 
 /**

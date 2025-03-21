@@ -15,8 +15,13 @@ const getFigmaApiKey = async (): Promise<string> => {
     return userToken;
   }
   
-  // Fall back to environment variable if needed
-  return process.env.REACT_APP_FIGMA_ACCESS_TOKEN || '';
+  // Fall back to environment variable if needed - support both formats
+  return (
+    process.env.NEXT_PUBLIC_FIGMA_ACCESS_TOKEN || 
+    process.env.FIGMA_ACCESS_TOKEN || 
+    process.env.REACT_APP_FIGMA_ACCESS_TOKEN || 
+    ''
+  );
 };
 
 // Constants for Figma API
