@@ -3,6 +3,7 @@ import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 // Import the logo directly from assets
 import logo from '../assets/coterate-logo.svg';
+import { UIComponent } from '../types';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -118,6 +119,15 @@ const ActionButton = styled.button`
     }
   }
 
+  &.secondary {
+    background-color: #34C759;
+    color: white;
+    
+    &:hover {
+      background-color: #2AB64E;
+    }
+  }
+
   &.disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -225,6 +235,123 @@ const VectorizedSvgContainer = styled.div`
   height: auto;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  position: relative;
+`;
+
+// UI Component Highlight Overlay
+const ComponentOverlay = styled.div<{ component: UIComponent }>`
+  position: absolute;
+  left: ${props => props.component.position.x}px;
+  top: ${props => props.component.position.y}px;
+  width: ${props => props.component.position.width}px;
+  height: ${props => props.component.position.height}px;
+  border: 2px dashed #4A90E2;
+  background-color: rgba(74, 144, 226, 0.1);
+  border-radius: ${props => props.component.style.borderRadius || 0}px;
+  z-index: ${props => (props.component.position.zIndex || 0) + 100};
+  cursor: pointer;
+  pointer-events: all;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: rgba(74, 144, 226, 0.2);
+  }
+`;
+
+// Analysis Panel
+const AnalysisPanel = styled.div`
+  position: fixed;
+  top: 60px;
+  right: 0;
+  width: 320px;
+  height: calc(100vh - 60px);
+  background-color: white;
+  border-left: 1px solid #E3E6EA;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
+  z-index: 50;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.3s;
+  transform: translateX(${props => props.hidden ? '100%' : '0'});
+`;
+
+const AnalysisPanelTitle = styled.h2`
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 16px 0;
+`;
+
+const ComponentTypeChip = styled.div<{ type: UIComponent['type'] }>`
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 8px;
+  color: white;
+  background-color: ${props => {
+    switch (props.type) {
+      case 'button': return '#4A90E2';
+      case 'text_field': return '#9C27B0';
+      case 'icon': return '#FF9800';
+      case 'text': return '#4CAF50';
+      case 'container': return '#607D8B';
+      case 'image': return '#E91E63';
+      default: return '#9E9E9E';
+    }
+  }};
+`;
+
+const SuggestionsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+`;
+
+const SuggestionItem = styled.div`
+  background-color: #F8F9FA;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #4A90E2;
+  font-size: 14px;
+  color: #333;
+`;
+
+const ComponentDetailSection = styled.div`
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const DetailItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  
+  .label {
+    font-weight: 600;
+    color: #666;
+  }
+  
+  .value {
+    color: #333;
+  }
+`;
+
+const ColorSwatch = styled.div<{ color: string }>`
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background-color: ${props => props.color};
+  display: inline-block;
+  margin-right: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 `;
 
 // Add the EmptyCanvas component
@@ -262,7 +389,7 @@ const LoadingIndicator = styled.div`
 `;
 
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage, vectorizeCurrentPage } = usePageContext();
+  const { currentPage, updatePage, vectorizeCurrentPage, analyzeCurrentPage } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -270,6 +397,9 @@ export const Canvas: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isVectorizing, setIsVectorizing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
+  const [selectedComponent, setSelectedComponent] = useState<UIComponent | null>(null);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   
@@ -374,8 +504,14 @@ export const Canvas: React.FC = () => {
             if (imageUrl && currentPage) {
               updatePage(currentPage.id, { 
                 baseImage: imageUrl,
-                vectorizedSvg: undefined // Clear any previous vectorized SVG when a new image is pasted
+                vectorizedSvg: undefined, // Clear any previous vectorized SVG when a new image is pasted
+                uiComponents: undefined,  // Clear any previous UI components
+                uiAnalysis: undefined     // Clear any previous analysis
               });
+              
+              // Close analysis panel when a new image is pasted
+              setShowAnalysisPanel(false);
+              setSelectedComponent(null);
             }
           };
           reader.readAsDataURL(blob);
@@ -404,6 +540,26 @@ export const Canvas: React.FC = () => {
     }
   };
   
+  // Handle UI component analysis
+  const handleAnalyze = async () => {
+    if (!currentPage || !currentPage.vectorizedSvg || !analyzeCurrentPage) return;
+    
+    try {
+      setIsAnalyzing(true);
+      await analyzeCurrentPage();
+      setShowAnalysisPanel(true);
+    } catch (error) {
+      console.error('Error analyzing UI components:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Handle component selection
+  const handleComponentClick = (component: UIComponent) => {
+    setSelectedComponent(component);
+  };
+  
   return (
     <>
       <GlobalStyle />
@@ -426,6 +582,13 @@ export const Canvas: React.FC = () => {
               disabled={!currentPage || !currentPage.baseImage || isVectorizing}
             >
               {isVectorizing ? 'Vectorizing...' : 'Vectorize Image'}
+            </ActionButton>
+            <ActionButton 
+              className={`secondary ${(!currentPage || !currentPage.vectorizedSvg) ? 'disabled' : ''}`}
+              onClick={handleAnalyze}
+              disabled={!currentPage || !currentPage.vectorizedSvg || isAnalyzing}
+            >
+              {isAnalyzing ? 'Analyzing...' : 'Analyze UI'}
             </ActionButton>
           </HeaderActions>
         </CanvasHeader>
@@ -451,9 +614,23 @@ export const Canvas: React.FC = () => {
                 </LoadingIndicator>
               )}
               
+              {isAnalyzing && (
+                <LoadingIndicator>
+                  Analyzing UI components...
+                </LoadingIndicator>
+              )}
+              
               {currentPage && currentPage.vectorizedSvg ? (
                 <DesignCard>
                   <VectorizedSvgContainer dangerouslySetInnerHTML={{ __html: currentPage.vectorizedSvg }} />
+                  {/* Overlay UI component highlights when analysis is available */}
+                  {currentPage.uiComponents && currentPage.uiComponents.map(component => (
+                    <ComponentOverlay 
+                      key={component.id} 
+                      component={component}
+                      onClick={() => handleComponentClick(component)}
+                    />
+                  ))}
                 </DesignCard>
               ) : currentPage && currentPage.baseImage ? (
                 <DesignCard>
@@ -470,6 +647,110 @@ export const Canvas: React.FC = () => {
             </DesignContainer>
           </CanvasContent>
         </InfiniteCanvas>
+        
+        {/* Analysis Panel */}
+        <AnalysisPanel hidden={!showAnalysisPanel}>
+          <AnalysisPanelTitle>UI Analysis</AnalysisPanelTitle>
+          
+          {selectedComponent ? (
+            <>
+              <div>
+                <ComponentTypeChip type={selectedComponent.type}>
+                  {selectedComponent.type.replace('_', ' ')}
+                </ComponentTypeChip>
+                {selectedComponent.content && <span>{selectedComponent.content}</span>}
+              </div>
+              
+              <ComponentDetailSection>
+                <DetailItem>
+                  <span className="label">Position</span>
+                  <span className="value">x: {Math.round(selectedComponent.position.x)}, y: {Math.round(selectedComponent.position.y)}</span>
+                </DetailItem>
+                
+                <DetailItem>
+                  <span className="label">Size</span>
+                  <span className="value">w: {Math.round(selectedComponent.position.width)}, h: {Math.round(selectedComponent.position.height)}</span>
+                </DetailItem>
+                
+                {selectedComponent.style.colors && (
+                  <DetailItem>
+                    <span className="label">Colors</span>
+                    <span className="value">
+                      {selectedComponent.style.colors.map((color, i) => (
+                        color !== 'none' && <ColorSwatch key={i} color={color} />
+                      ))}
+                    </span>
+                  </DetailItem>
+                )}
+                
+                {selectedComponent.style.borderRadius && (
+                  <DetailItem>
+                    <span className="label">Border Radius</span>
+                    <span className="value">{selectedComponent.style.borderRadius}px</span>
+                  </DetailItem>
+                )}
+                
+                {selectedComponent.style.fontSize && (
+                  <DetailItem>
+                    <span className="label">Font Size</span>
+                    <span className="value">{selectedComponent.style.fontSize}px</span>
+                  </DetailItem>
+                )}
+              </ComponentDetailSection>
+              
+              <SuggestionsContainer>
+                <h3>Improvement Suggestions</h3>
+                {currentPage?.uiAnalysis?.improvementSuggestions
+                  .find(s => s.component === selectedComponent.id)?.suggestions.map((suggestion, index) => (
+                    <SuggestionItem key={index}>
+                      {suggestion}
+                    </SuggestionItem>
+                  ))}
+              </SuggestionsContainer>
+              
+              <ActionButton onClick={() => setSelectedComponent(null)}>
+                Back to All Components
+              </ActionButton>
+            </>
+          ) : (
+            <>
+              <div>
+                {currentPage?.uiComponents && (
+                  <>{currentPage.uiComponents.length} components detected</>
+                )}
+              </div>
+              
+              {currentPage?.uiComponents?.map(component => (
+                <div 
+                  key={component.id} 
+                  style={{ 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    backgroundColor: '#F8F9FA',
+                    marginBottom: '8px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => handleComponentClick(component)}
+                >
+                  <ComponentTypeChip type={component.type}>
+                    {component.type.replace('_', ' ')}
+                  </ComponentTypeChip>
+                  {component.content ? (
+                    <span style={{ fontSize: '14px' }}>{component.content.substring(0, 20)}{component.content.length > 20 ? '...' : ''}</span>
+                  ) : (
+                    <span style={{ fontSize: '14px' }}>
+                      {Math.round(component.position.width)} × {Math.round(component.position.height)}
+                    </span>
+                  )}
+                </div>
+              ))}
+              
+              <ActionButton onClick={() => setShowAnalysisPanel(false)}>
+                Close Panel
+              </ActionButton>
+            </>
+          )}
+        </AnalysisPanel>
       </CanvasContainer>
     </>
   );
