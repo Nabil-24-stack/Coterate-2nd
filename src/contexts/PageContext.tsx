@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import { Page, PageContextType, UIComponent, UIAnalysis } from '../types';
-import { vectorizeImage, isRecraftConfigured } from '../services/RecraftService';
-import { analyzeUIComponents, generateImprovementSuggestions } from '../services/UIAnalysisService';
+import { vectorizeImage, vectorizeAllComponents, isRecraftConfigured } from '../services/RecraftService';
+import { analyzeImageWithGPT4Vision, generateImprovementSuggestions } from '../services/ImageAnalysisService';
 
 // Simple function to generate a UUID
 const generateUUID = (): string => {
@@ -21,8 +21,7 @@ const PageContext = createContext<PageContextType>({
   deletePage: () => {},
   setCurrentPage: () => {},
   renamePage: () => {},
-  vectorizeCurrentPage: async () => {},
-  analyzeCurrentPage: async () => {},
+  analyzeAndVectorizeImage: async () => {},
   toggleOriginalImage: () => {}
 });
 
@@ -38,7 +37,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: generateUUID(),
       name: 'Default Page',
       baseImage: '',
-      showOriginalWithAnalysis: false
+      showOriginalWithAnalysis: false,
+      isAnalyzing: false
     };
     
     return [defaultPage];
@@ -53,7 +53,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: generateUUID(),
       name: name || `Page ${pages.length + 1}`,
       baseImage: '',
-      showOriginalWithAnalysis: false
+      showOriginalWithAnalysis: false,
+      isAnalyzing: false
     };
     
     setPages(prevPages => [...prevPages, newPage]);
@@ -107,64 +108,68 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // Vectorize the current page's image
-  const vectorizeCurrentPage = async () => {
-    // Check if API is configured
-    if (!isRecraftConfigured()) {
-      console.error('Recraft API key not configured');
-      return;
-    }
-
+  // Single function to analyze the image, identify components, and vectorize them
+  const analyzeAndVectorizeImage = async () => {
     // Check if we have a current page and it has an image
     if (!currentPage || !currentPage.baseImage) {
-      console.error('No image available to vectorize');
+      console.error('No image available to analyze');
       return;
     }
 
     try {
-      // Call the Recraft API to vectorize the image with high fidelity settings
-      const svgData = await vectorizeImage(currentPage.baseImage, true);
+      // Set the analyzing state to show loading
+      updatePage(currentPage.id, { isAnalyzing: true });
+
+      // Step 1: Analyze the image with GPT-4o Vision to identify components
+      console.log('Analyzing image with GPT-4o Vision...');
+      const components = await analyzeImageWithGPT4Vision(currentPage.baseImage);
       
-      // Update the current page with the vectorized SVG
-      if (svgData) {
-        updatePage(currentPage.id, { 
-          vectorizedSvg: svgData,
-          // Set to show vectorized SVG by default
-          showOriginalWithAnalysis: false,
-          // Clear any previous analysis when a new SVG is created
-          uiComponents: undefined,
-          uiAnalysis: undefined
-        });
+      if (!components || components.length === 0) {
+        throw new Error('No components identified in the image');
       }
-    } catch (error) {
-      console.error('Error vectorizing image:', error);
-    }
-  };
-
-  // Analyze the current page's vectorized SVG for UI components
-  const analyzeCurrentPage = async () => {
-    // Check if we have a current page and it has a vectorized SVG
-    if (!currentPage || !currentPage.vectorizedSvg) {
-      console.error('No vectorized SVG available to analyze');
-      return;
-    }
-
-    try {
-      // Step 1: Identify UI components from the SVG
-      const components = await analyzeUIComponents(currentPage.vectorizedSvg);
       
+      console.log(`Identified ${components.length} components`);
+
       // Step 2: Generate improvement suggestions
-      const analysis = await generateImprovementSuggestions(components);
+      console.log('Generating improvement suggestions...');
+      const analysis = await generateImprovementSuggestions(components, currentPage.baseImage);
       
-      // Step 3: Update the current page with the analysis results
-      updatePage(currentPage.id, { 
-        uiComponents: components,
+      // Step 3: Vectorize all components
+      console.log('Vectorizing components...');
+      
+      // Check if Recraft API is configured
+      if (!isRecraftConfigured()) {
+        console.error('Recraft API key not configured');
+        
+        // Still update with the analysis results without vectorization
+        updatePage(currentPage.id, {
+          uiComponents: components,
+          uiAnalysis: analysis,
+          showOriginalWithAnalysis: true,
+          isAnalyzing: false
+        });
+        
+        return;
+      }
+      
+      // Vectorize all components
+      const vectorizedComponents = await vectorizeAllComponents(currentPage.baseImage, components);
+      
+      // Generate a full vectorized version as well for context
+      const fullVectorizedSvg = await vectorizeImage(currentPage.baseImage, true);
+      
+      // Step 4: Update the page with all the results
+      updatePage(currentPage.id, {
+        vectorizedSvg: fullVectorizedSvg,
+        uiComponents: vectorizedComponents,
         uiAnalysis: analysis,
-        // Set to show original image with analysis by default after analyzing
-        showOriginalWithAnalysis: true
+        showOriginalWithAnalysis: true, // Start with showing original image with overlays
+        isAnalyzing: false
       });
     } catch (error) {
-      console.error('Error analyzing UI components:', error);
+      console.error('Error in analyze and vectorize process:', error);
+      // Reset the analyzing state
+      updatePage(currentPage.id, { isAnalyzing: false });
     }
   };
   
@@ -178,8 +183,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deletePage,
         setCurrentPage,
         renamePage,
-        vectorizeCurrentPage,
-        analyzeCurrentPage,
+        analyzeAndVectorizeImage,
         toggleOriginalImage
       }}
     >

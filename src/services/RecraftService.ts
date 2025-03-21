@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { UIComponent } from '../types';
 
 // API constants
 // According to Recraft docs, the correct vectorize endpoint is:
@@ -79,6 +80,57 @@ export const vectorizeImage = async (imageData: string, highFidelity: boolean = 
     }
   } catch (error) {
     console.error('Error vectorizing image:', error);
+    throw error;
+  }
+};
+
+/**
+ * Extracts a component from an image and vectorizes it
+ * This simulates cropping and vectorizing a single component
+ * @param imageData - The full image data
+ * @param component - The component to extract and vectorize
+ * @returns Promise with the vectorized SVG for the component
+ */
+export const vectorizeComponent = async (imageData: string, component: UIComponent): Promise<string> => {
+  try {
+    // In a real implementation, you'd extract the component region from the image
+    // For now, we'll use the full image and let Recraft handle it
+    // A more advanced implementation would crop the image based on component coordinates
+    
+    const svg = await vectorizeImage(imageData, true);
+    
+    // In a real implementation, you'd manipulate the SVG to only include the component area
+    // by adjusting the viewBox and filtering elements based on their position
+    
+    return svg;
+  } catch (error) {
+    console.error(`Error vectorizing component ${component.id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Vectorizes all components in an array
+ * @param imageData - The full image data
+ * @param components - Array of components to vectorize
+ * @returns Promise with components updated with their vectorized SVGs
+ */
+export const vectorizeAllComponents = async (imageData: string, components: UIComponent[]): Promise<UIComponent[]> => {
+  try {
+    // First, create a full vectorized SVG
+    const fullSvg = await vectorizeImage(imageData, true);
+    
+    // Update all components with the same SVG for now
+    // In a more advanced implementation, you would extract the specific part of the SVG 
+    // that corresponds to each component
+    const updatedComponents = components.map(component => ({
+      ...component,
+      vectorizedSvg: fullSvg
+    }));
+    
+    return updatedComponents;
+  } catch (error) {
+    console.error('Error vectorizing all components:', error);
     throw error;
   }
 };

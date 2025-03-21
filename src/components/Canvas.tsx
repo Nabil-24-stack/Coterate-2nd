@@ -428,15 +428,13 @@ const LoadingIndicator = styled.div`
 `;
 
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage, vectorizeCurrentPage, analyzeCurrentPage, toggleOriginalImage } = usePageContext();
+  const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [isVectorizing, setIsVectorizing] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const [selectedComponent, setSelectedComponent] = useState<UIComponent | null>(null);
   
@@ -546,7 +544,8 @@ export const Canvas: React.FC = () => {
                 vectorizedSvg: undefined, // Clear any previous vectorized SVG when a new image is pasted
                 uiComponents: undefined,  // Clear any previous UI components
                 uiAnalysis: undefined,    // Clear any previous analysis
-                showOriginalWithAnalysis: false // Reset to default view
+                showOriginalWithAnalysis: false, // Reset to default view
+                isAnalyzing: false // Reset analyzing state
               });
               
               // Close analysis panel when a new image is pasted
@@ -566,32 +565,15 @@ export const Canvas: React.FC = () => {
     };
   }, [currentPage, updatePage]);
 
-  // Handle vectorization
-  const handleVectorize = async () => {
-    if (!currentPage || !currentPage.baseImage || !vectorizeCurrentPage) return;
+  // Handle analyze and vectorize
+  const handleAnalyzeAndVectorize = async () => {
+    if (!currentPage || !currentPage.baseImage || !analyzeAndVectorizeImage) return;
     
     try {
-      setIsVectorizing(true);
-      await vectorizeCurrentPage();
-    } catch (error) {
-      console.error('Error vectorizing image:', error);
-    } finally {
-      setIsVectorizing(false);
-    }
-  };
-  
-  // Handle UI component analysis
-  const handleAnalyze = async () => {
-    if (!currentPage || !currentPage.vectorizedSvg || !analyzeCurrentPage) return;
-    
-    try {
-      setIsAnalyzing(true);
-      await analyzeCurrentPage();
+      await analyzeAndVectorizeImage();
       setShowAnalysisPanel(true);
     } catch (error) {
-      console.error('Error analyzing UI components:', error);
-    } finally {
-      setIsAnalyzing(false);
+      console.error('Error analyzing and vectorizing image:', error);
     }
   };
 
@@ -617,6 +599,15 @@ export const Canvas: React.FC = () => {
         <EmptyCanvasMessage>
           Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
         </EmptyCanvasMessage>
+      );
+    }
+    
+    // Show loading indicator while analyzing
+    if (currentPage.isAnalyzing) {
+      return (
+        <LoadingIndicator>
+          Analyzing and vectorizing UI...
+        </LoadingIndicator>
       );
     }
     
@@ -707,18 +698,11 @@ export const Canvas: React.FC = () => {
               Reset View
             </ActionButton>
             <ActionButton 
-              className={`primary ${(!currentPage || !currentPage.baseImage) ? 'disabled' : ''}`}
-              onClick={handleVectorize}
-              disabled={!currentPage || !currentPage.baseImage || isVectorizing}
+              className={`primary ${(!currentPage || !currentPage.baseImage || currentPage.isAnalyzing) ? 'disabled' : ''}`}
+              onClick={handleAnalyzeAndVectorize}
+              disabled={!currentPage || !currentPage.baseImage || currentPage.isAnalyzing}
             >
-              {isVectorizing ? 'Vectorizing...' : 'Vectorize Image'}
-            </ActionButton>
-            <ActionButton 
-              className={`secondary ${(!currentPage || !currentPage.vectorizedSvg) ? 'disabled' : ''}`}
-              onClick={handleAnalyze}
-              disabled={!currentPage || !currentPage.vectorizedSvg || isAnalyzing}
-            >
-              {isAnalyzing ? 'Analyzing...' : 'Analyze UI'}
+              {currentPage?.isAnalyzing ? 'Analyzing...' : 'Analyze & Vectorize'}
             </ActionButton>
           </HeaderActions>
         </CanvasHeader>
@@ -738,18 +722,6 @@ export const Canvas: React.FC = () => {
             scale={scale}
           >
             <DesignContainer>
-              {isVectorizing && (
-                <LoadingIndicator>
-                  Vectorizing image...
-                </LoadingIndicator>
-              )}
-              
-              {isAnalyzing && (
-                <LoadingIndicator>
-                  Analyzing UI components...
-                </LoadingIndicator>
-              )}
-              
               {renderContent()}
             </DesignContainer>
           </CanvasContent>
@@ -804,6 +776,17 @@ export const Canvas: React.FC = () => {
                   </DetailItem>
                 )}
               </ComponentDetailSection>
+
+              {/* Display vectorized version of the individual component if available */}
+              {selectedComponent.vectorizedSvg && (
+                <div>
+                  <h3>Component Vector</h3>
+                  <VectorizedSvgContainer 
+                    dangerouslySetInnerHTML={{ __html: selectedComponent.vectorizedSvg }} 
+                    style={{ maxWidth: '100%', maxHeight: '200px', overflow: 'auto' }}
+                  />
+                </div>
+              )}
               
               <SuggestionsContainer>
                 <h3>Improvement Suggestions</h3>

@@ -5,6 +5,7 @@ export interface Page {
   baseImage?: string;
   vectorizedSvg?: string;
   showOriginalWithAnalysis?: boolean;
+  isAnalyzing?: boolean;
   uiComponents?: UIComponent[];
   uiAnalysis?: UIAnalysis;
   user_id?: string;
@@ -21,12 +22,11 @@ export interface PageContextType {
   deletePage: (id: string) => void;
   setCurrentPage: (page: Page) => void;
   renamePage: (id: string, newName: string) => void;
-  vectorizeCurrentPage?: () => Promise<void>;
-  analyzeCurrentPage?: () => Promise<void>;
+  analyzeAndVectorizeImage?: () => Promise<void>;
   toggleOriginalImage?: () => void;
 }
 
-// UI Component Analysis Types (importing from UIAnalysisService)
+// UI Component Analysis Types
 export interface UIComponent {
   id: string;
   type: 'button' | 'text_field' | 'icon' | 'image' | 'text' | 'container' | 'unknown';
@@ -54,18 +54,19 @@ export interface UIComponent {
     opacity?: number;
   };
   content?: string;
-  children?: string[]; // IDs of child components
-  parent?: string;     // ID of parent component
+  vectorizedSvg?: string;
+  children?: string[];
+  parent?: string;
 }
 
 export interface UIAnalysis {
   components: UIComponent[];
   hierarchy: {
-    root: string[];    // Root component IDs
-    relationships: Record<string, string[]>; // Parent ID -> Child IDs
+    root: string[];
+    relationships: Record<string, string[]>;
   };
   improvementSuggestions: {
-    component: string; // Component ID
+    component: string;
     suggestions: string[];
   }[];
 } 
