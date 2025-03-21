@@ -344,7 +344,7 @@ export const Canvas: React.FC = () => {
       <CanvasContainer>
         <CanvasHeader>
           <Logo>
-            <LogoImage src="/coterate-logo.svg" alt="Coterate Logo" />
+            <LogoImage src={`${process.env.PUBLIC_URL}/coterate-logo.svg`} alt="Coterate Logo" />
             Coterate UI
           </Logo>
           
