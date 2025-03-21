@@ -22,7 +22,8 @@ const PageContext = createContext<PageContextType>({
   setCurrentPage: () => {},
   renamePage: () => {},
   vectorizeCurrentPage: async () => {},
-  analyzeCurrentPage: async () => {}
+  analyzeCurrentPage: async () => {},
+  toggleOriginalImage: () => {}
 });
 
 // Custom hook to use the context
@@ -36,7 +37,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const defaultPage: Page = {
       id: generateUUID(),
       name: 'Default Page',
-      baseImage: ''
+      baseImage: '',
+      showOriginalWithAnalysis: false
     };
     
     return [defaultPage];
@@ -50,7 +52,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newPage: Page = {
       id: generateUUID(),
       name: name || `Page ${pages.length + 1}`,
-      baseImage: ''
+      baseImage: '',
+      showOriginalWithAnalysis: false
     };
     
     setPages(prevPages => [...prevPages, newPage]);
@@ -95,6 +98,15 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updatePage(id, { name: newName });
   };
 
+  // Toggle between original image and vectorized SVG
+  const toggleOriginalImage = () => {
+    if (!currentPage) return;
+    
+    updatePage(currentPage.id, { 
+      showOriginalWithAnalysis: !currentPage.showOriginalWithAnalysis 
+    });
+  };
+
   // Vectorize the current page's image
   const vectorizeCurrentPage = async () => {
     // Check if API is configured
@@ -110,13 +122,15 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // Call the Recraft API to vectorize the image
-      const svgData = await vectorizeImage(currentPage.baseImage);
+      // Call the Recraft API to vectorize the image with high fidelity settings
+      const svgData = await vectorizeImage(currentPage.baseImage, true);
       
       // Update the current page with the vectorized SVG
       if (svgData) {
         updatePage(currentPage.id, { 
           vectorizedSvg: svgData,
+          // Set to show vectorized SVG by default
+          showOriginalWithAnalysis: false,
           // Clear any previous analysis when a new SVG is created
           uiComponents: undefined,
           uiAnalysis: undefined
@@ -145,7 +159,9 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Step 3: Update the current page with the analysis results
       updatePage(currentPage.id, { 
         uiComponents: components,
-        uiAnalysis: analysis
+        uiAnalysis: analysis,
+        // Set to show original image with analysis by default after analyzing
+        showOriginalWithAnalysis: true
       });
     } catch (error) {
       console.error('Error analyzing UI components:', error);
@@ -163,7 +179,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentPage,
         renamePage,
         vectorizeCurrentPage,
-        analyzeCurrentPage
+        analyzeCurrentPage,
+        toggleOriginalImage
       }}
     >
       {children}

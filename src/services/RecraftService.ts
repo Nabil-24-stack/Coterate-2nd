@@ -19,9 +19,10 @@ const getApiKey = () => {
 /**
  * Vectorizes an image using the Recraft API
  * @param imageData - Base64 encoded image data
+ * @param highFidelity - Whether to use high fidelity settings for UI preservation
  * @returns Promise with the vectorized SVG data
  */
-export const vectorizeImage = async (imageData: string): Promise<string> => {
+export const vectorizeImage = async (imageData: string, highFidelity: boolean = true): Promise<string> => {
   try {
     const apiKey = getApiKey();
     console.log('API Key exists:', !!apiKey); // Log if key exists, not the actual key
@@ -47,6 +48,15 @@ export const vectorizeImage = async (imageData: string): Promise<string> => {
     // Append the blob as a file
     formData.append('file', blob, 'image.png');
     formData.append('response_format', 'b64_json');
+    
+    // Add parameters for high fidelity if requested
+    // These parameters may vary based on what the Recraft API actually supports
+    if (highFidelity) {
+      formData.append('detail_level', 'high');  // Request high level of detail
+      formData.append('text_detection', 'true'); // Ensure text is properly detected
+      formData.append('preserve_colors', 'true'); // Preserve original colors
+      formData.append('fidelity', 'high');      // High fidelity vectorization
+    }
 
     // Following Recraft's documentation - they use Bearer token authentication
     const response = await axios.post(

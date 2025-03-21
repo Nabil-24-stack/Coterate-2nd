@@ -128,6 +128,15 @@ const ActionButton = styled.button`
     }
   }
 
+  &.active {
+    background-color: #5C6BC0;
+    color: white;
+    
+    &:hover {
+      background-color: #3F51B5;
+    }
+  }
+
   &.disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -236,6 +245,13 @@ const VectorizedSvgContainer = styled.div`
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   position: relative;
+`;
+
+// Container for the original image with component overlays
+const AnalysisOverlayContainer = styled.div`
+  position: relative;
+  max-width: 100%;
+  height: auto;
 `;
 
 // UI Component Highlight Overlay
@@ -354,6 +370,29 @@ const ColorSwatch = styled.div<{ color: string }>`
   border: 1px solid rgba(0, 0, 0, 0.1);
 `;
 
+// Toggle Display Mode
+const DisplayModeToggle = styled.div`
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #E3E6EA;
+  margin-left: 16px;
+`;
+
+const ToggleButton = styled.button<{ active: boolean }>`
+  padding: 8px 12px;
+  background-color: ${props => props.active ? '#4A90E2' : 'white'};
+  color: ${props => props.active ? 'white' : '#333'};
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: ${props => props.active ? '#3A80D2' : '#f5f5f5'};
+  }
+`;
+
 // Add the EmptyCanvas component
 const EmptyCanvasMessage = styled.div`
   display: flex;
@@ -389,7 +428,7 @@ const LoadingIndicator = styled.div`
 `;
 
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage, vectorizeCurrentPage, analyzeCurrentPage } = usePageContext();
+  const { currentPage, updatePage, vectorizeCurrentPage, analyzeCurrentPage, toggleOriginalImage } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -506,7 +545,8 @@ export const Canvas: React.FC = () => {
                 baseImage: imageUrl,
                 vectorizedSvg: undefined, // Clear any previous vectorized SVG when a new image is pasted
                 uiComponents: undefined,  // Clear any previous UI components
-                uiAnalysis: undefined     // Clear any previous analysis
+                uiAnalysis: undefined,    // Clear any previous analysis
+                showOriginalWithAnalysis: false // Reset to default view
               });
               
               // Close analysis panel when a new image is pasted
@@ -559,6 +599,79 @@ export const Canvas: React.FC = () => {
   const handleComponentClick = (component: UIComponent) => {
     setSelectedComponent(component);
   };
+
+  // Toggle between original image and vectorized view
+  const handleToggleView = () => {
+    if (!toggleOriginalImage) return;
+    toggleOriginalImage();
+  };
+  
+  // Determine if analysis mode is active
+  const isAnalysisMode = currentPage?.uiComponents && currentPage.uiComponents.length > 0;
+  
+  // Determine what to display based on current state and settings
+  const renderContent = () => {
+    // No content to show
+    if (!currentPage) {
+      return (
+        <EmptyCanvasMessage>
+          Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
+        </EmptyCanvasMessage>
+      );
+    }
+    
+    // Show original image when no vectorized content or analysis mode with original toggled on
+    if (!currentPage.vectorizedSvg || 
+        (isAnalysisMode && currentPage.showOriginalWithAnalysis)) {
+      
+      if (currentPage.baseImage) {
+        return (
+          <DesignCard>
+            <AnalysisOverlayContainer>
+              <DesignImage 
+                src={currentPage.baseImage} 
+                alt={currentPage.name}
+              />
+              {/* Show component overlays on original image if in analysis mode */}
+              {isAnalysisMode && currentPage.uiComponents && 
+                currentPage.uiComponents.map(component => (
+                  <ComponentOverlay 
+                    key={component.id} 
+                    component={component}
+                    onClick={() => handleComponentClick(component)}
+                  />
+                ))
+              }
+            </AnalysisOverlayContainer>
+          </DesignCard>
+        );
+      }
+      
+      return (
+        <EmptyCanvasMessage>
+          No image available. Copy a UI design to your clipboard and paste it here.
+        </EmptyCanvasMessage>
+      );
+    }
+    
+    // Show vectorized SVG (with or without overlays)
+    return (
+      <DesignCard>
+        <VectorizedSvgContainer dangerouslySetInnerHTML={{ __html: currentPage.vectorizedSvg }} />
+        {/* Show component overlays if in analysis mode and not showing original */}
+        {isAnalysisMode && !currentPage.showOriginalWithAnalysis && 
+          currentPage.uiComponents && 
+          currentPage.uiComponents.map(component => (
+            <ComponentOverlay 
+              key={component.id} 
+              component={component}
+              onClick={() => handleComponentClick(component)}
+            />
+          ))
+        }
+      </DesignCard>
+    );
+  };
   
   return (
     <>
@@ -570,7 +683,24 @@ export const Canvas: React.FC = () => {
             Coterate UI
           </Logo>
           
-          <div />
+          <div>
+            {isAnalysisMode && (
+              <DisplayModeToggle>
+                <ToggleButton 
+                  active={!currentPage?.showOriginalWithAnalysis} 
+                  onClick={handleToggleView}
+                >
+                  Vectorized
+                </ToggleButton>
+                <ToggleButton 
+                  active={!!currentPage?.showOriginalWithAnalysis} 
+                  onClick={handleToggleView}
+                >
+                  Original
+                </ToggleButton>
+              </DisplayModeToggle>
+            )}
+          </div>
           
           <HeaderActions>
             <ActionButton onClick={resetCanvas}>
@@ -620,30 +750,7 @@ export const Canvas: React.FC = () => {
                 </LoadingIndicator>
               )}
               
-              {currentPage && currentPage.vectorizedSvg ? (
-                <DesignCard>
-                  <VectorizedSvgContainer dangerouslySetInnerHTML={{ __html: currentPage.vectorizedSvg }} />
-                  {/* Overlay UI component highlights when analysis is available */}
-                  {currentPage.uiComponents && currentPage.uiComponents.map(component => (
-                    <ComponentOverlay 
-                      key={component.id} 
-                      component={component}
-                      onClick={() => handleComponentClick(component)}
-                    />
-                  ))}
-                </DesignCard>
-              ) : currentPage && currentPage.baseImage ? (
-                <DesignCard>
-                  <DesignImage 
-                    src={currentPage.baseImage} 
-                    alt={currentPage.name}
-                  />
-                </DesignCard>
-              ) : (
-                <EmptyCanvasMessage>
-                  Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
-                </EmptyCanvasMessage>
-              )}
+              {renderContent()}
             </DesignContainer>
           </CanvasContent>
         </InfiniteCanvas>

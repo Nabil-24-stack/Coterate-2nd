@@ -4,6 +4,7 @@ export interface Page {
   name: string;
   baseImage?: string;
   vectorizedSvg?: string;
+  showOriginalWithAnalysis?: boolean;
   uiComponents?: UIComponent[];
   uiAnalysis?: UIAnalysis;
   user_id?: string;
@@ -22,6 +23,7 @@ export interface PageContextType {
   renamePage: (id: string, newName: string) => void;
   vectorizeCurrentPage?: () => Promise<void>;
   analyzeCurrentPage?: () => Promise<void>;
+  toggleOriginalImage?: () => void;
 }
 
 // UI Component Analysis Types (importing from UIAnalysisService)
