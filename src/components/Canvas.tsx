@@ -676,8 +676,8 @@ export const Canvas: React.FC = () => {
     }
     
     // Proceed with existing image analysis if available
-    if (currentPage?.baseImage && currentPage.analyzeAndVectorizeImage) {
-      await currentPage.analyzeAndVectorizeImage();
+    if (currentPage?.baseImage && analyzeAndVectorizeImage) {
+      await analyzeAndVectorizeImage();
     }
   };
 
