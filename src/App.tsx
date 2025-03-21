@@ -23,49 +23,80 @@ const AuthCallback = () => {
     // Handle the auth callback using Supabase
     const handleAuthCallback = async () => {
       try {
-        const supabase = getSupabase();
+        console.log('Auth callback triggered');
         
-        // Get URL hash parameters
-        const hashParams = window.location.hash 
-          ? new URLSearchParams(window.location.hash.substring(1))
-          : new URLSearchParams(window.location.search);
-        
-        console.log('Auth callback triggered - checking for auth response');
-        
-        // First check if we have the access_token in the URL (Supabase OAuth flow)
-        if (hashParams.get('access_token')) {
-          console.log('Found access_token in URL, processing authentication...');
-        }
-        
-        // Let Supabase process the URL parameters
-        // This is needed even if getSession is called later
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        
-        if (authError) {
-          console.error('Error getting authenticated user:', authError);
-        } else if (authData && authData.user) {
-          console.log('Successfully authenticated user:', authData.user.id);
-        }
-        
-        // Get the session
-        const { data, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Supabase auth error:', error);
-          setError('Authentication failed: ' + error.message);
-        } else if (data && data.session) {
-          console.log('Authentication successful!', data.session.user);
+        // Check for access_token in the URL hash
+        if (window.location.hash && window.location.hash.includes('access_token')) {
+          console.log('Found auth tokens in URL hash - processing...');
           
-          // Explicitly refresh the auth state to ensure it's updated
-          await refreshAuthState();
+          // The hash includes the token - we need to let Supabase process this
+          // Supabase automatically looks for these tokens on page load
+          const supabase = getSupabase();
           
-          // Redirect to main app
-          window.location.href = window.location.origin;
+          // Wait a moment for Supabase to process the hash
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Now check if we have a session
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            console.error('Supabase auth error:', error);
+            setError('Authentication failed: ' + error.message);
+          } else if (data && data.session) {
+            console.log('Authentication successful!', data.session.user);
+            
+            // Explicitly refresh the auth state to ensure it's updated across the app
+            await refreshAuthState();
+            
+            // Redirect to main app
+            window.location.href = window.location.origin;
+            return;
+          } else {
+            console.error('No session found despite having tokens in URL');
+            console.log('Full URL hash:', window.location.hash);
+            
+            // Attempt to manually extract and set the session
+            try {
+              // Get just the hash content (remove the # symbol)
+              const hashContent = window.location.hash.substring(1);
+              const params = new URLSearchParams(hashContent);
+              
+              // Log the access token (censored for security)
+              const accessToken = params.get('access_token');
+              if (accessToken) {
+                const censoredToken = accessToken.substring(0, 10) + '...' + 
+                  accessToken.substring(accessToken.length - 5);
+                console.log('Found access token:', censoredToken);
+                
+                // Try to exchange this token for a session
+                const { error: signInError } = await supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: params.get('refresh_token') || '',
+                });
+                
+                if (signInError) {
+                  console.error('Error setting session:', signInError);
+                  setError('Error processing authentication tokens');
+                } else {
+                  // Check if we have a session now
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  if (sessionData && sessionData.session) {
+                    console.log('Successfully set session manually');
+                    await refreshAuthState();
+                    window.location.href = window.location.origin;
+                    return;
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Error processing hash params:', err);
+            }
+            
+            setError('No session found after authentication attempt. Please try again.');
+          }
         } else {
-          console.error('No session found after authentication attempt');
-          console.log('URL hash:', window.location.hash);
-          console.log('URL search:', window.location.search);
-          setError('No session found after authentication attempt. Please try again.');
+          console.error('No auth tokens found in URL');
+          setError('No authentication tokens found in URL');
         }
       } catch (err) {
         console.error('Auth callback error:', err);
