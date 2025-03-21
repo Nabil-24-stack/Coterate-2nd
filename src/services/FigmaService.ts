@@ -133,21 +133,45 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
     // Parse the Figma URL to get file ID and node ID
     const { fileId, nodeId } = parseFigmaUrl(figmaUrl);
     
-    // Fetch file data from Figma API
-    const response = await axios.get(`${FIGMA_API_BASE_URL}/files/${fileId}`, {
-      headers: {
-        'X-Figma-Token': apiKey
-      }
-    });
-    
-    if (!response.data) {
-      throw new Error('Failed to fetch design data from Figma');
+    // Validate fileId to ensure it's in the right format
+    if (!fileId.match(/^[a-zA-Z0-9]{22,}$/)) {
+      throw new Error('Invalid Figma file ID format. Please ensure you copied a valid "Copy link to selection" URL.');
     }
     
-    return {
-      fileData: response.data,
-      nodeId
-    };
+    try {
+      // Fetch file data from Figma API
+      const response = await axios.get(`${FIGMA_API_BASE_URL}/files/${fileId}`, {
+        headers: {
+          'X-Figma-Token': apiKey
+        }
+      });
+      
+      if (!response.data) {
+        throw new Error('Failed to fetch design data from Figma');
+      }
+      
+      return {
+        fileData: response.data,
+        nodeId
+      };
+    } catch (error: any) {
+      // Handle specific error cases
+      if (error.response) {
+        if (error.response.status === 403) {
+          // Access denied error - provide a clear message about file permissions
+          console.error(`Figma API returned 403 Access Denied for file ID: ${fileId}`);
+          throw new Error(
+            'Access denied to this Figma file. Please check that:\n' + 
+            '1. You are logged in with the correct Figma account\n' + 
+            '2. Your account has permission to view this file\n' + 
+            '3. You are trying to access a file that exists and is shared with you'
+          );
+        } else if (error.response.status === 404) {
+          throw new Error('Figma file not found. The file may have been deleted or the URL is incorrect.');
+        }
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Error fetching Figma design:', error);
     throw error;
