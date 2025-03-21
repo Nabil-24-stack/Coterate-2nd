@@ -354,6 +354,15 @@ export const Sidebar: React.FC = () => {
     setEditingPageId(null);
   };
   
+  // Handle keyboard events for the edit input
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      savePageName();
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
+  };
+  
   // Handle clicks outside the edit input
   useEffect(() => {
     if (!editingPageId) return;
