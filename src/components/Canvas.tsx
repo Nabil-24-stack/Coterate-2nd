@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, MouseEvent } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
-import * as htmlToImage from 'html-to-image';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -45,11 +44,17 @@ const GlobalStyle = createGlobalStyle`
 const Logo = styled.div`
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   font-weight: 600;
   font-size: 28px;
   color: #333;
   font-family: 'Plus Jakarta Sans', sans-serif;
+`;
+
+const LogoImage = styled.img`
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
 `;
 
 // Redesigned Canvas Container
@@ -194,6 +199,20 @@ const DesignImage = styled.img`
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 `;
 
+// Add the EmptyCanvas component
+const EmptyCanvasMessage = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 18px;
+  margin-top: 100px;
+  text-align: center;
+  max-width: 500px;
+  line-height: 1.5;
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage } = usePageContext();
   
@@ -235,40 +254,55 @@ export const Canvas: React.FC = () => {
     setIsDragging(false);
   };
   
-  const handleCanvasWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    
-    const zoomSensitivity = 0.1;
-    const minScale = 0.1;
-    const maxScale = 4;
-    
-    // Calculate new scale
-    let newScale = scale;
-    
-    if (e.deltaY < 0) {
-      // Zoom in
-      newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
-    } else {
-      // Zoom out
-      newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
-    }
-    
-    // Calculate cursor position relative to canvas
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-    
-    // Calculate new position to zoom towards cursor
-    const newPosition = {
-      x: e.clientX - x * newScale,
-      y: e.clientY - y * newScale,
+  // Handle canvas wheel event manually instead of using onWheel prop
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      const zoomSensitivity = 0.1;
+      const minScale = 0.1;
+      const maxScale = 4;
+      
+      // Calculate new scale
+      let newScale = scale;
+      
+      if (e.deltaY < 0) {
+        // Zoom in
+        newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+      } else {
+        // Zoom out
+        newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+      }
+      
+      // Get the position of the cursor relative to the canvas
+      const rect = canvasElement.getBoundingClientRect();
+      
+      // Calculate cursor position relative to the transformed content
+      // This is the key part we need to fix:
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      // Calculate the point on the original content where the cursor is
+      const originX = mouseX / scale - position.x / scale;
+      const originY = mouseY / scale - position.y / scale;
+      
+      // Calculate the new position to keep the cursor point fixed
+      const newPositionX = mouseX - originX * newScale;
+      const newPositionY = mouseY - originY * newScale;
+      
+      setScale(newScale);
+      setPosition({ x: newPositionX, y: newPositionY });
     };
+
+    canvasElement.addEventListener('wheel', handleWheel, { passive: false });
     
-    setScale(newScale);
-    setPosition(newPosition);
-  };
+    return () => {
+      canvasElement.removeEventListener('wheel', handleWheel);
+    };
+  }, [scale, position]);
   
   // Handle image pasting
   useEffect(() => {
@@ -309,7 +343,10 @@ export const Canvas: React.FC = () => {
       <GlobalStyle />
       <CanvasContainer>
         <CanvasHeader>
-          <Logo>Coterate UI</Logo>
+          <Logo>
+            <LogoImage src="/coterate-logo.svg" alt="Coterate Logo" />
+            Coterate UI
+          </Logo>
           
           <div />
           
@@ -327,7 +364,6 @@ export const Canvas: React.FC = () => {
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
-          onWheel={handleCanvasWheel}
         >
           <CanvasContent
             id="canvas-content"
@@ -336,13 +372,17 @@ export const Canvas: React.FC = () => {
             scale={scale}
           >
             <DesignContainer>
-              {currentPage && (
+              {currentPage && currentPage.baseImage ? (
                 <DesignCard>
                   <DesignImage 
                     src={currentPage.baseImage} 
                     alt={currentPage.name}
                   />
                 </DesignCard>
+              ) : (
+                <EmptyCanvasMessage>
+                  Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
+                </EmptyCanvasMessage>
               )}
             </DesignContainer>
           </CanvasContent>

@@ -1,4 +1,4 @@
-# Coterate UI Simplified
+# Coterate 2nd
 
 A simplified version of the Coterate UI design tool that focuses only on the UI and page management functionality without any AI integrations.
 

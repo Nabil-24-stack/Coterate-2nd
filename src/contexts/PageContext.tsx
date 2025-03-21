@@ -4,8 +4,8 @@ import { Page, PageContextType } from '../types';
 // Simple function to generate a UUID
 const generateUUID = (): string => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 };
@@ -32,7 +32,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const defaultPage: Page = {
       id: generateUUID(),
       name: 'Default Page',
-      baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design'
+      baseImage: ''
     };
     
     return [defaultPage];
@@ -46,7 +46,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newPage: Page = {
       id: generateUUID(),
       name: name || `Page ${pages.length + 1}`,
-      baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design'
+      baseImage: ''
     };
     
     setPages(prevPages => [...prevPages, newPage]);

@@ -14,6 +14,12 @@ const Logo = styled.div`
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
+const LogoImage = styled.img`
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+`;
+
 const SidebarContainer = styled.div`
   width: 230px;
   height: calc(100% - 60px);
@@ -283,7 +289,7 @@ export const Sidebar: React.FC = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [editingPageId, editingPageName]);
+  }, [editingPageId, editingPageName, savePageName]);
   
   return (
     <SidebarContainer>
