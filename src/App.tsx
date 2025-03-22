@@ -5,6 +5,7 @@ import { Canvas } from './components/Canvas';
 import { PageProvider } from './contexts/PageContext';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { getSupabase, isAuthenticated, refreshAuthState } from './services/SupabaseService';
+import * as SupabaseService from './services/SupabaseService';
 
 const AppContainer = styled.div`
   display: flex;
@@ -74,30 +75,65 @@ const AuthCallback = () => {
               
               // Log the access token (censored for security)
               const accessToken = params.get('access_token');
+              const refreshToken = params.get('refresh_token') || '';
+              const expiresIn = params.get('expires_in');
+              const providerToken = params.get('provider_token');
+              
+              console.log('Auth data found:', { 
+                hasAccessToken: !!accessToken,
+                hasRefreshToken: !!refreshToken,
+                expiresIn,
+                hasProviderToken: !!providerToken
+              });
+              
               if (accessToken) {
                 const censoredToken = accessToken.substring(0, 10) + '...' + 
                   accessToken.substring(accessToken.length - 5);
                 console.log('Found access token:', censoredToken);
                 
                 // Try to exchange this token for a session
-                const { error: signInError } = await supabase.auth.setSession({
+                const { data, error: signInError } = await supabase.auth.setSession({
                   access_token: accessToken,
-                  refresh_token: params.get('refresh_token') || '',
+                  refresh_token: refreshToken
                 });
                 
                 if (signInError) {
                   console.error('Error setting session:', signInError);
-                  setError(`Error processing authentication tokens: ${signInError.message}. This may be due to invalid API keys.`);
+                  
+                  // If we can't set the session directly, try exchanging the provider token
+                  if (providerToken) {
+                    console.log('Attempting to sign in with provider token...');
+                    try {
+                      // First clear any existing sessions to avoid conflicts
+                      await supabase.auth.signOut();
+                      
+                      // Create a new instance of Supabase client for a fresh start
+                      // Force creation of a new Supabase client
+                      const freshSupabase = getSupabase();
+                      
+                      // Navigate to home and allow browser to reload with the params intact
+                      // This forces Supabase to automatically handle the token exchange
+                      window.location.href = window.location.origin;
+                      return;
+                    } catch (providerError) {
+                      console.error('Provider token approach failed:', providerError);
+                    }
+                  }
+                  
+                  setError(`Error processing authentication tokens: ${signInError.message || 'Unknown error'}. This may be due to invalid API keys.`);
                 } else {
                   // Check if we have a session now
-                  const { data: sessionData } = await supabase.auth.getSession();
-                  if (sessionData && sessionData.session) {
-                    console.log('Successfully set session manually');
+                  if (data && data.session) {
+                    console.log('Successfully set session manually', data.session);
                     await refreshAuthState();
                     window.location.href = window.location.origin;
                     return;
+                  } else {
+                    console.error('No session data returned from setSession');
                   }
                 }
+              } else {
+                console.error('No access token found in URL hash');
               }
             } catch (err: any) {
               console.error('Error processing hash params:', err);
