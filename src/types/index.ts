@@ -14,6 +14,7 @@ export interface Page {
   user_id?: string;
   created_at?: string;
   updated_at?: string;
+  error?: string; // Error message if any operation fails
 }
 
 // Interface for Page Context

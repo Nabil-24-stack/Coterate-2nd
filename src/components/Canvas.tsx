@@ -452,6 +452,57 @@ const UrlInput = styled.input`
   }
 `;
 
+// Add these style components at the top with the other styled components
+const ErrorMessageContainer = styled.div`
+  margin: 20px;
+  padding: 20px;
+  background-color: #fff3f3;
+  border: 1px solid #e74c3c;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 600px;
+`;
+
+const ErrorIcon = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #e74c3c;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+`;
+
+const ErrorTitle = styled.h3`
+  color: #e74c3c;
+  margin: 0 0 8px 0;
+`;
+
+const ErrorDescription = styled.p`
+  margin: 0 0 16px 0;
+  white-space: pre-line;
+  line-height: 1.5;
+`;
+
+const RetryButton = styled.button`
+  background-color: #4A90E2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-weight: 500;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #3a7bc8;
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage, analyzeFigmaDesign, isLoggedIn, userProfile } = usePageContext();
   
@@ -630,38 +681,28 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Add function to handle Figma URL submission
+  // Handle Figma URL submission
   const handleFigmaUrlSubmit = async () => {
-    if (!validateFigmaUrl(figmaUrl)) {
-      setIsValidUrl(false);
-      setErrorMessage("Please enter a valid Figma URL (Copy link to selection format).");
-      return;
-    }
-    
-    // Clear previous error messages
-    setErrorMessage(null);
+    if (!figmaUrl) return;
     
     try {
-      // Analyze the Figma design using the context function
+      setErrorMessage(''); // Clear any previous errors
+      
+      // Check if we have a valid Figma URL (basic check)
+      if (!isValidUrl || !figmaUrl.includes('figma.com')) {
+        setErrorMessage('Please enter a valid Figma URL.');
+        return;
+      }
+      
       if (analyzeFigmaDesign) {
         await analyzeFigmaDesign(figmaUrl);
         
-        // Reset the UI after processing
-        setFigmaUrl('');
+        // If successful, close the URL input
         setShowUrlInput(false);
       }
     } catch (error: any) {
       console.error('Error analyzing Figma design:', error);
-      // Provide a helpful error message based on the error received
-      if (error.message.includes('Access denied') || error.message.includes('permission')) {
-        setErrorMessage("Access denied to this Figma file. Please make sure you have permission to view it and you're logged in with the correct Figma account.");
-      } else if (error.message.includes('not found')) {
-        setErrorMessage("Figma file not found. The file may have been deleted or the URL is incorrect.");
-      } else if (error.message.includes('log in with Figma')) {
-        setErrorMessage("You need to log in with Figma first to access this design.");
-      } else {
-        setErrorMessage(`Error importing from Figma: ${error.message || 'Unknown error'}`);
-      }
+      setErrorMessage(error.message || 'Failed to analyze Figma design.');
     }
   };
   
@@ -843,6 +884,13 @@ export const Canvas: React.FC = () => {
     );
   }
   
+  // Check for errors in the currentPage
+  useEffect(() => {
+    if (currentPage?.error) {
+      setErrorMessage(currentPage.error);
+    }
+  }, [currentPage?.error]);
+  
   return (
     <>
       <GlobalStyle />
@@ -1021,6 +1069,24 @@ export const Canvas: React.FC = () => {
           )}
         </AnalysisPanel>
       </CanvasContainer>
+      {currentPage?.isAnalyzing && (
+        <LoadingOverlay>
+          <LoadingSpinner />
+          <LoadingText>Analyzing Design...</LoadingText>
+        </LoadingOverlay>
+      )}
+      {!showUrlInput && currentPage?.error && !currentPage?.isAnalyzing && (
+        <ErrorMessageContainer>
+          <ErrorIcon>!</ErrorIcon>
+          <div>
+            <ErrorTitle>Error</ErrorTitle>
+            <ErrorDescription>{currentPage.error}</ErrorDescription>
+            <RetryButton onClick={() => setShowUrlInput(true)}>
+              Try Another URL
+            </RetryButton>
+          </div>
+        </ErrorMessageContainer>
+      )}
     </>
   );
 }; 
