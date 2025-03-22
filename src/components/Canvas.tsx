@@ -503,6 +503,43 @@ const RetryButton = styled.button`
   }
 `;
 
+// Add missing styled components after the other styled components
+const LoadingOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const LoadingSpinner = styled.div`
+  width: 48px;
+  height: 48px;
+  border: 4px solid #E3E6EA;
+  border-radius: 50%;
+  border-top-color: #4A90E2;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+const LoadingText = styled.div`
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, analyzeAndVectorizeImage, toggleOriginalImage, analyzeFigmaDesign, isLoggedIn, userProfile } = usePageContext();
   
@@ -823,7 +860,6 @@ export const Canvas: React.FC = () => {
     );
   };
   
-  // Add this before the return statement
   if (showUrlInput) {
     return (
       <DesignContainer>
@@ -883,13 +919,6 @@ export const Canvas: React.FC = () => {
       </DesignContainer>
     );
   }
-  
-  // Check for errors in the currentPage
-  useEffect(() => {
-    if (currentPage?.error) {
-      setErrorMessage(currentPage.error);
-    }
-  }, [currentPage?.error]);
   
   return (
     <>
