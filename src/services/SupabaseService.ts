@@ -317,15 +317,31 @@ export const deletePage = async (pageId: string): Promise<void> => {
 export const getFigmaAccessTokenFromUser = async (): Promise<string | null> => {
   try {
     const supabase = getSupabase();
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (error || !user) return null;
-    
-    // Get access token from user metadata
-    if (user.app_metadata?.provider === 'figma' && user.app_metadata?.access_token) {
-      return user.app_metadata.access_token;
+    if (error || !session) {
+      console.log('No active session found for Figma token lookup');
+      return null;
     }
     
+    // Log available session data to debug token access
+    console.log('Session provider:', session.user?.app_metadata?.provider);
+    
+    // First check for provider_token in the session (this is where Figma token is stored)
+    if (session.provider_token) {
+      console.log('Found provider_token in session');
+      return session.provider_token;
+    }
+    
+    // As a fallback, check the user metadata
+    const user = session.user;
+    if (user?.app_metadata?.provider === 'figma') {
+      if (user.app_metadata.provider_token) {
+        return user.app_metadata.provider_token;
+      }
+    }
+    
+    console.log('No Figma access token found in user session');
     return null;
   } catch (error) {
     console.error('Error getting Figma access token:', error);

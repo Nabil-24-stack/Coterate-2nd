@@ -130,6 +130,9 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
       throw new Error('Figma API key not configured. Please log in with Figma.');
     }
     
+    console.log('Using Figma token (masked):', 
+      apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5));
+    
     // Parse the Figma URL to get file ID and node ID
     const { fileId, nodeId } = parseFigmaUrl(figmaUrl);
     
@@ -160,14 +163,22 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
         if (error.response.status === 403) {
           // Access denied error - provide a clear message about file permissions
           console.error(`Figma API returned 403 Access Denied for file ID: ${fileId}`);
+          
+          // This is likely a token issue - try to get a fresh token
+          console.log('Access denied - suggesting to reauthenticate with Figma');
+          
           throw new Error(
             'Access denied to this Figma file. Please check that:\n' + 
             '1. You are logged in with the correct Figma account\n' + 
             '2. Your account has permission to view this file\n' + 
-            '3. You are trying to access a file that exists and is shared with you'
+            '3. You are trying to access a file that exists and is shared with you\n\n' +
+            'Try signing out and signing back in with Figma to refresh your access token.'
           );
         } else if (error.response.status === 404) {
           throw new Error('Figma file not found. The file may have been deleted or the URL is incorrect.');
+        } else {
+          console.error('Figma API error:', error.response.status, error.response.data);
+          throw new Error(`Figma API error: ${error.response.status} - ${error.response.data?.message || error.response.statusText || 'Unknown error'}`);
         }
       }
       throw error;
