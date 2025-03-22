@@ -363,7 +363,7 @@ export const getFigmaAccessTokenFromUser = async (): Promise<string | null> => {
       return envToken;
     }
     
-    console.error('No Figma access token found anywhere');
+    console.error('No Figma access token found anywhere. Please sign in with Figma first.');
     return null;
   } catch (error) {
     console.error('Error getting Figma access token:', error);

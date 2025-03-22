@@ -24,25 +24,26 @@ const AuthCallback = () => {
     // Handle the auth callback using Supabase
     const handleAuthCallback = async () => {
       try {
-        console.log('Auth callback triggered');
-        
-        // First, verify Supabase configuration
-        try {
-          const supabase = getSupabase();
-          console.log('Supabase client created successfully');
-        } catch (configError: any) {
-          console.error('Supabase configuration error:', configError);
-          setError(`Supabase configuration error: ${configError.message || 'Unknown error'}. Please check your API keys in the environment variables.`);
-          setLoading(false);
-          return;
-        }
+        console.log('Auth callback triggered, URL:', window.location.href);
         
         // Check for access_token in the URL hash
         if (window.location.hash && window.location.hash.includes('access_token')) {
           console.log('Found auth tokens in URL hash - processing...');
           
-          // The hash includes the token - we need to let Supabase process this
-          // Supabase automatically looks for these tokens on page load
+          // First, we'll extract the tokens from the URL for debug purposes
+          const hashContent = window.location.hash.substring(1);
+          const params = new URLSearchParams(hashContent);
+          
+          // Log the token types we've found (without revealing the actual tokens)
+          console.log('Auth tokens found:', {
+            hasAccessToken: !!params.get('access_token'),
+            hasRefreshToken: !!params.get('refresh_token'),
+            hasProviderToken: !!params.get('provider_token'),
+            expires_in: params.get('expires_in'),
+            token_type: params.get('token_type')
+          });
+          
+          // Let Supabase handle the auth flow - this will automatically process the tokens in the URL
           const supabase = getSupabase();
           
           // Wait a moment for Supabase to process the hash
@@ -55,91 +56,45 @@ const AuthCallback = () => {
             console.error('Supabase auth error:', error);
             setError(`Authentication failed: ${error.message}. This may be due to invalid API keys.`);
           } else if (data && data.session) {
-            console.log('Authentication successful!', data.session.user);
+            console.log('Authentication successful! Session established.');
+            console.log('User metadata:', data.session.user?.user_metadata);
             
-            // Explicitly refresh the auth state to ensure it's updated across the app
-            await refreshAuthState();
-            
-            // Redirect to main app
+            // Force reload the page to ensure the auth state is properly picked up
+            // This is more reliable than just redirecting
             window.location.href = window.location.origin;
             return;
           } else {
-            console.error('No session found despite having tokens in URL');
-            console.log('Full URL hash:', window.location.hash);
+            console.error('No session established despite having tokens in URL');
             
-            // Attempt to manually extract and set the session
+            // Attempt to manually set the session with the tokens from the URL
             try {
-              // Get just the hash content (remove the # symbol)
-              const hashContent = window.location.hash.substring(1);
-              const params = new URLSearchParams(hashContent);
-              
-              // Log the access token (censored for security)
               const accessToken = params.get('access_token');
-              const refreshToken = params.get('refresh_token') || '';
-              const expiresIn = params.get('expires_in');
-              const providerToken = params.get('provider_token');
+              const refreshToken = params.get('refresh_token');
               
-              console.log('Auth data found:', { 
-                hasAccessToken: !!accessToken,
-                hasRefreshToken: !!refreshToken,
-                expiresIn,
-                hasProviderToken: !!providerToken
-              });
-              
-              if (accessToken) {
-                const censoredToken = accessToken.substring(0, 10) + '...' + 
-                  accessToken.substring(accessToken.length - 5);
-                console.log('Found access token:', censoredToken);
+              if (accessToken && refreshToken) {
+                console.log('Attempting to manually set session with tokens from URL');
                 
-                // Try to exchange this token for a session
-                const { data, error: signInError } = await supabase.auth.setSession({
+                const { error: setSessionError } = await supabase.auth.setSession({
                   access_token: accessToken,
                   refresh_token: refreshToken
                 });
                 
-                if (signInError) {
-                  console.error('Error setting session:', signInError);
-                  
-                  // If we can't set the session directly, try exchanging the provider token
-                  if (providerToken) {
-                    console.log('Attempting to sign in with provider token...');
-                    try {
-                      // First clear any existing sessions to avoid conflicts
-                      await supabase.auth.signOut();
-                      
-                      // Create a new instance of Supabase client for a fresh start
-                      // Force creation of a new Supabase client
-                      const freshSupabase = getSupabase();
-                      
-                      // Navigate to home and allow browser to reload with the params intact
-                      // This forces Supabase to automatically handle the token exchange
-                      window.location.href = window.location.origin;
-                      return;
-                    } catch (providerError) {
-                      console.error('Provider token approach failed:', providerError);
-                    }
-                  }
-                  
-                  setError(`Error processing authentication tokens: ${signInError.message || 'Unknown error'}. This may be due to invalid API keys.`);
+                if (setSessionError) {
+                  console.error('Error setting session manually:', setSessionError);
+                  setError(`Error setting session: ${setSessionError.message}`);
                 } else {
-                  // Check if we have a session now
-                  if (data && data.session) {
-                    console.log('Successfully set session manually', data.session);
-                    await refreshAuthState();
-                    window.location.href = window.location.origin;
-                    return;
-                  } else {
-                    console.error('No session data returned from setSession');
-                  }
+                  console.log('Session set manually, forcing page reload');
+                  window.location.href = window.location.origin;
+                  return;
                 }
               } else {
-                console.error('No access token found in URL hash');
+                console.error('Missing required tokens for manual session setup');
               }
-            } catch (err: any) {
-              console.error('Error processing hash params:', err);
+            } catch (setSessionError) {
+              console.error('Exception during manual session setup:', setSessionError);
             }
             
-            setError('No session found after authentication attempt. Please check your Supabase API keys and try again.');
+            setError('Authentication failed. Could not establish a session.');
           }
         } else {
           console.error('No auth tokens found in URL');
@@ -152,10 +107,11 @@ const AuthCallback = () => {
         setLoading(false);
       }
     };
-
+    
     handleAuthCallback();
   }, []);
-
+  
+  // If still loading, show a loading message
   if (loading) {
     return (
       <div style={{ 
@@ -171,7 +127,8 @@ const AuthCallback = () => {
       </div>
     );
   }
-
+  
+  // If there was an error, show an error message
   if (error) {
     return (
       <div style={{ 
@@ -202,7 +159,8 @@ const AuthCallback = () => {
       </div>
     );
   }
-
+  
+  // If authentication was successful but we're still on this page
   return (
     <div style={{ 
       display: 'flex', 
@@ -216,6 +174,22 @@ const AuthCallback = () => {
       <h2>Authentication Successful</h2>
       <p>You have successfully logged in with Figma.</p>
       <p>Redirecting you to the application...</p>
+      
+      {/* Add a manual redirect button in case the automatic redirect fails */}
+      <button 
+        onClick={() => window.location.href = window.location.origin}
+        style={{
+          marginTop: '20px',
+          padding: '10px 20px',
+          background: '#4A90E2',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+      >
+        Go to Application
+      </button>
     </div>
   );
 };

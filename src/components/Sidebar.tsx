@@ -362,24 +362,35 @@ export const Sidebar: React.FC = () => {
   
   // Handle user info when authentication state changes
   useEffect(() => {
-    if (isLoggedIn && userProfile) {
-      console.log('User profile in Sidebar:', userProfile);
-      
-      // Get name from user metadata or use default
-      const name = userProfile.user_metadata?.full_name || 
-                   userProfile.user_metadata?.name || 
-                   'Figma User';
-      
-      // Get email or use default
-      const email = userProfile.email || '';
-      
-      setUserName(name);
-      setUserEmail(email);
-    } else {
-      // Reset user info when logged out
-      setUserName('');
-      setUserEmail('');
-    }
+    const checkLoginStatus = async () => {
+      try {
+        if (isLoggedIn && userProfile) {
+          console.log('User profile in Sidebar:', userProfile);
+          
+          // Get name from user metadata or use default
+          const name = userProfile.user_metadata?.full_name || 
+                      userProfile.user_metadata?.name || 
+                      'Figma User';
+          
+          // Get email or use default
+          const email = userProfile.email || '';
+          
+          console.log('Setting user profile display to:', name, email);
+          
+          setUserName(name);
+          setUserEmail(email);
+        } else {
+          // Reset user info when logged out
+          console.log('Not logged in or no user profile, clearing user display');
+          setUserName('');
+          setUserEmail('');
+        }
+      } catch (error) {
+        console.error('Error handling user profile in sidebar:', error);
+      }
+    };
+    
+    checkLoginStatus();
   }, [isLoggedIn, userProfile]);
   
   // Handle click outside user dropdown
@@ -497,13 +508,16 @@ export const Sidebar: React.FC = () => {
   
   // Render the user section
   const renderUserSection = () => {
+    console.log('Rendering user section, isLoggedIn:', isLoggedIn);
+    console.log('User profile available:', Boolean(userProfile));
+    
     if (isLoggedIn && userProfile) {
       return (
         <UserSection>
           <UserProfileButton onClick={toggleUserDropdown}>
             <FigmaIcon>F</FigmaIcon>
             <ProfileInfo>
-              <ProfileName>{userName}</ProfileName>
+              <ProfileName>{userName || 'Figma User'}</ProfileName>
               {userEmail && <ProfileEmail>{userEmail}</ProfileEmail>}
             </ProfileInfo>
           </UserProfileButton>

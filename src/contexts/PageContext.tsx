@@ -88,21 +88,30 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (event === 'SIGNED_IN') {
           console.log("User signed in!");
-          const { data: { user }, error } = await supabase.auth.getUser();
-          if (!error && user) {
-            setIsLoggedIn(true);
-            setUserProfile(user);
-            
-            // Load user's pages
-            try {
-              const userPages = await getPages();
-              if (userPages.length > 0) {
-                setPages(userPages);
-                setCurrentPage(userPages[0]);
+          
+          try {
+            const { data: { user }, error } = await supabase.auth.getUser();
+            if (!error && user) {
+              console.log("User data fetched after sign in:", user.email);
+              console.log("User metadata:", user.user_metadata);
+              
+              // Explicitly update the state with the user profile
+              setIsLoggedIn(true);
+              setUserProfile(user);
+              
+              // Load user's pages
+              try {
+                const userPages = await getPages();
+                if (userPages.length > 0) {
+                  setPages(userPages);
+                  setCurrentPage(userPages[0]);
+                }
+              } catch (error) {
+                console.error('Error loading pages after sign in:', error);
               }
-            } catch (error) {
-              console.error('Error loading pages after sign in:', error);
             }
+          } catch (error) {
+            console.error("Error fetching user after sign in:", error);
           }
         } else if (event === 'SIGNED_OUT') {
           console.log("User signed out!");
@@ -119,6 +128,25 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setPages([defaultPage]);
           setCurrentPage(defaultPage);
+        } else if (event === 'TOKEN_REFRESHED') {
+          // When a token is refreshed, update the auth state
+          console.log("Auth token refreshed!");
+          const { isLoggedIn, user } = await refreshAuthState();
+          
+          // Update state with refreshed data
+          setIsLoggedIn(isLoggedIn);
+          if (user) {
+            setUserProfile(user);
+          }
+        } else if (event === 'USER_UPDATED') {
+          console.log("User data updated!");
+          
+          // Get the updated user data
+          const { data: { user }, error } = await supabase.auth.getUser();
+          if (!error && user) {
+            console.log("Updated user data:", user.user_metadata);
+            setUserProfile(user);
+          }
         }
       }
     );
@@ -231,7 +259,11 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       // Set the analyzing state to show loading
-      updatePage(currentPage.id, { isAnalyzing: true });
+      updatePage(currentPage.id, { 
+        isAnalyzing: true,
+        // Clear any previous error state
+        error: undefined 
+      });
 
       // Step 1: Check if Figma API is configured
       const figmaConfigured = await isFigmaApiConfigured();
@@ -248,34 +280,35 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fileId,
           nodeId,
         } = await importFigmaDesign(figmaUrl);
-
-        // Step 3: Generate improvement suggestions with GPT-4o
-        console.log('Generating improvement suggestions...');
-        const analysis = await generateImprovementSuggestions(components, imageData);
-
-        // Step 4: Update the page with all the results
+        
+        // Step 3: Update the page with the imported design
+        console.log('Design imported successfully, updating page...');
+        
+        // Update the page with the design data
         updatePage(currentPage.id, {
-          figmaUrl,
-          figmaFileId: fileId,
-          figmaNodeId: nodeId,
           baseImage: imageData,
           uiComponents: components,
-          uiAnalysis: analysis,
-          showOriginalWithAnalysis: true,
-          isAnalyzing: false
+          figmaFileId: fileId,
+          figmaNodeId: nodeId,
+          figmaUrl: figmaUrl,
+          isAnalyzing: false,
         });
-
-        console.log('Figma design analysis complete!');
-      } catch (error) {
-        // Reset the analyzing state and rethrow the error to propagate it
-        updatePage(currentPage.id, { isAnalyzing: false });
+      } catch (error: any) {
+        console.error('Error importing Figma design:', error);
+        // Update the page with the error
+        updatePage(currentPage.id, {
+          isAnalyzing: false,
+          error: error.message || 'Failed to import Figma design.'
+        });
         throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing Figma design:', error);
-      // Reset the analyzing state
-      updatePage(currentPage.id, { isAnalyzing: false });
-      // Rethrow the error to be handled by the UI layer
+      // Make sure to update the page with the error and stop the analyzing state
+      updatePage(currentPage.id, {
+        isAnalyzing: false,
+        error: error.message || 'Error analyzing Figma design'
+      });
       throw error;
     }
   };
