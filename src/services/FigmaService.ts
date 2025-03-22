@@ -6,22 +6,36 @@
 import axios from 'axios';
 import { UIComponent } from '../types';
 import { getFigmaAccessTokenFromUser } from './SupabaseService';
+import { getSupabase } from './SupabaseService';
 
 // Get the Figma API key from environment variables or user's token
 const getFigmaApiKey = async (): Promise<string> => {
   // First try to get the token from the authenticated user (via Supabase)
   const userToken = await getFigmaAccessTokenFromUser();
   if (userToken) {
+    // Mask token for logging
+    const maskedToken = userToken.substring(0, 5) + '...' + userToken.substring(userToken.length - 5);
+    console.log('Using user Figma auth token (masked):', maskedToken);
     return userToken;
   }
   
+  // If we can't get a token from Supabase, we may not be authenticated correctly
+  console.error('Could not retrieve Figma token from user session or localStorage. You may need to sign out and sign in again with Figma.');
+
   // Fall back to environment variable if needed - support both formats
-  return (
+  const envToken = (
     process.env.NEXT_PUBLIC_FIGMA_ACCESS_TOKEN || 
     process.env.FIGMA_ACCESS_TOKEN || 
     process.env.REACT_APP_FIGMA_ACCESS_TOKEN || 
     ''
   );
+  
+  if (envToken && envToken !== 'replace_with_your_key') {
+    console.log('Using environment variable token as fallback');
+    return envToken;
+  }
+  
+  throw new Error('No Figma API token available. Please sign in with Figma or configure an API token.');
 };
 
 // Constants for Figma API
@@ -534,4 +548,23 @@ const rgbaToHex = (r: number, g: number, b: number, a: number = 1): string => {
   }
   
   return `#${rHex}${gHex}${bHex}`;
+};
+
+// Add a new function to reset Figma auth state
+export const resetFigmaAuth = async (): Promise<void> => {
+  try {
+    const supabase = getSupabase();
+    
+    // Sign out and sign back in to refresh the token
+    await supabase.auth.signOut();
+    console.log('Signed out to reset Figma auth state');
+    
+    // Clear any cached auth data
+    localStorage.removeItem('supabase.auth.token');
+    
+    console.log('Auth state reset. Please sign in with Figma again.');
+  } catch (error) {
+    console.error('Error resetting auth state:', error);
+    throw error;
+  }
 }; 

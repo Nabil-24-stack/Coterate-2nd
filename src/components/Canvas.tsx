@@ -5,7 +5,7 @@ import { usePageContext } from '../contexts/PageContext';
 import logo from '../assets/coterate-logo.svg';
 import { UIComponent } from '../types';
 import { signInWithFigma, isAuthenticated } from '../services/SupabaseService';
-import { parseFigmaUrl } from '../services/FigmaService';
+import { parseFigmaUrl, resetFigmaAuth } from '../services/FigmaService';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -787,6 +787,18 @@ export const Canvas: React.FC = () => {
   // Determine if analysis mode is active
   const isAnalysisMode = currentPage?.uiComponents && currentPage.uiComponents.length > 0;
   
+  // Add a function to handle Figma auth reset
+  const handleResetFigmaAuth = async () => {
+    try {
+      await resetFigmaAuth();
+      setErrorMessage('Figma authentication reset. Please sign in again.');
+      setShowUrlInput(false); // Show the main canvas
+    } catch (error) {
+      console.error('Error resetting Figma auth:', error);
+      setErrorMessage('Failed to reset authentication. Please try again.');
+    }
+  };
+  
   // Modify the render content function to include Figma URL input
   const renderContent = () => {
     // No content to show
@@ -895,7 +907,25 @@ export const Canvas: React.FC = () => {
               fontSize: '14px'
             }}>
               <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>Error</p>
-              <p style={{ whiteSpace: 'pre-line', margin: 0 }}>{errorMessage}</p>
+              <p style={{ whiteSpace: 'pre-line', margin: '0 0 10px 0' }}>{errorMessage}</p>
+              
+              {/* Add reset button if the error is related to access denied */}
+              {isLoggedIn && errorMessage.includes('Access denied') && (
+                <button 
+                  onClick={handleResetFigmaAuth}
+                  style={{
+                    backgroundColor: '#4A90E2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '6px 12px',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Reset Figma Authentication
+                </button>
+              )}
             </div>
           )}
           {!isLoggedIn && (

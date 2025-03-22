@@ -316,32 +316,54 @@ export const deletePage = async (pageId: string): Promise<void> => {
 // Export Figma access token getter (to be used by FigmaService)
 export const getFigmaAccessTokenFromUser = async (): Promise<string | null> => {
   try {
+    // Try to get the token from local storage first, as this is where Supabase OAuth stores the provider token
+    // Use localStorage to directly check for the provider token
     const supabase = getSupabase();
-    const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (error || !session) {
-      console.log('No active session found for Figma token lookup');
-      return null;
-    }
+    // First try to get the session manually
+    const { data: { session } } = await supabase.auth.getSession();
     
-    // Log available session data to debug token access
-    console.log('Session provider:', session.user?.app_metadata?.provider);
-    
-    // First check for provider_token in the session (this is where Figma token is stored)
-    if (session.provider_token) {
-      console.log('Found provider_token in session');
-      return session.provider_token;
-    }
-    
-    // As a fallback, check the user metadata
-    const user = session.user;
-    if (user?.app_metadata?.provider === 'figma') {
-      if (user.app_metadata.provider_token) {
-        return user.app_metadata.provider_token;
+    if (session) {
+      console.log('Session found, checking for provider token');
+      
+      // Log the session object to see what's available (with sensitive parts masked)
+      console.log('Auth session structure:', {
+        provider: session.user?.app_metadata?.provider,
+        hasProviderToken: !!session.provider_token,
+        providerRefreshToken: !!session.provider_refresh_token
+      });
+      
+      // Check if provider_token exists in the session
+      if (session.provider_token) {
+        console.log('Found provider_token in session');
+        return session.provider_token;
       }
+    } else {
+      console.log('No session found, checking localStorage directly');
     }
     
-    console.log('No Figma access token found in user session');
+    // As a fallback, try to manually extract the token from localStorage
+    try {
+      const storageData = localStorage.getItem('supabase.auth.token');
+      if (storageData) {
+        const authData = JSON.parse(storageData);
+        if (authData?.currentSession?.provider_token) {
+          console.log('Found provider_token in localStorage');
+          return authData.currentSession.provider_token;
+        }
+      }
+    } catch (storageError) {
+      console.error('Error accessing localStorage:', storageError);
+    }
+
+    // Check for environment variable token as a last resort
+    const envToken = process.env.REACT_APP_FIGMA_ACCESS_TOKEN || '';
+    if (envToken && envToken !== 'replace_with_your_key') {
+      console.log('Using environment variable token');
+      return envToken;
+    }
+    
+    console.error('No Figma access token found anywhere');
     return null;
   } catch (error) {
     console.error('Error getting Figma access token:', error);
