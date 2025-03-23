@@ -360,22 +360,25 @@ export const Sidebar: React.FC = () => {
   const editInputRef = useRef<HTMLInputElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   
-  // Handle user info when authentication state changes
+  // Check login status and update user info
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
+        // Check for a stored Figma token as additional verification
+        const figmaToken = localStorage.getItem('figma_provider_token');
+        
         if (isLoggedIn && userProfile) {
-          console.log('User profile in Sidebar:', userProfile);
-          
-          // Get name from user metadata or use default
-          const name = userProfile.user_metadata?.full_name || 
-                      userProfile.user_metadata?.name || 
-                      'Figma User';
-          
-          // Get email or use default
+          // Extract user info from profile
+          const name = userProfile.user_metadata?.full_name || 'User';
           const email = userProfile.email || '';
           
-          console.log('Setting user profile display to:', name, email);
+          console.log('Rendering user section, isLoggedIn:', isLoggedIn);
+          console.log('User profile available:', !!userProfile);
+          console.log(`User: ${name} (${email})`);
+          
+          if (figmaToken) {
+            console.log('Figma token is available - user is fully authenticated');
+          }
           
           setUserName(name);
           setUserEmail(email);
@@ -487,9 +490,12 @@ export const Sidebar: React.FC = () => {
     setShowUserDropdown(!showUserDropdown);
   };
   
-  // Handle sign in with Figma
-  const handleSignIn = async () => {
+  // Handle Figma login
+  const handleFigmaLogin = async () => {
     try {
+      // Clear any existing tokens first to ensure fresh authentication
+      localStorage.removeItem('figma_provider_token');
+      console.log('Initiating Figma sign-in process...');
       await signInWithFigma();
     } catch (error) {
       console.error('Error signing in with Figma:', error);
@@ -535,7 +541,7 @@ export const Sidebar: React.FC = () => {
     
     return (
       <UserSection>
-        <SignInButton onClick={handleSignIn}>
+        <SignInButton onClick={handleFigmaLogin}>
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>

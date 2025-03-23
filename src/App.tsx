@@ -38,6 +38,13 @@ const AuthCallback = () => {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData && sessionData.session) {
           console.log('Existing session found.');
+          
+          // Check for provider token in the session and save it
+          if (sessionData.session.provider_token) {
+            console.log('Found provider token in existing session, saving to localStorage');
+            localStorage.setItem('figma_provider_token', sessionData.session.provider_token);
+          }
+          
           authSuccess = true;
         }
         // Check for access_token in the URL hash
@@ -64,9 +71,12 @@ const AuthCallback = () => {
             try {
               // Save the Figma token directly to localStorage for our app to use
               localStorage.setItem('figma_provider_token', providerToken);
+              console.log('Successfully saved provider token to localStorage');
             } catch (storageError) {
               console.error('Error saving provider token to localStorage:', storageError);
             }
+          } else {
+            console.warn('No provider_token found in URL hash');
           }
           
           // Wait a moment for Supabase to process the hash
@@ -81,6 +91,13 @@ const AuthCallback = () => {
           } else if (data && data.session) {
             console.log('Authentication successful! Session established.');
             console.log('User metadata:', data.session.user?.user_metadata);
+            
+            // Check again for the provider token in the session
+            if (data.session.provider_token && !localStorage.getItem('figma_provider_token')) {
+              console.log('Found provider token in new session, saving to localStorage');
+              localStorage.setItem('figma_provider_token', data.session.provider_token);
+            }
+            
             authSuccess = true;
           } else {
             console.error('No session established despite having tokens in URL');
@@ -129,6 +146,13 @@ const AuthCallback = () => {
             setError(`Authentication failed: ${error.message}`);
           } else if (data && data.session) {
             console.log('PKCE authentication successful! Session established.');
+            
+            // Check for provider token in the session
+            if (data.session.provider_token) {
+              console.log('Found provider token in PKCE session, saving to localStorage');
+              localStorage.setItem('figma_provider_token', data.session.provider_token);
+            }
+            
             authSuccess = true;
           } else {
             console.error('No session established after PKCE code exchange');
@@ -250,6 +274,19 @@ function App() {
         console.log('Auth event:', event);
         if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user);
+          
+          // Store provider token in localStorage if available in session
+          if (session?.provider_token) {
+            console.log('Found provider token in session, storing for Figma access');
+            try {
+              localStorage.setItem('figma_provider_token', session.provider_token);
+              console.log('Stored Figma provider token in localStorage');
+            } catch (e) {
+              console.error('Error storing Figma token:', e);
+            }
+          } else {
+            console.warn('No provider token found in session after sign-in');
+          }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out');
         }

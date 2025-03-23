@@ -211,8 +211,13 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
       throw new Error('Figma API key not configured. Please log in with Figma.');
     }
     
-    console.log('Using Figma token (masked):', 
-      apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5));
+    // Log token properties for debugging (without exposing the actual token)
+    console.log('Using Figma token info:', {
+      length: apiKey.length,
+      starts_with: apiKey.substring(0, 4),
+      ends_with: apiKey.substring(apiKey.length - 4),
+      is_valid_format: /^[A-Za-z0-9_-]{50,}$/.test(apiKey)
+    });
     
     // Parse the Figma URL to get file ID and node ID
     const { fileId, nodeId } = parseFigmaUrl(figmaUrl);
@@ -223,12 +228,16 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
     }
     
     try {
+      console.log(`Making Figma API request to: ${FIGMA_API_BASE_URL}/files/${fileId}`);
+      
       // Fetch file data from Figma API
       const response = await axios.get(`${FIGMA_API_BASE_URL}/files/${fileId}`, {
         headers: {
           'X-Figma-Token': apiKey
         }
       });
+      
+      console.log('Figma API request successful');
       
       if (!response.data) {
         throw new Error('Failed to fetch design data from Figma');
@@ -241,12 +250,17 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
     } catch (error: any) {
       // Handle specific error cases
       if (error.response) {
+        console.error(`Figma API error: ${error.response.status}`, error.response.data);
+        
         if (error.response.status === 403) {
           // Access denied error - provide a clear message about file permissions
           console.error(`Figma API returned 403 Access Denied for file ID: ${fileId}`);
           
           // This is likely a token issue - try to get a fresh token
           console.log('Access denied - suggesting to reauthenticate with Figma');
+          
+          // Remove the invalid token from localStorage
+          localStorage.removeItem('figma_provider_token');
           
           throw new Error(
             'Access denied to this Figma file. Please check that:\n' + 
@@ -257,10 +271,22 @@ export const fetchFigmaDesign = async (figmaUrl: string): Promise<any> => {
           );
         } else if (error.response.status === 404) {
           throw new Error('Figma file not found. The file may have been deleted or the URL is incorrect.');
+        } else if (error.response.status === 401) {
+          // Invalid or expired token
+          console.error('Figma API returned 401 Unauthorized - token is invalid or expired');
+          
+          // Remove the invalid token from localStorage
+          localStorage.removeItem('figma_provider_token');
+          
+          throw new Error('Your Figma authentication has expired. Please sign out and sign in again with Figma.');
         } else {
           console.error('Figma API error:', error.response.status, error.response.data);
           throw new Error(`Figma API error: ${error.response.status} - ${error.response.data?.message || error.response.statusText || 'Unknown error'}`);
         }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('Figma API network error - no response received:', error.request);
+        throw new Error('Network error when accessing Figma API. Please check your internet connection.');
       }
       throw error;
     }
