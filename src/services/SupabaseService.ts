@@ -102,7 +102,12 @@ export const signInWithFigma = async (): Promise<void> => {
         redirectTo: redirectUrl,
         // Enable PKCE flow for better security
         skipBrowserRedirect: false,
-        scopes: 'files:read'
+        scopes: 'files:read',
+        // Explicitly request that Supabase should get and store the provider token
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
       }
     });
     
@@ -338,22 +343,57 @@ export const getFigmaAccessTokenFromUser = async (): Promise<string | null> => {
       // Check for provider_token in session object
       if (session.provider_token) {
         console.log('Found provider_token in Supabase session');
+        
+        // Also store it in our direct storage to ensure it's available
+        try {
+          localStorage.setItem('figma_provider_token', session.provider_token);
+        } catch (err) {
+          console.warn('Could not save token to localStorage');
+        }
+        
         return session.provider_token;
       }
       
       // Check for the token in user metadata
       if (session.user?.user_metadata?.figma_access_token) {
         console.log('Found token in user metadata');
+        
+        // Also store it in our direct storage
+        try {
+          localStorage.setItem('figma_provider_token', session.user.user_metadata.figma_access_token);
+        } catch (err) {
+          console.warn('Could not save token to localStorage');
+        }
+        
         return session.user.user_metadata.figma_access_token;
       }
       
       // Check app_metadata for provider tokens
       if (session.user?.app_metadata?.provider_token) {
         console.log('Found token in app_metadata');
+        
+        // Also store it in our direct storage
+        try {
+          localStorage.setItem('figma_provider_token', session.user.app_metadata.provider_token);
+        } catch (err) {
+          console.warn('Could not save token to localStorage');
+        }
+        
         return session.user.app_metadata.provider_token;
       }
     } else {
       console.log('No active session found via API');
+    }
+    
+    // Check for our directly stored token first before trying localStorage
+    try {
+      const directToken = localStorage.getItem('figma_provider_token');
+      if (directToken) {
+        console.log('Found directly stored Figma provider token');
+        return directToken;
+      }
+    } catch (storageError) {
+      console.error('Error accessing direct token storage:', storageError);
     }
     
     // As a fallback, try to manually get token from localStorage

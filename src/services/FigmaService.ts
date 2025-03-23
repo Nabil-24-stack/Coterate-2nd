@@ -22,6 +22,14 @@ const getFigmaApiKey = async (): Promise<string> => {
       return userToken;
     }
     
+    // Check our direct localStorage backup for the Figma token
+    console.log('Checking for directly stored Figma token...');
+    const directToken = localStorage.getItem('figma_provider_token');
+    if (directToken) {
+      console.log('Found directly stored Figma provider token');
+      return directToken;
+    }
+    
     // If we can't get a token from Supabase, check local storage directly
     console.log('No token from session, checking localStorage directly...');
     

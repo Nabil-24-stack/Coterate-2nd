@@ -265,10 +265,37 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: undefined 
       });
 
+      // First try to check if user is properly authenticated
+      const isUserLoggedIn = await isAuthenticated();
+      if (!isUserLoggedIn) {
+        // User needs to authenticate first
+        throw new Error('Please sign in with Figma to analyze your design.');
+      }
+
+      // Check for a direct token in localStorage
+      let directTokenAvailable = false;
+      try {
+        const directToken = localStorage.getItem('figma_provider_token');
+        if (directToken) {
+          console.log('Found stored Figma token, proceeding with analysis');
+          directTokenAvailable = true;
+        }
+      } catch (e) {
+        console.error('Error checking localStorage for token:', e);
+      }
+
       // Step 1: Check if Figma API is configured
       const figmaConfigured = await isFigmaApiConfigured();
-      if (!figmaConfigured) {
-        throw new Error('Figma API is not configured. Please login with Figma first.');
+      if (!figmaConfigured && !directTokenAvailable) {
+        // If we don't have a token but user appears to be logged in, we need to refresh auth
+        console.log('Figma API not configured, attempting to refresh auth state...');
+        await refreshAuthState();
+        
+        // Check again after refresh
+        const configuredAfterRefresh = await isFigmaApiConfigured();
+        if (!configuredAfterRefresh) {
+          throw new Error('Unable to access Figma API. Please sign out and sign in with Figma again to authorize access to your designs.');
+        }
       }
 
       // Step 2: Import the Figma design
@@ -295,11 +322,25 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } catch (error: any) {
         console.error('Error importing Figma design:', error);
-        // Update the page with the error
-        updatePage(currentPage.id, {
-          isAnalyzing: false,
-          error: error.message || 'Failed to import Figma design.'
-        });
+        
+        // If the error is about Figma access token, provide a clear message
+        if (error.message && (
+          error.message.includes('Figma API key') || 
+          error.message.includes('Figma token') ||
+          error.message.includes('sign in with Figma')
+        )) {
+          // Update the page with a clear error message
+          updatePage(currentPage.id, {
+            isAnalyzing: false,
+            error: 'Could not access your Figma design. Please sign out and sign in again with Figma to grant access to your designs.'
+          });
+        } else {
+          // Update the page with the original error
+          updatePage(currentPage.id, {
+            isAnalyzing: false,
+            error: error.message || 'Failed to import Figma design.'
+          });
+        }
         throw error;
       }
     } catch (error: any) {

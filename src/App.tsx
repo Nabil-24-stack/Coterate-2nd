@@ -57,6 +57,18 @@ const AuthCallback = () => {
             token_type: params.get('token_type')
           });
           
+          // If we have a provider_token, store it directly in localStorage as backup
+          const providerToken = params.get('provider_token');
+          if (providerToken) {
+            console.log('Found provider_token in URL hash, storing it for Figma API access');
+            try {
+              // Save the Figma token directly to localStorage for our app to use
+              localStorage.setItem('figma_provider_token', providerToken);
+            } catch (storageError) {
+              console.error('Error saving provider token to localStorage:', storageError);
+            }
+          }
+          
           // Wait a moment for Supabase to process the hash
           await new Promise(resolve => setTimeout(resolve, 500));
           
