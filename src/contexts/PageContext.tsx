@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Page, PageContextType, UIComponent, UIAnalysis } from '../types';
 import { analyzeImageWithGPT4Vision, generateImprovementSuggestions } from '../services/ImageAnalysisService';
-import { importFigmaDesign, isFigmaApiConfigured, getFigmaClientCredentials } from '../services/FigmaService';
 import { isAuthenticated, getPages, savePage, deletePage as deletePageFromDB, refreshAuthState } from '../services/SupabaseService';
 import { getSupabase } from '../services/SupabaseService';
 
@@ -23,7 +22,6 @@ const PageContext = createContext<PageContextType>({
   deletePage: () => {},
   setCurrentPage: () => {},
   renamePage: () => {},
-  analyzeFigmaDesign: async () => {},
   analyzeAndVectorizeImage: async () => {},
   toggleOriginalImage: () => {},
   isLoggedIn: false,
@@ -151,98 +149,99 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
     
+    // Return cleanup function
     return () => {
       subscription.unsubscribe();
     };
   }, []);
-  
+
   // Add a new page
-  const addPage = async (name: string) => {
+  const addPage = (name: string) => {
+    // Generate a unique ID
+    const id = generateUUID();
+    
+    // Create a new page with default values
     const newPage: Page = {
-      id: generateUUID(),
+      id,
       name: name || `Page ${pages.length + 1}`,
       baseImage: '',
       showOriginalWithAnalysis: false,
       isAnalyzing: false
     };
     
+    // Update state with the new page
     setPages(prevPages => [...prevPages, newPage]);
     setCurrentPage(newPage);
     
-    // Save to Supabase if logged in
+    // Save to Supabase if user is logged in
     if (isLoggedIn) {
-      try {
-        await savePage(newPage);
-      } catch (error) {
+      savePage(newPage).catch(error => {
         console.error('Error saving new page:', error);
-      }
+      });
     }
   };
   
-  // Update a page
-  const updatePage = async (id: string, updates: Partial<Page>) => {
-    let updatedPage: Page | null = null;
-    
+  // Update an existing page
+  const updatePage = (id: string, updates: Partial<Page>) => {
     setPages(prevPages => {
-      const newPages = prevPages.map(page => {
-        if (page.id === id) {
-          updatedPage = { ...page, ...updates };
-          return updatedPage;
-        }
-        return page;
-      });
+      const newPages = prevPages.map(page => 
+        page.id === id ? { ...page, ...updates } : page
+      );
       return newPages;
     });
     
     // Update current page if it's the one being updated
     if (currentPage && currentPage.id === id) {
-      setCurrentPage(prevPage => ({
-        ...prevPage!,
-        ...updates
-      }));
+      setCurrentPage(prevPage => {
+        if (prevPage) {
+          return { ...prevPage, ...updates };
+        }
+        return prevPage;
+      });
     }
     
-    // Save to Supabase if logged in
-    if (isLoggedIn && updatedPage) {
-      try {
-        await savePage(updatedPage);
-      } catch (error) {
-        console.error('Error updating page:', error);
+    // Save to Supabase if user is logged in
+    if (isLoggedIn) {
+      const updatedPage = pages.find(page => page.id === id);
+      if (updatedPage) {
+        const mergedPage = { ...updatedPage, ...updates };
+        savePage(mergedPage).catch(error => {
+          console.error('Error updating page:', error);
+        });
       }
     }
   };
   
   // Delete a page
-  const deletePage = async (id: string) => {
-    // Remove from local state
+  const deletePage = (id: string) => {
+    // Check if the page to delete exists
+    const pageToDelete = pages.find(page => page.id === id);
+    if (!pageToDelete) return;
+    
+    // Remove the page from state
     const newPages = pages.filter(page => page.id !== id);
     setPages(newPages);
     
-    // If the deleted page was the current page, set a new current page
+    // Update current page if needed
     if (currentPage && currentPage.id === id) {
-      if (newPages.length > 0) {
-        setCurrentPage(newPages[0]);
-      } else {
-        setCurrentPage(null);
-      }
+      // Select a new current page (first available)
+      setCurrentPage(newPages.length > 0 ? newPages[0] : null);
     }
     
-    // Delete from Supabase if logged in
+    // Delete from Supabase if user is logged in
     if (isLoggedIn) {
-      try {
-        await deletePageFromDB(id);
-      } catch (error) {
+      deletePageFromDB(id).catch(error => {
         console.error('Error deleting page:', error);
-      }
+      });
     }
   };
   
   // Rename a page
-  const renamePage = async (id: string, newName: string) => {
-    await updatePage(id, { name: newName });
+  const renamePage = (id: string, newName: string) => {
+    updatePage(id, { name: newName });
   };
-
-  // Toggle between original image and analysis view
+  
+  // Toggle between original image and vectorized view
   const toggleOriginalImage = () => {
     if (!currentPage) return;
     
@@ -251,122 +250,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // Analyze Figma design
-  const analyzeFigmaDesign = async (figmaUrl: string) => {
-    if (!currentPage) {
-      throw new Error('No current page to add design to');
-    }
-
-    try {
-      // Set the analyzing state to show loading
-      updatePage(currentPage.id, { 
-        isAnalyzing: true,
-        // Clear any previous error state
-        error: undefined 
-      });
-
-      // Check if Figma client credentials are configured
-      const { clientId } = getFigmaClientCredentials();
-      if (clientId) {
-        console.log('Figma client credentials are properly configured');
-      }
-
-      // First try to check if user is properly authenticated
-      const isUserLoggedIn = await isAuthenticated();
-      if (!isUserLoggedIn) {
-        // User needs to authenticate first
-        throw new Error('Please sign in with Figma to analyze your design.');
-      }
-
-      // Check for a direct token in localStorage
-      let directTokenAvailable = false;
-      try {
-        const directToken = localStorage.getItem('figma_provider_token');
-        if (directToken) {
-          console.log('Found stored Figma token, proceeding with analysis');
-          directTokenAvailable = true;
-        }
-      } catch (e) {
-        console.error('Error checking localStorage for token:', e);
-      }
-
-      // Step 1: Check if Figma API is configured
-      const figmaConfigured = await isFigmaApiConfigured();
-      if (!figmaConfigured && !directTokenAvailable) {
-        // If we have client credentials but no access token, we need to authenticate
-        if (clientId) {
-          console.log('Figma client ID is configured, but no access token. User needs to authenticate.');
-          throw new Error('You need to sign in with Figma to access your designs. Please sign in using the "Sign In with Figma" button in the sidebar.');
-        }
-        
-        // If we don't have a token but user appears to be logged in, we need to refresh auth
-        console.log('Figma API not configured, attempting to refresh auth state...');
-        await refreshAuthState();
-        
-        // Check again after refresh
-        const configuredAfterRefresh = await isFigmaApiConfigured();
-        if (!configuredAfterRefresh) {
-          throw new Error('Unable to access Figma API. Please sign out and sign in with Figma again to authorize access to your designs.');
-        }
-      }
-
-      // Step 2: Import the Figma design
-      console.log('Importing Figma design...');
-      try {
-        const {
-          components,
-          imageData,
-          fileId,
-          nodeId,
-        } = await importFigmaDesign(figmaUrl);
-        
-        // Step 3: Update the page with the imported design
-        console.log('Design imported successfully, updating page...');
-        
-        // Update the page with the design data
-        updatePage(currentPage.id, {
-          baseImage: imageData,
-          uiComponents: components,
-          figmaFileId: fileId,
-          figmaNodeId: nodeId,
-          figmaUrl: figmaUrl,
-          isAnalyzing: false,
-        });
-      } catch (error: any) {
-        console.error('Error importing Figma design:', error);
-        
-        // If the error is about Figma access token, provide a clear message
-        if (error.message && (
-          error.message.includes('Figma API key') || 
-          error.message.includes('Figma token') ||
-          error.message.includes('sign in with Figma')
-        )) {
-          // Update the page with a clear error message
-          updatePage(currentPage.id, {
-            isAnalyzing: false,
-            error: 'Could not access your Figma design. Please sign out and sign in again with Figma to grant access to your designs.'
-          });
-        } else {
-          // Update the page with the original error
-          updatePage(currentPage.id, {
-            isAnalyzing: false,
-            error: error.message || 'Failed to import Figma design.'
-          });
-        }
-        throw error;
-      }
-    } catch (error: any) {
-      console.error('Error analyzing Figma design:', error);
-      // Make sure to update the page with the error and stop the analyzing state
-      updatePage(currentPage.id, {
-        isAnalyzing: false,
-        error: error.message || 'Error analyzing Figma design'
-      });
-      throw error;
-    }
-  };
-
-  // Keep the legacy image analysis for backward compatibility
+  // Handle analyze and vectorize
   const analyzeAndVectorizeImage = async () => {
     // Check if we have a current page and it has an image
     if (!currentPage || !currentPage.baseImage) {
@@ -416,7 +300,6 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deletePage,
         setCurrentPage,
         renamePage,
-        analyzeFigmaDesign,
         analyzeAndVectorizeImage,
         toggleOriginalImage,
         isLoggedIn,
