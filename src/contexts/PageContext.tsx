@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Page, PageContextType, UIComponent, UIAnalysis } from '../types';
 import { analyzeImageWithGPT4Vision, generateImprovementSuggestions } from '../services/ImageAnalysisService';
-import { importFigmaDesign, isFigmaApiConfigured } from '../services/FigmaService';
+import { importFigmaDesign, isFigmaApiConfigured, getFigmaClientCredentials } from '../services/FigmaService';
 import { isAuthenticated, getPages, savePage, deletePage as deletePageFromDB, refreshAuthState } from '../services/SupabaseService';
 import { getSupabase } from '../services/SupabaseService';
 
@@ -265,6 +265,12 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: undefined 
       });
 
+      // Check if Figma client credentials are configured
+      const { clientId } = getFigmaClientCredentials();
+      if (clientId) {
+        console.log('Figma client credentials are properly configured');
+      }
+
       // First try to check if user is properly authenticated
       const isUserLoggedIn = await isAuthenticated();
       if (!isUserLoggedIn) {
@@ -287,6 +293,12 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Step 1: Check if Figma API is configured
       const figmaConfigured = await isFigmaApiConfigured();
       if (!figmaConfigured && !directTokenAvailable) {
+        // If we have client credentials but no access token, we need to authenticate
+        if (clientId) {
+          console.log('Figma client ID is configured, but no access token. User needs to authenticate.');
+          throw new Error('You need to sign in with Figma to access your designs. Please sign in using the "Sign In with Figma" button in the sidebar.');
+        }
+        
         // If we don't have a token but user appears to be logged in, we need to refresh auth
         console.log('Figma API not configured, attempting to refresh auth state...');
         await refreshAuthState();

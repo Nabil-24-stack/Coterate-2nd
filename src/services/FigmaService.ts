@@ -8,6 +8,33 @@ import { UIComponent } from '../types';
 import { getFigmaAccessTokenFromUser } from './SupabaseService';
 import { getSupabase } from './SupabaseService';
 
+// Get the Figma client credentials from environment variables
+export const getFigmaClientCredentials = (): { clientId: string | null; clientSecret: string | null } => {
+  // Check for client ID in various environment variable formats
+  const clientId = 
+    process.env.NEXT_PUBLIC_FIGMA_CLIENT_ID ||
+    process.env.FIGMA_CLIENT_ID ||
+    process.env.REACT_APP_FIGMA_CLIENT_ID ||
+    null;
+  
+  // Check for client secret in various environment variable formats
+  // Note: Client secret should only be used on the server side
+  const clientSecret = 
+    process.env.FIGMA_CLIENT_SECRET ||
+    process.env.REACT_APP_FIGMA_CLIENT_SECRET ||
+    null;
+  
+  if (clientId) {
+    console.log('Found Figma Client ID in environment variables');
+  }
+  
+  if (clientSecret) {
+    console.log('Found Figma Client Secret in environment variables (should only be used on server)');
+  }
+  
+  return { clientId, clientSecret };
+};
+
 // Get the Figma API key from environment variables or user's token
 const getFigmaApiKey = async (): Promise<string> => {
   try {
@@ -62,6 +89,13 @@ const getFigmaApiKey = async (): Promise<string> => {
     if (envToken && envToken !== 'replace_with_your_key') {
       console.log('Using environment variable token as fallback');
       return envToken;
+    }
+    
+    // Check if we have client credentials - if so, inform that user needs to authenticate
+    const { clientId } = getFigmaClientCredentials();
+    if (clientId) {
+      console.log('Figma client credentials are set up, but no access token is available. User needs to sign in.');
+      throw new Error('No Figma access token available. Please sign in with Figma to authorize access to your designs.');
     }
     
     throw new Error('No Figma API token available. Please sign in with Figma or configure an API token.');

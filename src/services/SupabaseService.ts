@@ -92,6 +92,15 @@ export const signInWithFigma = async (): Promise<void> => {
   const supabase = getSupabase();
   
   try {
+    // Get Figma client ID from environment variables if available
+    const figmaClientId = 
+      process.env.NEXT_PUBLIC_FIGMA_CLIENT_ID ||
+      process.env.REACT_APP_FIGMA_CLIENT_ID;
+    
+    if (figmaClientId) {
+      console.log('Using configured Figma Client ID from environment variables');
+    }
+    
     // Use the specific callback URL that's configured in Supabase
     const redirectUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback';
     console.log('Using redirect URL:', redirectUrl);
@@ -106,7 +115,9 @@ export const signInWithFigma = async (): Promise<void> => {
         // Explicitly request that Supabase should get and store the provider token
         queryParams: {
           access_type: 'offline',
-          prompt: 'consent'
+          prompt: 'consent',
+          // Use custom client ID if available
+          ...(figmaClientId ? { client_id: figmaClientId } : {})
         }
       }
     });
