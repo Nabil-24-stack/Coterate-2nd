@@ -353,11 +353,19 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
 const FigmaDebugSection = () => {
   const [tokenInput, setTokenInput] = useState('');
   const [debugVisible, setDebugVisible] = useState(true); // Always visible in development for now
+  const [clientId, setClientId] = useState<string | null>(null);
   
-  // Only show in development mode
+  useEffect(() => {
+    // Show the Figma client ID in the debug panel
+    const id = process.env.REACT_APP_FIGMA_CLIENT_ID || process.env.NEXT_PUBLIC_FIGMA_CLIENT_ID || null;
+    setClientId(id);
+  }, []);
+  
+  // Only show in development mode or on Vercel preview
   const isDevelopment = 
     window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1';
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === 'coterate-2nd.vercel.app';
   
   if (!isDevelopment) return null;
   
@@ -390,6 +398,16 @@ const FigmaDebugSection = () => {
     }
   };
   
+  const clearToken = () => {
+    try {
+      localStorage.removeItem('figma_provider_token');
+      console.log('Cleared Figma token from localStorage');
+      alert('Figma token has been cleared!');
+    } catch (error) {
+      console.error('Error clearing token:', error);
+    }
+  };
+  
   return (
     <div style={{ 
       marginTop: '20px', 
@@ -414,6 +432,16 @@ const FigmaDebugSection = () => {
       
       {debugVisible && (
         <>
+          <div style={{ fontSize: '12px', marginBottom: '10px', color: '#333' }}>
+            Host: <span style={{ fontWeight: 'bold' }}>{window.location.hostname}</span><br/>
+            Figma Client ID: <span style={{ fontWeight: 'bold' }}>{clientId || 'Not set'}</span><br/>
+            Redirect URL: <span style={{ fontWeight: 'bold' }}>
+              {window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+                ? 'https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback' 
+                : 'https://coterate-2nd.vercel.app/auth/callback'}
+            </span>
+          </div>
+          
           <div style={{ fontSize: '12px', marginBottom: '5px' }}>Direct Figma Token (for testing):</div>
           <div style={{ display: 'flex', marginBottom: '10px' }}>
             <input 
@@ -444,22 +472,39 @@ const FigmaDebugSection = () => {
             </button>
           </div>
           
-          <button 
-            onClick={useEnvToken}
-            style={{
-              background: '#34C759',
-              color: 'white',
-              border: 'none',
-              padding: '6px 10px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginBottom: '10px',
-              width: '100%'
-            }}
-          >
-            Use Token from .env File
-          </button>
+          <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+            <button 
+              onClick={useEnvToken}
+              style={{
+                background: '#34C759',
+                color: 'white',
+                border: 'none',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                flex: 1
+              }}
+            >
+              Use Token from .env
+            </button>
+            
+            <button 
+              onClick={clearToken}
+              style={{
+                background: '#FF3B30',
+                color: 'white',
+                border: 'none',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                flex: 1
+              }}
+            >
+              Clear Token
+            </button>
+          </div>
           
           <div style={{ fontSize: '12px', marginBottom: '5px' }}>
             Current localStorage token: {localStorage.getItem('figma_provider_token') ? 
@@ -468,8 +513,10 @@ const FigmaDebugSection = () => {
           </div>
           
           <div style={{ fontSize: '10px', color: '#666', marginTop: '10px' }}>
-            Try this if OAuth is not working: Add a personal access token in .env as 
-            REACT_APP_FIGMA_ACCESS_TOKEN, then click "Use Token from .env File".
+            <strong>Help:</strong> To get Figma authentication working:<br/>
+            1. Ensure the Figma app is properly set up at figma.com/developers/apps<br/>
+            2. Use a personal access token from your Figma account as a workaround<br/>
+            3. Check that the redirect URLs are correctly configured
           </div>
         </>
       )}

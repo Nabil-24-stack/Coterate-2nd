@@ -109,10 +109,18 @@ export const signInWithFigma = async (): Promise<void> => {
       console.log('Using configured Figma Client Secret from environment variables');
     }
     
-    // Important: Use the app's own URL with the /auth/callback path
-    // instead of Supabase's internal URL for better handling
-    const siteUrl = window.location.origin;
-    const redirectUrl = `${siteUrl}/auth/callback`;
+    // Use the exact redirect URLs as configured in Figma
+    let redirectUrl = 'https://coterate-2nd.vercel.app/auth/callback';
+    
+    // If in development, use Supabase's callback URL
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      redirectUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback';
+    }
+    // If on Vercel, use the Vercel callback URL
+    else if (window.location.hostname === 'coterate-2nd.vercel.app') {
+      redirectUrl = 'https://coterate-2nd.vercel.app/auth/callback';
+    }
+    
     console.log('Using redirect URL:', redirectUrl);
     
     const { error } = await supabase.auth.signInWithOAuth({
