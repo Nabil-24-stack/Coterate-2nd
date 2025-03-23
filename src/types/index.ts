@@ -24,6 +24,7 @@ export interface PageContextType {
   setCurrentPage: (page: Page) => void;
   renamePage: (id: string, newName: string) => void;
   analyzeAndVectorizeImage?: () => Promise<void>;
+  analyzeFigmaDesign?: (figmaUrl: string) => Promise<void>;
   toggleOriginalImage?: () => void;
   isLoggedIn: boolean;
   userProfile?: any;
@@ -72,4 +73,4 @@ export interface UIAnalysis {
     component: string;
     suggestions: string[];
   }[];
-} 
+}
