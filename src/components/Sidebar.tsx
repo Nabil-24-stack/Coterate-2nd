@@ -352,7 +352,7 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
 // Debug component to help diagnose authentication issues
 const FigmaDebugSection = () => {
   const [tokenInput, setTokenInput] = useState('');
-  const [debugVisible, setDebugVisible] = useState(false);
+  const [debugVisible, setDebugVisible] = useState(true); // Always visible in development for now
   
   // Only show in development mode
   const isDevelopment = 
@@ -374,17 +374,42 @@ const FigmaDebugSection = () => {
     }
   };
   
+  const useEnvToken = () => {
+    try {
+      // Try to get token from REACT_APP_FIGMA_ACCESS_TOKEN in .env
+      const envToken = process.env.REACT_APP_FIGMA_ACCESS_TOKEN;
+      if (envToken && envToken !== 'replace_with_your_key') {
+        localStorage.setItem('figma_provider_token', envToken);
+        console.log('Using Figma token from .env file');
+        alert('Figma token from .env file has been set!');
+      } else {
+        alert('No valid Figma token found in .env file (REACT_APP_FIGMA_ACCESS_TOKEN)');
+      }
+    } catch (error) {
+      console.error('Error using .env token:', error);
+    }
+  };
+  
   return (
     <div style={{ 
       marginTop: '20px', 
       padding: '10px', 
       background: '#f5f5f5', 
-      borderRadius: '4px',
-      display: debugVisible ? 'block' : 'none'
+      borderRadius: '4px'
     }}>
-      <div style={{ marginBottom: '10px', fontWeight: 'bold', cursor: 'pointer' }} 
+      <div style={{ 
+        marginBottom: '10px', 
+        fontWeight: 'bold', 
+        cursor: 'pointer',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }} 
            onClick={() => setDebugVisible(!debugVisible)}>
         🔧 Debug Tools
+        <span style={{ fontSize: '10px', color: '#666' }}>
+          {debugVisible ? '(click to hide)' : '(click to show)'}
+        </span>
       </div>
       
       {debugVisible && (
@@ -419,8 +444,32 @@ const FigmaDebugSection = () => {
             </button>
           </div>
           
+          <button 
+            onClick={useEnvToken}
+            style={{
+              background: '#34C759',
+              color: 'white',
+              border: 'none',
+              padding: '6px 10px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginBottom: '10px',
+              width: '100%'
+            }}
+          >
+            Use Token from .env File
+          </button>
+          
           <div style={{ fontSize: '12px', marginBottom: '5px' }}>
-            Current localStorage token: {localStorage.getItem('figma_provider_token') ? '✅ Present' : '❌ Missing'}
+            Current localStorage token: {localStorage.getItem('figma_provider_token') ? 
+              '✅ Present' : 
+              '❌ Missing'}
+          </div>
+          
+          <div style={{ fontSize: '10px', color: '#666', marginTop: '10px' }}>
+            Try this if OAuth is not working: Add a personal access token in .env as 
+            REACT_APP_FIGMA_ACCESS_TOKEN, then click "Use Token from .env File".
           </div>
         </>
       )}

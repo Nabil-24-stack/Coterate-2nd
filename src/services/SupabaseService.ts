@@ -92,13 +92,21 @@ export const signInWithFigma = async (): Promise<void> => {
   const supabase = getSupabase();
   
   try {
-    // Get Figma client ID from environment variables if available
+    // Get Figma client credentials from environment variables if available
     const figmaClientId = 
       process.env.NEXT_PUBLIC_FIGMA_CLIENT_ID ||
       process.env.REACT_APP_FIGMA_CLIENT_ID;
     
+    const figmaClientSecret = 
+      process.env.FIGMA_CLIENT_SECRET ||
+      process.env.REACT_APP_FIGMA_CLIENT_SECRET;
+    
     if (figmaClientId) {
       console.log('Using configured Figma Client ID from environment variables');
+    }
+    
+    if (figmaClientSecret) {
+      console.log('Using configured Figma Client Secret from environment variables');
     }
     
     // Important: Use the app's own URL with the /auth/callback path
@@ -118,8 +126,9 @@ export const signInWithFigma = async (): Promise<void> => {
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
-          // Use custom client ID if available
-          ...(figmaClientId ? { client_id: figmaClientId } : {})
+          // Use custom client credentials if available
+          ...(figmaClientId ? { client_id: figmaClientId } : {}),
+          ...(figmaClientSecret ? { client_secret: figmaClientSecret } : {})
         }
       }
     });
