@@ -101,8 +101,10 @@ export const signInWithFigma = async (): Promise<void> => {
       console.log('Using configured Figma Client ID from environment variables');
     }
     
-    // Use the specific callback URL that's configured in Supabase
-    const redirectUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback';
+    // Important: Use the app's own URL with the /auth/callback path
+    // instead of Supabase's internal URL for better handling
+    const siteUrl = window.location.origin;
+    const redirectUrl = `${siteUrl}/auth/callback`;
     console.log('Using redirect URL:', redirectUrl);
     
     const { error } = await supabase.auth.signInWithOAuth({

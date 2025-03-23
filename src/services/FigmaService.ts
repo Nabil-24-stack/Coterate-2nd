@@ -660,4 +660,28 @@ export const resetFigmaAuth = async (): Promise<void> => {
     console.error('Error resetting auth state:', error);
     throw error;
   }
+};
+
+/**
+ * Set a Figma token directly for debugging/testing purposes
+ * This can be used as a workaround if OAuth is not working correctly
+ * @param token The Figma access token to use
+ */
+export const setFigmaTokenDirectly = (token: string): void => {
+  if (!token || token.length < 20) {
+    console.error('Invalid token format. Figma tokens are usually 50+ characters.');
+    return;
+  }
+  
+  try {
+    // Store the token in localStorage
+    localStorage.setItem('figma_provider_token', token);
+    console.log('Successfully set Figma token directly');
+    
+    // Show a masked version for debugging
+    const maskedToken = token.substring(0, 4) + '...' + token.substring(token.length - 4);
+    console.log('Token (masked):', maskedToken);
+  } catch (error) {
+    console.error('Error setting Figma token directly:', error);
+  }
 }; 

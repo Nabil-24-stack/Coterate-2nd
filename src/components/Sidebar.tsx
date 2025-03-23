@@ -349,6 +349,85 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
   );
 };
 
+// Debug component to help diagnose authentication issues
+const FigmaDebugSection = () => {
+  const [tokenInput, setTokenInput] = useState('');
+  const [debugVisible, setDebugVisible] = useState(false);
+  
+  // Only show in development mode
+  const isDevelopment = 
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1';
+  
+  if (!isDevelopment) return null;
+  
+  const handleSetToken = () => {
+    if (!tokenInput) return;
+    
+    try {
+      // Import dynamically to avoid circular dependencies
+      const FigmaService = require('../services/FigmaService');
+      FigmaService.setFigmaTokenDirectly(tokenInput);
+      setTokenInput('');
+    } catch (error) {
+      console.error('Error setting token:', error);
+    }
+  };
+  
+  return (
+    <div style={{ 
+      marginTop: '20px', 
+      padding: '10px', 
+      background: '#f5f5f5', 
+      borderRadius: '4px',
+      display: debugVisible ? 'block' : 'none'
+    }}>
+      <div style={{ marginBottom: '10px', fontWeight: 'bold', cursor: 'pointer' }} 
+           onClick={() => setDebugVisible(!debugVisible)}>
+        🔧 Debug Tools
+      </div>
+      
+      {debugVisible && (
+        <>
+          <div style={{ fontSize: '12px', marginBottom: '5px' }}>Direct Figma Token (for testing):</div>
+          <div style={{ display: 'flex', marginBottom: '10px' }}>
+            <input 
+              type="text" 
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Paste Figma token here"
+              style={{ 
+                flex: 1, 
+                padding: '4px 8px', 
+                fontSize: '12px',
+                border: '1px solid #ddd'
+              }}
+            />
+            <button 
+              onClick={handleSetToken}
+              style={{
+                background: '#4A90E2',
+                color: 'white',
+                border: 'none',
+                padding: '4px 8px',
+                marginLeft: '5px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Set
+            </button>
+          </div>
+          
+          <div style={{ fontSize: '12px', marginBottom: '5px' }}>
+            Current localStorage token: {localStorage.getItem('figma_provider_token') ? '✅ Present' : '❌ Missing'}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { pages, currentPage, setCurrentPage, addPage, renamePage, isLoggedIn, userProfile } = usePageContext();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -601,6 +680,8 @@ export const Sidebar: React.FC = () => {
       </PageList>
       
       {renderUserSection()}
+      
+      <FigmaDebugSection />
     </SidebarContainer>
   );
 }; 
