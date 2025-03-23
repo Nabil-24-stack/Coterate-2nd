@@ -10,32 +10,57 @@ import { getSupabase } from './SupabaseService';
 
 // Get the Figma API key from environment variables or user's token
 const getFigmaApiKey = async (): Promise<string> => {
-  // First try to get the token from the authenticated user (via Supabase)
-  const userToken = await getFigmaAccessTokenFromUser();
-  if (userToken) {
-    // Mask token for logging
-    const maskedToken = userToken.substring(0, 5) + '...' + userToken.substring(userToken.length - 5);
-    console.log('Using user Figma auth token (masked):', maskedToken);
-    return userToken;
-  }
-  
-  // If we can't get a token from Supabase, we may not be authenticated correctly
-  console.error('Could not retrieve Figma token from user session or localStorage. You may need to sign out and sign in again with Figma.');
+  try {
+    // First try to get the token from the authenticated user (via Supabase)
+    console.log('Attempting to get Figma token from user session...');
+    const userToken = await getFigmaAccessTokenFromUser();
+    
+    if (userToken) {
+      // Mask token for logging
+      const maskedToken = userToken.substring(0, 5) + '...' + userToken.substring(userToken.length - 5);
+      console.log('Using user Figma auth token (masked):', maskedToken);
+      return userToken;
+    }
+    
+    // If we can't get a token from Supabase, check local storage directly
+    console.log('No token from session, checking localStorage directly...');
+    
+    try {
+      const supabaseAuthToken = localStorage.getItem('supabase.auth.token');
+      if (supabaseAuthToken) {
+        const authData = JSON.parse(supabaseAuthToken);
+        const providerToken = authData?.currentSession?.provider_token;
+        
+        if (providerToken) {
+          console.log('Found provider token in localStorage');
+          return providerToken;
+        }
+      }
+    } catch (storageError) {
+      console.error('Error accessing localStorage:', storageError);
+    }
+    
+    // If we can't get a token from either source, we may not be authenticated correctly
+    console.warn('Could not retrieve Figma token from user session or localStorage. You may need to sign out and sign in again with Figma.');
 
-  // Fall back to environment variable if needed - support both formats
-  const envToken = (
-    process.env.NEXT_PUBLIC_FIGMA_ACCESS_TOKEN || 
-    process.env.FIGMA_ACCESS_TOKEN || 
-    process.env.REACT_APP_FIGMA_ACCESS_TOKEN || 
-    ''
-  );
-  
-  if (envToken && envToken !== 'replace_with_your_key') {
-    console.log('Using environment variable token as fallback');
-    return envToken;
+    // Fall back to environment variable if needed - support both formats
+    const envToken = (
+      process.env.NEXT_PUBLIC_FIGMA_ACCESS_TOKEN || 
+      process.env.FIGMA_ACCESS_TOKEN || 
+      process.env.REACT_APP_FIGMA_ACCESS_TOKEN || 
+      ''
+    );
+    
+    if (envToken && envToken !== 'replace_with_your_key') {
+      console.log('Using environment variable token as fallback');
+      return envToken;
+    }
+    
+    throw new Error('No Figma API token available. Please sign in with Figma or configure an API token.');
+  } catch (error) {
+    console.error('Error getting Figma API key:', error);
+    throw new Error('Failed to get Figma access token. Please sign in with Figma again.');
   }
-  
-  throw new Error('No Figma API token available. Please sign in with Figma or configure an API token.');
 };
 
 // Constants for Figma API

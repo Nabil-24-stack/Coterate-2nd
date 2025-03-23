@@ -26,8 +26,22 @@ const AuthCallback = () => {
       try {
         console.log('Auth callback triggered, URL:', window.location.href);
         
+        // We need to check different ways the auth tokens might be returned
+        // 1. Check for access_token in the URL hash (standard OAuth redirect)
+        // 2. Check for code in URL params (PKCE flow)
+        // 3. Check if we're already logged in despite not having tokens in URL
+        
+        const supabase = getSupabase();
+        let authSuccess = false;
+        
+        // Check if we already have a session first
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData && sessionData.session) {
+          console.log('Existing session found.');
+          authSuccess = true;
+        }
         // Check for access_token in the URL hash
-        if (window.location.hash && window.location.hash.includes('access_token')) {
+        else if (window.location.hash && window.location.hash.includes('access_token')) {
           console.log('Found auth tokens in URL hash - processing...');
           
           // First, we'll extract the tokens from the URL for debug purposes
@@ -43,9 +57,6 @@ const AuthCallback = () => {
             token_type: params.get('token_type')
           });
           
-          // Let Supabase handle the auth flow - this will automatically process the tokens in the URL
-          const supabase = getSupabase();
-          
           // Wait a moment for Supabase to process the hash
           await new Promise(resolve => setTimeout(resolve, 500));
           
@@ -58,11 +69,7 @@ const AuthCallback = () => {
           } else if (data && data.session) {
             console.log('Authentication successful! Session established.');
             console.log('User metadata:', data.session.user?.user_metadata);
-            
-            // Force reload the page to ensure the auth state is properly picked up
-            // This is more reliable than just redirecting
-            window.location.href = window.location.origin;
-            return;
+            authSuccess = true;
           } else {
             console.error('No session established despite having tokens in URL');
             
@@ -83,22 +90,48 @@ const AuthCallback = () => {
                   console.error('Error setting session manually:', setSessionError);
                   setError(`Error setting session: ${setSessionError.message}`);
                 } else {
-                  console.log('Session set manually, forcing page reload');
-                  window.location.href = window.location.origin;
-                  return;
+                  console.log('Session set manually');
+                  authSuccess = true;
                 }
               } else {
                 console.error('Missing required tokens for manual session setup');
+                setError('Missing required authentication tokens. Please try again.');
               }
             } catch (setSessionError) {
               console.error('Exception during manual session setup:', setSessionError);
+              setError(`Error during authentication: ${setSessionError}`);
             }
-            
-            setError('Authentication failed. Could not establish a session.');
+          }
+        }
+        // Check for code param (PKCE flow)
+        else if (window.location.search && window.location.search.includes('code=')) {
+          console.log('Found auth code in URL query params - PKCE flow');
+          
+          // Let Supabase handle the PKCE exchange
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Check if we now have a session
+          const { data, error } = await supabase.auth.getSession();
+          if (error) {
+            console.error('Supabase auth error:', error);
+            setError(`Authentication failed: ${error.message}`);
+          } else if (data && data.session) {
+            console.log('PKCE authentication successful! Session established.');
+            authSuccess = true;
+          } else {
+            console.error('No session established after PKCE code exchange');
+            setError('Authentication failed. Could not establish a session after code exchange.');
           }
         } else {
-          console.error('No auth tokens found in URL');
-          setError('No authentication tokens found in URL');
+          console.error('No auth tokens or code found in URL');
+          setError('No authentication tokens found in URL. Please try signing in again.');
+        }
+        
+        // If authentication was successful, redirect to the main page
+        if (authSuccess) {
+          console.log('Authentication successful - redirecting to home page');
+          window.location.href = window.location.origin;
+          return;
         }
       } catch (err: any) {
         console.error('Auth callback error:', err);
@@ -228,6 +261,8 @@ function App() {
               <Canvas />
             </AppContainer>
           } />
+          {/* Add a catch-all route to handle redirects from Supabase auth */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </PageProvider>
     </Router>
