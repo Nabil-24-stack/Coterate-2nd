@@ -12,7 +12,7 @@ export interface Page {
 export interface PageContextType {
   pages: Page[];
   currentPage: Page | null;
-  addPage: (name: string) => void;
+  addPage: (name: string, baseImage?: string) => void;
   updatePage: (id: string, updates: Partial<Page>) => void;
   deletePage: (id: string) => void;
   setCurrentPage: (page: Page) => void;

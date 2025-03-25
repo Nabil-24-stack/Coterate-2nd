@@ -42,15 +42,17 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentPage, setCurrentPage] = useState<Page | null>(() => pages[0]);
   
   // Add a new page
-  const addPage = (name: string) => {
+  const addPage = (name: string, baseImage?: string) => {
     const newPage: Page = {
       id: generateUUID(),
       name: name || `Page ${pages.length + 1}`,
-      baseImage: ''
+      baseImage: baseImage || ''
     };
     
     setPages(prevPages => [...prevPages, newPage]);
     setCurrentPage(newPage);
+    
+    return newPage;
   };
   
   // Update a page

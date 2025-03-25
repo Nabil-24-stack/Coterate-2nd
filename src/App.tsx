@@ -3,7 +3,8 @@ import styled from 'styled-components';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import { PageProvider } from './contexts/PageContext';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import FigmaAuthCallback from './components/FigmaAuthCallback';
 
 const AppContainer = styled.div`
   display: flex;
@@ -18,10 +19,15 @@ function App() {
   return (
     <Router>
       <PageProvider>
-        <AppContainer>
-          <Sidebar />
-          <Canvas />
-        </AppContainer>
+        <Routes>
+          <Route path="/auth/figma/callback" element={<FigmaAuthCallback />} />
+          <Route path="/" element={
+            <AppContainer>
+              <Sidebar />
+              <Canvas />
+            </AppContainer>
+          } />
+        </Routes>
       </PageProvider>
     </Router>
   );

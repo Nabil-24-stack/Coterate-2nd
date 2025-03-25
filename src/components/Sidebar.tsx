@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
+import FigmaFileSelector from './FigmaFileSelector';
+import FigmaService from '../services/FigmaService';
 
 // Logo component
 const Logo = styled.div`
@@ -54,15 +56,21 @@ const Title = styled.h1`
   color: #333;
 `;
 
-const NewPageButton = styled.button`
+const ButtonsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 16px;
+`;
+
+const NewPageButton = styled.button`
   padding: 10px 15px;
   background-color: white;
   color: #333;
   border-radius: 8px;
   font-weight: 600;
   transition: background-color 0.2s;
-  width: calc(100% - 32px);
+  width: 100%;
   text-align: center;
   border: 1px solid #E3E6EA;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -71,6 +79,23 @@ const NewPageButton = styled.button`
   &:hover {
     background-color: #f5f5f5;
   }
+`;
+
+const FigmaImportButton = styled(NewPageButton)`
+  background-color: #1E1E1E;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  
+  &:hover {
+    background-color: #000;
+  }
+`;
+
+const FigmaIcon = styled.span`
+  font-size: 16px;
 `;
 
 const PageList = styled.div`
@@ -226,6 +251,7 @@ export const Sidebar: React.FC = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [editingPageName, setEditingPageName] = useState('');
+  const [isFigmaModalOpen, setIsFigmaModalOpen] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
   
   const toggleMenu = (pageId: string) => {
@@ -275,6 +301,14 @@ export const Sidebar: React.FC = () => {
     setEditingPageId(null);
   };
   
+  const openFigmaModal = () => {
+    setIsFigmaModalOpen(true);
+  };
+  
+  const closeFigmaModal = () => {
+    setIsFigmaModalOpen(false);
+  };
+  
   // Handle clicks outside the edit input
   useEffect(() => {
     if (!editingPageId) return;
@@ -291,13 +325,31 @@ export const Sidebar: React.FC = () => {
     };
   }, [editingPageId, editingPageName, savePageName]);
   
+  // Check if user is already authenticated with Figma
+  const isFigmaAuthenticated = FigmaService.isAuthenticated();
+  
   return (
     <SidebarContainer>
       <SectionTitle>Pages</SectionTitle>
       
-      <NewPageButton onClick={handleAddPage}>
-        + New Page
-      </NewPageButton>
+      <ButtonsContainer>
+        <NewPageButton onClick={handleAddPage}>
+          + New Page
+        </NewPageButton>
+        
+        <FigmaImportButton onClick={openFigmaModal}>
+          <FigmaIcon>
+            <svg width="16" height="16" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
+              <path d="M0 47.5C0 44.9804 1.00089 42.5641 2.78249 40.7825C4.56408 39.0009 6.98044 38 9.5 38H19V47.5C19 50.0196 17.9991 52.4359 16.2175 54.2175C14.4359 55.9991 12.0196 57 9.5 57C6.98044 57 4.56408 55.9991 2.78249 54.2175C1.00089 52.4359 0 50.0196 0 47.5Z" fill="white"/>
+              <path d="M19 0V19H28.5C31.0196 19 33.4359 17.9991 35.2175 16.2175C36.9991 14.4359 38 12.0196 38 9.5C38 6.98044 36.9991 4.56408 35.2175 2.78249C33.4359 1.00089 31.0196 0 28.5 0H19Z" fill="white"/>
+              <path d="M0 9.5C0 12.0196 1.00089 14.4359 2.78249 16.2175C4.56408 17.9991 6.98044 19 9.5 19H19V0H9.5C6.98044 0 4.56408 1.00089 2.78249 2.78249C1.00089 4.56408 0 6.98044 0 9.5Z" fill="white"/>
+              <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
+            </svg>
+          </FigmaIcon>
+          Import with Figma
+        </FigmaImportButton>
+      </ButtonsContainer>
       
       <PageList>
         {pages.map(page => (
@@ -344,6 +396,12 @@ export const Sidebar: React.FC = () => {
           </PageItem>
         ))}
       </PageList>
+      
+      {/* Figma File Selector Modal */}
+      <FigmaFileSelector 
+        isOpen={isFigmaModalOpen} 
+        onClose={closeFigmaModal}
+      />
     </SidebarContainer>
   );
 }; 
