@@ -13,10 +13,12 @@ export default async function handler(req, res) {
     }
 
     // Get Figma credentials from environment variables
+    // For Vercel, these are set in the project settings
     const clientId = process.env.REACT_APP_FIGMA_CLIENT_ID;
     const clientSecret = process.env.REACT_APP_FIGMA_CLIENT_SECRET;
-    const redirectUri = process.env.REACT_APP_FIGMA_REDIRECT_URI || 
-                        (req.headers.origin + '/auth/figma/callback');
+    const redirectUri = process.env.REACT_APP_FIGMA_REDIRECT_URI || 'https://coterate-2nd.vercel.app/auth/figma/callback';
+
+    console.log('Using credentials:', { clientIdExists: !!clientId, clientSecretExists: !!clientSecret, redirectUri });
 
     if (!clientId || !clientSecret) {
       return res.status(500).json({ message: 'Figma credentials not configured' });
@@ -37,8 +39,16 @@ export default async function handler(req, res) {
       })
     });
 
+    const responseText = await tokenResponse.text();
+    
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json();
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch (e) {
+        errorData = { raw: responseText };
+      }
+      
       console.error('Figma token exchange error:', errorData);
       return res.status(tokenResponse.status).json({ 
         message: 'Failed to exchange auth code with Figma',
@@ -46,7 +56,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = JSON.parse(responseText);
 
     // Get user info with the access token
     const userResponse = await fetch('https://api.figma.com/v1/me', {
@@ -75,6 +85,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Server error during Figma auth:', error);
-    return res.status(500).json({ message: 'Server error during authentication' });
+    return res.status(500).json({ message: 'Server error during authentication', error: error.message });
   }
 } 

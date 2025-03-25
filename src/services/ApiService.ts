@@ -17,7 +17,9 @@ interface FigmaAuthResponse {
  */
 export const exchangeFigmaAuthCode = async (code: string): Promise<FigmaAuthResponse> => {
   try {
-    // In production, this would go to your Vercel API route
+    console.log('Exchanging auth code with backend API');
+    
+    // For Vercel deployment, this will call our API route
     const response = await fetch('/api/auth/figma/token', {
       method: 'POST',
       headers: {
@@ -26,12 +28,35 @@ export const exchangeFigmaAuthCode = async (code: string): Promise<FigmaAuthResp
       body: JSON.stringify({ code }),
     });
 
+    const responseText = await response.text();
+    console.log('Received response from API:', { 
+      status: response.status,
+      ok: response.ok,
+      contentType: response.headers.get('content-type')
+    });
+
     if (!response.ok) {
-      const errorData = await response.json();
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch (e) {
+        errorData = { raw: responseText };
+      }
+      
+      console.error('API error response:', errorData);
       throw new Error(errorData.message || 'Failed to exchange auth code');
     }
 
-    return await response.json();
+    // Parse JSON response
+    let jsonData;
+    try {
+      jsonData = JSON.parse(responseText);
+    } catch (e) {
+      console.error('Failed to parse JSON response:', responseText);
+      throw new Error('Invalid response format from API');
+    }
+
+    return jsonData;
   } catch (error) {
     console.error('Error exchanging Figma auth code:', error);
     throw error;
