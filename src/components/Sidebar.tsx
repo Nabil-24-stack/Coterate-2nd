@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
@@ -290,12 +290,12 @@ export const Sidebar: React.FC = () => {
     }
   };
   
-  const savePageName = () => {
+  const savePageName = useCallback(() => {
     if (editingPageId && editingPageName.trim()) {
       renamePage(editingPageId, editingPageName.trim());
     }
     setEditingPageId(null);
-  };
+  }, [editingPageId, editingPageName, renamePage]);
   
   const cancelEditing = () => {
     setEditingPageId(null);
@@ -323,10 +323,10 @@ export const Sidebar: React.FC = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [editingPageId, editingPageName, savePageName]);
+  }, [editingPageId, savePageName]);
   
-  // Check if user is already authenticated with Figma
-  const isFigmaAuthenticated = FigmaService.isAuthenticated();
+  // We'll ignore the isFigmaAuthenticated variable since it's not used but may be needed later
+  // const isFigmaAuthenticated = FigmaService.isAuthenticated();
   
   return (
     <SidebarContainer>

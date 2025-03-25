@@ -63,6 +63,9 @@ export const exchangeFigmaAuthCode = async (code: string): Promise<FigmaAuthResp
   }
 };
 
-export default {
+// Create a named export object
+const apiService = {
   exchangeFigmaAuthCode,
-}; 
+};
+
+export default apiService; 

@@ -291,4 +291,7 @@ class FigmaService {
   }
 }
 
-export default new FigmaService();
+// Create a named instance
+const figmaService = new FigmaService();
+
+export default figmaService;

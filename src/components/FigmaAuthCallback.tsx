@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import FigmaService from '../services/FigmaService';
@@ -68,7 +68,7 @@ const FigmaAuthCallback: React.FC = () => {
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const processAuth = async () => {
+  const processAuth = useCallback(async () => {
     try {
       setStatus('loading');
       setMessage('Processing your login...');
@@ -120,11 +120,11 @@ const FigmaAuthCallback: React.FC = () => {
       setMessage('An unexpected error occurred');
       setErrorDetails(error instanceof Error ? error.message : 'Unknown error');
     }
-  };
+  }, [navigate]);
   
   useEffect(() => {
     processAuth();
-  }, [navigate]);
+  }, [processAuth]);
 
   const handleRetry = () => {
     // Navigate back to home to restart the auth flow
