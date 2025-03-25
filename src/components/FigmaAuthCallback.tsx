@@ -47,58 +47,89 @@ const StatusIcon = styled.div<{ success?: boolean }>`
   margin: 0 auto 24px;
 `;
 
+const RetryButton = styled.button`
+  background-color: #4A90E2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 16px;
+  
+  &:hover {
+    background-color: #3A80D2;
+  }
+`;
+
 const FigmaAuthCallback: React.FC = () => {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState<string>('Processing your login...');
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const processAuth = async () => {
-      try {
-        // Get code and state from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const state = urlParams.get('state');
-        
-        // Handle errors from Figma
-        const error = urlParams.get('error');
-        if (error) {
-          setStatus('error');
-          setMessage(`Authentication failed: ${error}`);
-          return;
-        }
-        
-        // Validate required parameters
-        if (!code || !state) {
-          setStatus('error');
-          setMessage('Missing required parameters');
-          return;
-        }
-        
-        // Process the callback
-        const success = await FigmaService.handleOAuthCallback(code, state);
-        
-        if (success) {
-          setStatus('success');
-          setMessage('Successfully authenticated with Figma!');
-          
-          // Redirect back to the main app after a short delay
-          setTimeout(() => {
-            navigate('/');
-          }, 2000);
-        } else {
-          setStatus('error');
-          setMessage('Failed to authenticate with Figma. Please try again.');
-        }
-      } catch (error) {
-        console.error('Error processing auth callback:', error);
+  const processAuth = async () => {
+    try {
+      setStatus('loading');
+      setMessage('Processing your login...');
+      setErrorDetails(null);
+      
+      // Get code and state from URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      
+      // Handle errors from Figma
+      const error = urlParams.get('error');
+      const errorDescription = urlParams.get('error_description');
+      
+      if (error) {
         setStatus('error');
-        setMessage('An unexpected error occurred');
+        setMessage(`Authentication failed: ${error}`);
+        setErrorDetails(errorDescription || null);
+        return;
       }
-    };
-    
+      
+      // Validate required parameters
+      if (!code || !state) {
+        setStatus('error');
+        setMessage('Missing required parameters');
+        setErrorDetails('The authentication response is missing the code or state parameter');
+        return;
+      }
+      
+      // Process the callback
+      const success = await FigmaService.handleOAuthCallback(code, state);
+      
+      if (success) {
+        setStatus('success');
+        setMessage('Successfully authenticated with Figma!');
+        
+        // Redirect back to the main app after a short delay
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
+      } else {
+        setStatus('error');
+        setMessage('Failed to authenticate with Figma');
+        setErrorDetails('There was a problem exchanging the authorization code for an access token');
+      }
+    } catch (error) {
+      console.error('Error processing auth callback:', error);
+      setStatus('error');
+      setMessage('An unexpected error occurred');
+      setErrorDetails(error instanceof Error ? error.message : 'Unknown error');
+    }
+  };
+  
+  useEffect(() => {
     processAuth();
   }, [navigate]);
+
+  const handleRetry = () => {
+    // Navigate back to home to restart the auth flow
+    navigate('/');
+  };
 
   return (
     <Container>
@@ -124,6 +155,8 @@ const FigmaAuthCallback: React.FC = () => {
             <StatusIcon>✗</StatusIcon>
             <Title>Error</Title>
             <Message>{message}</Message>
+            {errorDetails && <Message style={{ fontSize: '14px', opacity: 0.8 }}>{errorDetails}</Message>}
+            <RetryButton onClick={handleRetry}>Try Again</RetryButton>
           </>
         )}
       </Card>

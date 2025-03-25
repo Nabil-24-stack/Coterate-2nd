@@ -1,5 +1,5 @@
 import { Page } from '../types';
-import { exchangeFigmaAuthCode } from './MockApiService';
+import { exchangeFigmaAuthCode } from './ApiService';
 
 // Constants
 const FIGMA_TOKEN_KEY = 'figma_access_token';
@@ -82,9 +82,13 @@ class FigmaService {
 
   // Start OAuth process
   startOAuthFlow(): void {
-    // Client ID should be registered with Figma
-    const clientId = 'YOUR_FIGMA_CLIENT_ID';
-    const redirectUri = window.location.origin + '/auth/figma/callback';
+    // Use environment variables for client ID
+    const clientId = process.env.REACT_APP_FIGMA_CLIENT_ID;
+    
+    // Use environment variable for redirect URI if available, otherwise use window.location
+    const redirectUri = process.env.REACT_APP_FIGMA_REDIRECT_URI || 
+                       (window.location.origin + '/auth/figma/callback');
+    
     const scope = 'file_read';
     
     // Generate a state parameter to prevent CSRF attacks
@@ -108,8 +112,7 @@ class FigmaService {
     }
     
     try {
-      // In a real app, this would be handled server-side
-      // We're using our mock API service to simulate the exchange
+      // Call our backend API to exchange the code for tokens
       const authData = await exchangeFigmaAuthCode(code);
       
       // Store token and user data
@@ -128,30 +131,32 @@ class FigmaService {
       throw new Error('User not authenticated');
     }
     
-    // In a real app, this would make an actual API call
-    // For demo purposes, we'll return mock data
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    return [
-      {
-        key: 'file_123',
-        name: 'Dashboard Design',
-        thumbnail_url: 'https://via.placeholder.com/300/e3e6ea/808080?text=Dashboard',
-        last_modified: new Date().toISOString()
-      },
-      {
-        key: 'file_456',
-        name: 'Mobile App UI',
-        thumbnail_url: 'https://via.placeholder.com/300/e3e6ea/808080?text=Mobile+App',
-        last_modified: new Date().toISOString()
-      },
-      {
-        key: 'file_789',
-        name: 'Website Redesign',
-        thumbnail_url: 'https://via.placeholder.com/300/e3e6ea/808080?text=Website',
-        last_modified: new Date().toISOString()
+    try {
+      const response = await fetch(`${FIGMA_API_BASE}/me/files`, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch files: ${response.statusText}`);
       }
-    ];
+      
+      const data = await response.json();
+      
+      // Map the API response to our FigmaFile interface
+      return data.projects.map((project: any) => ({
+        key: project.key,
+        name: project.name,
+        thumbnail_url: project.thumbnail_url || 'https://via.placeholder.com/300/e3e6ea/808080?text=No+Thumbnail',
+        last_modified: project.last_modified
+      }));
+    } catch (error) {
+      console.error('Error fetching Figma files:', error);
+      
+      // Return empty array on error
+      return [];
+    }
   }
 
   // Get a specific Figma file
@@ -160,44 +165,22 @@ class FigmaService {
       throw new Error('User not authenticated');
     }
     
-    // In a real app, this would make an actual API call
-    // For demo purposes, we'll return mock data
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    return {
-      document: {
-        id: 'doc_123',
-        name: 'Document',
-        type: 'DOCUMENT',
-        children: [
-          {
-            id: 'page_123',
-            name: 'Page 1',
-            type: 'CANVAS',
-            children: [
-              {
-                id: 'frame_123',
-                name: 'Login Screen',
-                type: 'FRAME',
-                absoluteBoundingBox: { x: 0, y: 0, width: 375, height: 812 }
-              },
-              {
-                id: 'frame_456',
-                name: 'Home Screen',
-                type: 'FRAME',
-                absoluteBoundingBox: { x: 400, y: 0, width: 375, height: 812 }
-              },
-              {
-                id: 'component_123',
-                name: 'Button Component',
-                type: 'COMPONENT',
-                absoluteBoundingBox: { x: 0, y: 900, width: 120, height: 40 }
-              }
-            ]
-          }
-        ]
+    try {
+      const response = await fetch(`${FIGMA_API_BASE}/files/${fileKey}`, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.statusText}`);
       }
-    };
+      
+      return await response.json();
+    } catch (error) {
+      console.error(`Error fetching Figma file ${fileKey}:`, error);
+      throw error;
+    }
   }
 
   // Get image URLs for nodes
@@ -206,23 +189,27 @@ class FigmaService {
       throw new Error('User not authenticated');
     }
     
-    // In a real app, this would make an actual API call
-    // For demo purposes, we'll return mock data
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const result: Record<string, string> = {};
-    
-    nodeIds.forEach(id => {
-      if (id === 'frame_123') {
-        result[id] = 'https://via.placeholder.com/375x812/ffffff/333333?text=Login+Screen';
-      } else if (id === 'frame_456') {
-        result[id] = 'https://via.placeholder.com/375x812/ffffff/333333?text=Home+Screen';
-      } else if (id === 'component_123') {
-        result[id] = 'https://via.placeholder.com/120x40/0066ff/ffffff?text=Button';
+    try {
+      const nodeIdsParam = nodeIds.join(',');
+      const response = await fetch(
+        `${FIGMA_API_BASE}/images/${fileKey}?ids=${nodeIdsParam}&format=png`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image URLs: ${response.statusText}`);
       }
-    });
-    
-    return result;
+      
+      const data = await response.json();
+      return data.images || {};
+    } catch (error) {
+      console.error('Error fetching image URLs:', error);
+      return {};
+    }
   }
 
   // Import frame from Figma as a page
