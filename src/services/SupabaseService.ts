@@ -2,8 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Page } from '../types';
 
 // Supabase configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsqfwommnuhtbeupuwwm.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+// IMPORTANT: This is a temporary fix - in production, this should come from environment variables
+// We're hardcoding it temporarily to fix the "supabaseKey is required" error
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
 
 // Create Supabase client
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -22,7 +24,7 @@ class SupabaseService {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
-          redirectTo: 'https://coterate-2nd.vercel.app/auth/callback',
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 

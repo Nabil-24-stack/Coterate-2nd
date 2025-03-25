@@ -64,8 +64,9 @@ const RetryButton = styled.button`
 `;
 
 // Supabase configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsqfwommnuhtbeupuwwm.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+// IMPORTANT: This is a temporary fix - in production, this should come from environment variables
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const AuthCallback: React.FC = () => {
