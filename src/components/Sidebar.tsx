@@ -298,6 +298,8 @@ export const Sidebar: React.FC = () => {
   // Add user state
   const [user, setUser] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [figmaUser, setFigmaUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   
   const editInputRef = useRef<HTMLInputElement>(null);
   
@@ -305,31 +307,79 @@ export const Sidebar: React.FC = () => {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
+        setIsLoading(true);
+        console.log('Checking auth status...');
+        
         const session = await supabaseService.getSession();
-        const userData = await supabaseService.getCurrentUser();
+        console.log('Retrieved session:', session);
         
-        setIsAuthenticated(!!session);
-        setUser(userData);
-        
-        console.log('Auth status:', { isAuthenticated: !!session, user: userData });
+        if (session) {
+          // Get the Supabase user
+          const userData = await supabaseService.getCurrentUser();
+          console.log('Retrieved user data:', userData);
+          
+          setIsAuthenticated(true);
+          setUser(userData);
+          
+          // If we have a provider token, try to get Figma user data
+          if (session.provider_token) {
+            try {
+              console.log('Getting Figma user data...');
+              const figmaUserData = await supabaseService.getFigmaUserData();
+              console.log('Retrieved Figma user data:', figmaUserData);
+              
+              if (figmaUserData) {
+                setFigmaUser(figmaUserData);
+              }
+            } catch (figmaError) {
+              console.error('Error fetching Figma user data:', figmaError);
+            }
+          }
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+          setFigmaUser(null);
+        }
       } catch (error) {
         console.error('Error checking auth status:', error);
+        setIsAuthenticated(false);
+        setUser(null);
+        setFigmaUser(null);
+      } finally {
+        setIsLoading(false);
       }
     };
     
     checkAuthStatus();
     
     // Set up auth state change listener
-    const { data: authListener } = supabaseService.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabaseService.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session);
-      setIsAuthenticated(!!session);
       
       if (session) {
-        supabaseService.getCurrentUser().then(userData => {
+        try {
+          setIsAuthenticated(true);
+          
+          // Get Supabase user data
+          const userData = await supabaseService.getCurrentUser();
           setUser(userData);
-        });
+          
+          // Get Figma user data if we have a provider token
+          if (session.provider_token) {
+            try {
+              const figmaUserData = await supabaseService.getFigmaUserData();
+              setFigmaUser(figmaUserData);
+            } catch (figmaError) {
+              console.error('Error fetching Figma user data after auth change:', figmaError);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing auth state change:', error);
+        }
       } else {
+        setIsAuthenticated(false);
         setUser(null);
+        setFigmaUser(null);
       }
     });
     
@@ -340,11 +390,16 @@ export const Sidebar: React.FC = () => {
   
   const handleSignOut = async () => {
     try {
+      setIsLoading(true);
       await supabaseService.signOut();
       setUser(null);
+      setFigmaUser(null);
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Error signing out:', error);
+      alert('Failed to sign out. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -397,13 +452,17 @@ export const Sidebar: React.FC = () => {
   
   const openFigmaModal = async () => {
     try {
+      setIsLoading(true);
+      
       // Check if user is already authenticated with Figma via Supabase
       const session = await supabaseService.getSession();
       
       if (session && session.provider_token) {
+        console.log('User already authenticated, showing file selector');
         // User is already authenticated, show the file selector
         setIsFigmaModalOpen(true);
       } else {
+        console.log('User needs to authenticate, starting OAuth flow');
         // User needs to authenticate, start the OAuth flow
         await supabaseService.signInWithFigma();
         // The page will redirect to Figma for authentication
@@ -411,6 +470,8 @@ export const Sidebar: React.FC = () => {
     } catch (error) {
       console.error('Error starting Figma authentication:', error);
       alert('Failed to authenticate with Figma. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -446,7 +507,7 @@ export const Sidebar: React.FC = () => {
           + New Page
         </NewPageButton>
         
-        <FigmaImportButton onClick={openFigmaModal}>
+        <FigmaImportButton onClick={openFigmaModal} disabled={isLoading}>
           <FigmaIcon>
             <svg width="16" height="16" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
@@ -456,22 +517,28 @@ export const Sidebar: React.FC = () => {
               <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
             </svg>
           </FigmaIcon>
-          Import with Figma
+          {isLoading ? 'Loading...' : 'Import with Figma'}
         </FigmaImportButton>
         
         {/* Display user info if authenticated */}
-        {isAuthenticated && user && (
+        {isAuthenticated && (figmaUser || user) && (
           <UserProfileSection>
             <UserInfo>
               <UserName>
-                {user.user_metadata?.name || user.user_metadata?.full_name || 'Figma User'}
+                {figmaUser?.user?.handle || 
+                 user?.user_metadata?.name || 
+                 user?.user_metadata?.full_name || 
+                 'Figma User'}
               </UserName>
               <UserEmail>
-                {user.email || user.user_metadata?.email || ''}
+                {figmaUser?.user?.email || 
+                 user?.email || 
+                 user?.user_metadata?.email || 
+                 ''}
               </UserEmail>
             </UserInfo>
-            <SignOutButton onClick={handleSignOut}>
-              Sign Out
+            <SignOutButton onClick={handleSignOut} disabled={isLoading}>
+              {isLoading ? 'Loading...' : 'Sign Out'}
             </SignOutButton>
           </UserProfileSection>
         )}

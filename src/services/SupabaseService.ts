@@ -18,6 +18,11 @@ interface FigmaUser {
 }
 
 class SupabaseService {
+  // Get auth state change listener
+  onAuthStateChange(callback: (event: string, session: any) => void) {
+    return supabase.auth.onAuthStateChange(callback);
+  }
+
   // Initialize Figma auth flow through Supabase
   async signInWithFigma() {
     try {
@@ -26,6 +31,15 @@ class SupabaseService {
       // Generate a random state to prevent CSRF attacks
       const state = Math.random().toString(36).substring(2, 15);
       localStorage.setItem('figma_auth_state', state);
+      
+      // First check if we already have a session
+      const existingSession = await this.getSession();
+      console.log('Existing session check:', existingSession);
+      
+      if (existingSession?.provider_token) {
+        console.log('User already authenticated with Figma');
+        return { url: null, provider: 'figma', session: existingSession };
+      }
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
@@ -55,72 +69,128 @@ class SupabaseService {
 
   // Get the current user session
   async getSession() {
-    const { data, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      console.error('Error getting session:', error);
+    try {
+      console.log('Getting session from Supabase');
+      const { data, error } = await supabase.auth.getSession();
+      
+      console.log('Session data:', data);
+      
+      if (error) {
+        console.error('Error getting session:', error);
+        return null;
+      }
+      
+      return data.session;
+    } catch (error) {
+      console.error('Unexpected error getting session:', error);
       return null;
     }
-    
-    return data.session;
   }
 
   // Get current user
   async getCurrentUser() {
-    const { data, error } = await supabase.auth.getUser();
-    
-    if (error) {
-      console.error('Error getting user:', error);
+    try {
+      console.log('Getting current user from Supabase');
+      const { data, error } = await supabase.auth.getUser();
+      
+      console.log('User data:', data);
+      
+      if (error) {
+        console.error('Error getting user:', error);
+        return null;
+      }
+      
+      return data.user;
+    } catch (error) {
+      console.error('Unexpected error getting user:', error);
       return null;
     }
-    
-    return data.user;
+  }
+
+  // Get user data from Figma
+  async getFigmaUserData() {
+    try {
+      const session = await this.getSession();
+      
+      if (!session?.provider_token) {
+        console.error('No provider token available for Figma API call');
+        return null;
+      }
+      
+      const userData = await this.callFigmaApi('me');
+      console.log('Figma user data:', userData);
+      
+      return userData;
+    } catch (error) {
+      console.error('Error getting Figma user data:', error);
+      return null;
+    }
   }
 
   // Sign out the user
   async signOut() {
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-      console.error('Error signing out:', error);
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error signing out:', error);
+        throw error;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Unexpected error during sign out:', error);
       throw error;
     }
-    
-    return true;
   }
 
   // Helper to access Figma API with the user's token
   async callFigmaApi(endpoint: string) {
-    const session = await this.getSession();
-    if (!session?.provider_token) {
-      throw new Error('No provider token available');
-    }
-
-    const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
-      headers: {
-        'Authorization': `Bearer ${session.provider_token}`
+    try {
+      const session = await this.getSession();
+      
+      if (!session?.provider_token) {
+        console.error('No provider token available for Figma API call');
+        throw new Error('No provider token available');
       }
-    });
 
-    if (!response.ok) {
-      throw new Error(`Failed to call Figma API: ${response.statusText}`);
+      console.log(`Calling Figma API: ${endpoint}`);
+      
+      const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
+        headers: {
+          'Authorization': `Bearer ${session.provider_token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Figma API error (${response.status}):`, errorText);
+        throw new Error(`Failed to call Figma API: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error calling Figma API (${endpoint}):`, error);
+      throw error;
     }
-
-    return await response.json();
   }
 
   // Get user's Figma files
   async getFigmaFiles() {
     try {
+      // First, try to get the user data which will validate our token
+      await this.getFigmaUserData();
+      
       const data = await this.callFigmaApi('me/files');
+      console.log('Figma files data:', data);
       
       // Map the API response to our expected format
-      return data.projects.map((project: any) => ({
+      return Array.isArray(data.projects) ? data.projects.map((project: any) => ({
         key: project.key,
         name: project.name,
         thumbnail_url: project.thumbnail_url || 'https://via.placeholder.com/300/e3e6ea/808080?text=No+Thumbnail',
         last_modified: project.last_modified
-      }));
+      })) : [];
     } catch (error) {
       console.error('Error fetching Figma files:', error);
       return [];
@@ -199,11 +269,6 @@ class SupabaseService {
       console.error('Error importing frame as page:', error);
       throw error;
     }
-  }
-
-  // Get auth state change listener
-  onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback);
   }
 }
 

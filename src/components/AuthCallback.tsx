@@ -86,68 +86,92 @@ const AuthCallback: React.FC = () => {
         const urlParams = new URLSearchParams(window.location.search);
         console.log('URL params:', Object.fromEntries(urlParams.entries()));
 
-        // Get the session - Supabase should handle the token exchange automatically
-        const { data, error } = await supabase.auth.getSession();
+        // Get the hash fragment from the URL if it exists
+        const hashParams = window.location.hash 
+          ? new URLSearchParams(window.location.hash.substring(1))
+          : null;
+          
+        console.log('Hash fragment:', hashParams ? Object.fromEntries(hashParams.entries()) : 'none');
+
+        // Explicitly process the auth callback - this is critical for Supabase to set the session
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
         
-        // Debug: Log the session data
+        // Check for errors in URL params
+        if (error) {
+          console.error('Error in auth callback URL:', error, errorDescription);
+          setStatus('error');
+          setMessage(`Authentication failed: ${error}`);
+          setErrorDetails(errorDescription || 'Unknown error occurred during authentication');
+          return;
+        }
+        
+        // If we have a code param, we need to exchange it for a session
+        if (code) {
+          console.log('Found code in URL, exchanging for session...');
+          try {
+            // Exchange the code for a session
+            const { data: signInData, error: signInError } = 
+              await supabase.auth.exchangeCodeForSession(code);
+            
+            console.log('Code exchange result:', signInData);
+            
+            if (signInError) {
+              throw signInError;
+            }
+            
+            if (signInData.session) {
+              console.log('Successfully got session from code exchange');
+              setStatus('success');
+              setMessage('Successfully authenticated with Figma!');
+              
+              // Redirect back to the main app after a short delay
+              setTimeout(() => {
+                navigate('/');
+              }, 2000);
+              return;
+            } else {
+              throw new Error('No session returned from code exchange');
+            }
+          } catch (codeExchangeError) {
+            console.error('Error exchanging code for session:', codeExchangeError);
+            setStatus('error');
+            setMessage('Failed to exchange code for session');
+            setErrorDetails(codeExchangeError instanceof Error ? codeExchangeError.message : 'Unknown error');
+            return;
+          }
+        }
+        
+        // If we get here, check if we already have a session
+        const { data, error: sessionError } = await supabase.auth.getSession();
         console.log('Auth session response:', data);
 
-        if (error) {
-          console.error('Authentication error:', error);
+        if (sessionError) {
+          console.error('Session retrieval error:', sessionError);
           setStatus('error');
-          setMessage('Failed to authenticate with Figma');
-          setErrorDetails(error.message);
+          setMessage('Failed to retrieve session');
+          setErrorDetails(sessionError.message);
           return;
         }
 
-        // Try to exchange the code manually if the session isn't already available
-        if (!data.session) {
-          console.log('No session found, attempting to exchange code for token...');
+        if (data.session) {
+          setStatus('success');
+          setMessage('Successfully authenticated with Figma!');
           
-          // Extract code from URL if present
-          const code = urlParams.get('code');
-          
-          if (code) {
-            try {
-              // Exchange the code for a token
-              const { data: signInData, error: signInError } = 
-                await supabase.auth.exchangeCodeForSession(code);
-              
-              console.log('Code exchange result:', signInData, signInError);
-              
-              if (signInError) {
-                throw signInError;
-              }
-              
-              if (signInData.session) {
-                setStatus('success');
-                setMessage('Successfully authenticated with Figma!');
-                
-                // Redirect back to the main app after a short delay
-                setTimeout(() => {
-                  navigate('/');
-                }, 2000);
-                return;
-              }
-            } catch (exchangeError) {
-              console.error('Error exchanging code:', exchangeError);
-              // Continue to the error handling below
-            }
-          }
-          
-          setStatus('error');
-          setMessage('No session found after authentication');
-          setErrorDetails('The authentication process did not return a valid session');
+          // Redirect back to the main app after a short delay
+          setTimeout(() => {
+            navigate('/');
+          }, 2000);
           return;
         }
 
-        setStatus('success');
-        setMessage('Successfully authenticated with Figma!');
+        // If we reach this point, we don't have a session
+        console.error('No session found and no code to exchange');
+        setStatus('error');
+        setMessage('No session found after authentication');
+        setErrorDetails('The authentication process did not return a valid session. Please try again.');
         
-        // Redirect back to the main app after a short delay
-        setTimeout(() => {
-          navigate('/');
-        }, 2000);
       } catch (error) {
         console.error('Error processing auth callback:', error);
         setStatus('error');
