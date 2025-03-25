@@ -31,7 +31,7 @@ class SupabaseService {
         provider: 'figma',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
-          scopes: 'file_read',
+          scopes: 'files:read',
           queryParams: {
             // Send state parameter for validation
             state: state
