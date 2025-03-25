@@ -64,8 +64,8 @@ const RetryButton = styled.button`
 `;
 
 // Supabase configuration
-const supabaseUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const AuthCallback: React.FC = () => {

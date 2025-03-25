@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { Page } from '../types';
 
 // Supabase configuration
-const supabaseUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Create Supabase client
 const supabase = createClient(supabaseUrl, supabaseAnonKey);

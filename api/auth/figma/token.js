@@ -7,9 +7,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Use environment variable or fallback to hardcoded URL
+    const supabaseUrl = process.env.SUPABASE_URL || 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+    
     // Redirect the user to Supabase's callback URL
     return res.status(200).json({ 
-      redirectTo: 'https://tsqfwommnuhtbeupuwwm.supabase.co/auth/v1/callback',
+      redirectTo: `${supabaseUrl}/auth/v1/callback`,
       message: 'Please use Supabase authentication flow'
     });
   } catch (error) {
