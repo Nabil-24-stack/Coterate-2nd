@@ -21,14 +21,28 @@ class SupabaseService {
   // Initialize Figma auth flow through Supabase
   async signInWithFigma() {
     try {
+      console.log('Starting Figma auth flow via Supabase');
+      
+      // Generate a random state to prevent CSRF attacks
+      const state = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('figma_auth_state', state);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'file_read',
+          queryParams: {
+            // Send state parameter for validation
+            state: state
+          },
         },
       });
 
+      console.log('Supabase OAuth initialization response:', data);
+
       if (error) {
+        console.error('Error starting Figma auth flow:', error);
         throw error;
       }
 

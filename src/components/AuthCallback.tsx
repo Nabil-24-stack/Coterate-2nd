@@ -81,8 +81,16 @@ const AuthCallback: React.FC = () => {
         setStatus('loading');
         setMessage('Processing your login...');
 
+        // Debug: Log URL parameters
+        console.log('Auth callback URL:', window.location.href);
+        const urlParams = new URLSearchParams(window.location.search);
+        console.log('URL params:', Object.fromEntries(urlParams.entries()));
+
         // Get the session - Supabase should handle the token exchange automatically
         const { data, error } = await supabase.auth.getSession();
+        
+        // Debug: Log the session data
+        console.log('Auth session response:', data);
 
         if (error) {
           console.error('Authentication error:', error);
@@ -92,19 +100,54 @@ const AuthCallback: React.FC = () => {
           return;
         }
 
-        if (data.session) {
-          setStatus('success');
-          setMessage('Successfully authenticated with Figma!');
+        // Try to exchange the code manually if the session isn't already available
+        if (!data.session) {
+          console.log('No session found, attempting to exchange code for token...');
           
-          // Redirect back to the main app after a short delay
-          setTimeout(() => {
-            navigate('/');
-          }, 2000);
-        } else {
+          // Extract code from URL if present
+          const code = urlParams.get('code');
+          
+          if (code) {
+            try {
+              // Exchange the code for a token
+              const { data: signInData, error: signInError } = 
+                await supabase.auth.exchangeCodeForSession(code);
+              
+              console.log('Code exchange result:', signInData, signInError);
+              
+              if (signInError) {
+                throw signInError;
+              }
+              
+              if (signInData.session) {
+                setStatus('success');
+                setMessage('Successfully authenticated with Figma!');
+                
+                // Redirect back to the main app after a short delay
+                setTimeout(() => {
+                  navigate('/');
+                }, 2000);
+                return;
+              }
+            } catch (exchangeError) {
+              console.error('Error exchanging code:', exchangeError);
+              // Continue to the error handling below
+            }
+          }
+          
           setStatus('error');
           setMessage('No session found after authentication');
           setErrorDetails('The authentication process did not return a valid session');
+          return;
         }
+
+        setStatus('success');
+        setMessage('Successfully authenticated with Figma!');
+        
+        // Redirect back to the main app after a short delay
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
       } catch (error) {
         console.error('Error processing auth callback:', error);
         setStatus('error');
