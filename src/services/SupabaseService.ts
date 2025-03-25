@@ -41,15 +41,15 @@ class SupabaseService {
         return { url: null, provider: 'figma', session: existingSession };
       }
       
+      // Use signInWithOAuth which will direct to Figma auth
+      // The redirectTo should be our app's auth callback endpoint
+      // Supabase will redirect the user back to this URL after the Figma auth flow
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
+          // This needs to match the URL we set in the Supabase dashboard under Auth > URL Configuration
           redirectTo: `${window.location.origin}/auth/callback`,
           scopes: 'files:read',
-          queryParams: {
-            // Send state parameter for validation
-            state: state
-          },
         },
       });
 
