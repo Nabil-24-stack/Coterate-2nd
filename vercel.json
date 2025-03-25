@@ -19,10 +19,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "REACT_APP_FIGMA_CLIENT_ID": "@figma_client_id",
-    "REACT_APP_FIGMA_CLIENT_SECRET": "@figma_client_secret",
-    "REACT_APP_FIGMA_REDIRECT_URI": "@figma_redirect_uri"
-  }
+  ]
 } 
