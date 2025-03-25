@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
 import FigmaFileSelector from './FigmaFileSelector';
-import FigmaService from '../services/FigmaService';
+import supabaseService from '../services/SupabaseService';
 
 // Logo component
 const Logo = styled.div`
@@ -301,8 +301,23 @@ export const Sidebar: React.FC = () => {
     setEditingPageId(null);
   };
   
-  const openFigmaModal = () => {
-    setIsFigmaModalOpen(true);
+  const openFigmaModal = async () => {
+    try {
+      // Check if user is already authenticated with Figma via Supabase
+      const session = await supabaseService.getSession();
+      
+      if (session && session.provider_token) {
+        // User is already authenticated, show the file selector
+        setIsFigmaModalOpen(true);
+      } else {
+        // User needs to authenticate, start the OAuth flow
+        await supabaseService.signInWithFigma();
+        // The page will redirect to Figma for authentication
+      }
+    } catch (error) {
+      console.error('Error starting Figma authentication:', error);
+      alert('Failed to authenticate with Figma. Please try again.');
+    }
   };
   
   const closeFigmaModal = () => {

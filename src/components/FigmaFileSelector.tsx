@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import FigmaService, { FigmaFile, FigmaNode } from '../services/FigmaService';
+import { FigmaFile, FigmaNode } from '../services/FigmaService';
 import { usePageContext } from '../contexts/PageContext';
+import supabaseService from '../services/SupabaseService';
 
 const Modal = styled.div`
   position: fixed;
@@ -249,32 +250,24 @@ const FigmaFileSelector: React.FC<FigmaFileSelectorProps> = ({ isOpen, onClose }
   
   const { addPage } = usePageContext();
   
-  // Check if user is authenticated with Figma
-  const isAuthenticated = FigmaService.isAuthenticated();
-  
-  // Load user's Figma files when authenticated
+  // Load user's Figma files when opened
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
+    if (isOpen) {
       fetchUserFiles();
     }
-  }, [isOpen, isAuthenticated]);
+  }, [isOpen]);
   
-  // Fetch user's Figma files
+  // Fetch user's Figma files using Supabase service
   const fetchUserFiles = async () => {
     setLoading(true);
     try {
-      const userFiles = await FigmaService.getUserFiles();
+      const userFiles = await supabaseService.getFigmaFiles();
       setFiles(userFiles);
     } catch (error) {
       console.error('Error fetching Figma files:', error);
     } finally {
       setLoading(false);
     }
-  };
-  
-  // Handle Figma authentication
-  const handleAuthenticate = () => {
-    FigmaService.startOAuthFlow();
   };
   
   // Handle file selection
@@ -284,7 +277,7 @@ const FigmaFileSelector: React.FC<FigmaFileSelectorProps> = ({ isOpen, onClose }
     
     try {
       // Get file data to extract frames
-      const fileData = await FigmaService.getFile(file.key);
+      const fileData = await supabaseService.getFigmaFile(file.key);
       
       // Extract frame nodes
       const frames: FigmaNode[] = [];
@@ -321,7 +314,7 @@ const FigmaFileSelector: React.FC<FigmaFileSelectorProps> = ({ isOpen, onClose }
       if (!selectedFile) return;
       
       // Import the frame as a page
-      const newPage = await FigmaService.importFrameAsPage(selectedFile.key, nodeId);
+      const newPage = await supabaseService.importFrameAsPage(selectedFile.key, nodeId);
       
       // Add the page to the app with image URL
       addPage(newPage.name, newPage.baseImage);
@@ -354,14 +347,7 @@ const FigmaFileSelector: React.FC<FigmaFileSelectorProps> = ({ isOpen, onClose }
         </ModalHeader>
         
         <ModalBody>
-          {!isAuthenticated ? (
-            <EmptyState>
-              <p>Connect to your Figma account to import designs</p>
-              <AuthButton onClick={handleAuthenticate}>
-                Authenticate with Figma
-              </AuthButton>
-            </EmptyState>
-          ) : selectedFile ? (
+          {selectedFile ? (
             <>
               <BackButton onClick={handleBack}>
                 <ButtonWithIcon>←</ButtonWithIcon> Back to files
