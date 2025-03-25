@@ -82,23 +82,29 @@ class FigmaService {
 
   // Start OAuth process
   startOAuthFlow(): void {
-    // Use environment variables for client ID, with fallback for local development
-    const clientId = process.env.REACT_APP_FIGMA_CLIENT_ID;
+    // Use environment variables for client ID, check both naming conventions
+    // Create React App uses REACT_APP_ prefix, but it's good to check both formats
+    const clientId = process.env.REACT_APP_FIGMA_CLIENT_ID || process.env.FIGMA_CLIENT_ID || '';
     
     // For Vercel deployment, use the callback URL properly
     const redirectUri = process.env.REACT_APP_FIGMA_REDIRECT_URI || 
+                       process.env.FIGMA_REDIRECT_URI ||
                        'https://coterate-2nd.vercel.app/auth/figma/callback';
     
     const scope = 'file_read';
     
     if (!clientId) {
       console.error('Figma client ID not configured. Please check your environment variables.');
+      alert('Figma client ID is missing. Please check the application configuration.');
       return;
     }
     
     console.log('Starting OAuth flow with:', { 
       clientIdExists: !!clientId,
-      redirectUri 
+      clientIdLength: clientId.length,
+      redirectUri,
+      usingReactAppPrefix: !!process.env.REACT_APP_FIGMA_CLIENT_ID,
+      usingDirectFormat: !!process.env.FIGMA_CLIENT_ID
     });
     
     // Generate a state parameter to prevent CSRF attacks
@@ -107,6 +113,10 @@ class FigmaService {
     
     // Build the authorization URL
     const authUrl = `https://www.figma.com/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&response_type=code`;
+    
+    // Log URL for debugging (without the client ID)
+    console.log('Auth URL (without client ID):', 
+      `https://www.figma.com/oauth?client_id=[REDACTED]&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&response_type=code`);
     
     // Redirect to Figma's authorization page
     window.location.href = authUrl;
