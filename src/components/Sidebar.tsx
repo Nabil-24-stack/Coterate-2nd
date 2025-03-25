@@ -200,6 +200,48 @@ const EditInput = styled.input`
   }
 `;
 
+// Add new styled components for the user profile section
+const UserProfileSection = styled.div`
+  margin: 16px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  border: 1px solid #E3E6EA;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const UserInfo = styled.div`
+  font-size: 14px;
+  color: #333;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+`;
+
+const UserName = styled.div`
+  font-weight: 600;
+  font-size: 14px;
+`;
+
+const UserEmail = styled.div`
+  font-size: 12px;
+  color: #666;
+`;
+
+const SignOutButton = styled.button`
+  margin-top: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #e6e6e6;
+  }
+`;
+
 interface DropdownProps {
   pageId: string;
   pageName: string;
@@ -252,7 +294,59 @@ export const Sidebar: React.FC = () => {
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [editingPageName, setEditingPageName] = useState('');
   const [isFigmaModalOpen, setIsFigmaModalOpen] = useState(false);
+  
+  // Add user state
+  const [user, setUser] = useState<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // Check auth status on component mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const session = await supabaseService.getSession();
+        const userData = await supabaseService.getCurrentUser();
+        
+        setIsAuthenticated(!!session);
+        setUser(userData);
+        
+        console.log('Auth status:', { isAuthenticated: !!session, user: userData });
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+      }
+    };
+    
+    checkAuthStatus();
+    
+    // Set up auth state change listener
+    const { data: authListener } = supabaseService.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session);
+      setIsAuthenticated(!!session);
+      
+      if (session) {
+        supabaseService.getCurrentUser().then(userData => {
+          setUser(userData);
+        });
+      } else {
+        setUser(null);
+      }
+    });
+    
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+  
+  const handleSignOut = async () => {
+    try {
+      await supabaseService.signOut();
+      setUser(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
   
   const toggleMenu = (pageId: string) => {
     setOpenMenuId(openMenuId === pageId ? null : pageId);
@@ -364,6 +458,23 @@ export const Sidebar: React.FC = () => {
           </FigmaIcon>
           Import with Figma
         </FigmaImportButton>
+        
+        {/* Display user info if authenticated */}
+        {isAuthenticated && user && (
+          <UserProfileSection>
+            <UserInfo>
+              <UserName>
+                {user.user_metadata?.name || user.user_metadata?.full_name || 'Figma User'}
+              </UserName>
+              <UserEmail>
+                {user.email || user.user_metadata?.email || ''}
+              </UserEmail>
+            </UserInfo>
+            <SignOutButton onClick={handleSignOut}>
+              Sign Out
+            </SignOutButton>
+          </UserProfileSection>
+        )}
       </ButtonsContainer>
       
       <PageList>
