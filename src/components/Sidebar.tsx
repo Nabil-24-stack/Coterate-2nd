@@ -4,7 +4,6 @@ import { usePageContext } from '../contexts/PageContext';
 import { Page } from '../types';
 import FigmaFileSelector from './FigmaFileSelector';
 import supabaseService from '../services/SupabaseService';
-import { FigmaFrameDialog } from './FigmaFrameDialog';
 
 // Logo component
 const Logo = styled.div`
@@ -295,7 +294,6 @@ export const Sidebar: React.FC = () => {
   const [editingPageName, setEditingPageName] = useState<string>('');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [showFigmaModal, setShowFigmaModal] = useState<boolean>(false);
-  const [showFigmaFrameDialog, setShowFigmaFrameDialog] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [figmaUser, setFigmaUser] = useState<any>(null);
@@ -320,15 +318,6 @@ export const Sidebar: React.FC = () => {
         // Try to get user data
         try {
           console.log('Authenticated with Figma, fetching user data...');
-          
-          // Verify token access
-          const figmaToken = localStorage.getItem('figma_provider_token');
-          if (figmaToken) {
-            console.log('Found Figma token in localStorage, length:', figmaToken.length);
-          } else {
-            console.warn('No Figma token in localStorage!');
-          }
-          
           const userData = await supabaseService.getFigmaUserData();
           console.log('Figma user data response:', userData);
           
@@ -360,13 +349,7 @@ export const Sidebar: React.FC = () => {
   // Handle sign out
   const handleSignOut = async () => {
     try {
-      // Clear tokens from localStorage
-      localStorage.removeItem('figma_access_token');
-      localStorage.removeItem('figma_provider_token');
-      
-      // Also sign out from Supabase
       await supabaseService.signOut();
-      
       setIsAuthenticated(false);
       setFigmaUser(null);
     } catch (error) {
@@ -429,9 +412,9 @@ export const Sidebar: React.FC = () => {
       const session = await supabaseService.getSession();
       
       if (session && session.provider_token) {
-        console.log('User already authenticated, showing frame dialog');
-        // User is already authenticated, show the frame dialog
-        setShowFigmaFrameDialog(true);
+        console.log('User already authenticated, showing file selector');
+        // User is already authenticated, show the file selector
+        setShowFigmaModal(true);
       } else {
         console.log('User needs to authenticate, starting OAuth flow');
         // User needs to authenticate, start the OAuth flow
@@ -446,8 +429,8 @@ export const Sidebar: React.FC = () => {
     }
   };
   
-  const closeFigmaFrameDialog = () => {
-    setShowFigmaFrameDialog(false);
+  const closeFigmaModal = () => {
+    setShowFigmaModal(false);
   };
   
   // Handle clicks outside the edit input
@@ -465,9 +448,6 @@ export const Sidebar: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [editingPageId, savePageName]);
-  
-  // We'll ignore the isFigmaAuthenticated variable since it's not used but may be needed later
-  // const isFigmaAuthenticated = FigmaService.isAuthenticated();
   
   return (
     <SidebarContainer>
@@ -553,10 +533,10 @@ export const Sidebar: React.FC = () => {
         ))}
       </PageList>
       
-      {/* Figma Frame Dialog */}
-      <FigmaFrameDialog 
-        isOpen={showFigmaFrameDialog} 
-        onClose={closeFigmaFrameDialog}
+      {/* Figma File Selector Modal */}
+      <FigmaFileSelector 
+        isOpen={showFigmaModal} 
+        onClose={closeFigmaModal}
       />
     </SidebarContainer>
   );

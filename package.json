@@ -3,20 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.6",
     "@supabase/supabase-js": "^2.49.3",
     "@types/node": "^16.18.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/styled-components": "^5.1.30",
-    "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.3.0",
     "styled-components": "^6.1.0",
-    "tailwind-merge": "^3.0.2",
     "typescript": "^4.9.5"
   },
   "scripts": {
