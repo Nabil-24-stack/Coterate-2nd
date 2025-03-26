@@ -28,10 +28,6 @@ class SupabaseService {
     try {
       console.log('Starting Figma auth flow via Supabase');
       
-      // Generate a random state to prevent CSRF attacks
-      const state = Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('figma_auth_state', state);
-      
       // First check if we already have a session
       const existingSession = await this.getSession();
       console.log('Existing session check:', existingSession);
@@ -42,14 +38,15 @@ class SupabaseService {
       }
       
       // Use signInWithOAuth which will direct to Figma auth
-      // The redirectTo should be our app's auth callback endpoint
-      // Supabase will redirect the user back to this URL after the Figma auth flow
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
-          // This needs to match the URL we set in the Supabase dashboard under Auth > URL Configuration
           redirectTo: `${window.location.origin}/auth/callback`,
           scopes: 'files:read',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
         },
       });
 
