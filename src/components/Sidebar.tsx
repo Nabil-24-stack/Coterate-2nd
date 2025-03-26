@@ -307,6 +307,8 @@ export const Sidebar: React.FC = () => {
     try {
       setIsLoading(true);
       
+      console.log('==== CHECKING FIGMA AUTH STATUS ====');
+      
       // Check if authenticated with Figma using our new method
       const isAuth = await supabaseService.isAuthenticatedWithFigma();
       console.log('Figma auth status:', isAuth);
@@ -315,11 +317,27 @@ export const Sidebar: React.FC = () => {
       if (isAuth) {
         // Try to get user data
         try {
+          console.log('Authenticated with Figma, fetching user data...');
+          
+          // Verify token access
+          const figmaToken = localStorage.getItem('figma_provider_token');
+          if (figmaToken) {
+            console.log('Found Figma token in localStorage, length:', figmaToken.length);
+          } else {
+            console.warn('No Figma token in localStorage!');
+          }
+          
           const userData = await supabaseService.getFigmaUserData();
-          console.log('Figma user data:', userData);
+          console.log('Figma user data response:', userData);
           
           if (userData) {
+            console.log('Setting Figma user data:', {
+              handle: userData.handle,
+              email: userData.email
+            });
             setFigmaUser(userData);
+          } else {
+            console.error('Failed to get Figma user data');
           }
         } catch (userError) {
           console.error('Error fetching Figma user data:', userError);
@@ -472,10 +490,16 @@ export const Sidebar: React.FC = () => {
         </FigmaImportButton>
         
         {/* Display user info if authenticated */}
-        {isAuthenticated && figmaUser && (
+        {isAuthenticated && (
           <UserProfileSection>
-            <UserName>{figmaUser.handle || 'Figma User'}</UserName>
-            <UserEmail>{figmaUser.email || ''}</UserEmail>
+            {figmaUser ? (
+              <>
+                <UserName>{figmaUser.handle || 'Figma User'}</UserName>
+                <UserEmail>{figmaUser.email || ''}</UserEmail>
+              </>
+            ) : (
+              <UserName>Authenticated with Figma</UserName>
+            )}
             <SignOutButton onClick={handleSignOut}>Sign Out</SignOutButton>
           </UserProfileSection>
         )}

@@ -208,18 +208,79 @@ class SupabaseService {
     }
   }
 
+  // Helper to access Figma API with the user's token
+  async callFigmaApi(endpoint: string) {
+    try {
+      // First try to get the token from the session
+      const session = await this.getSession();
+      let token = session?.provider_token;
+      
+      // If no token in session, check localStorage as fallback
+      if (!token) {
+        console.log('No provider token in session, checking localStorage');
+        token = localStorage.getItem('figma_provider_token');
+        
+        if (token) {
+          console.log('Found Figma provider token in localStorage, length:', token.length);
+          
+          // Log a portion of the token for debugging (safely)
+          const safeTokenPreview = token.length > 10 ? 
+            `${token.substring(0, 5)}...${token.substring(token.length - 5)}` : 
+            '[token too short]';
+          console.log('Token preview:', safeTokenPreview);
+        }
+      }
+      
+      if (!token) {
+        console.error('No provider token available for Figma API call');
+        throw new Error('No provider token available');
+      }
+
+      console.log(`Calling Figma API: ${endpoint} with token (length: ${token.length})`);
+      
+      const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Figma API error (${response.status}):`, errorText);
+        throw new Error(`Failed to call Figma API: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log(`Figma API response for ${endpoint}:`, data);
+      return data;
+    } catch (error) {
+      console.error(`Error calling Figma API (${endpoint}):`, error);
+      throw error;
+    }
+  }
+
   // Get user data from Figma
   async getFigmaUserData() {
     try {
-      const session = await this.getSession();
+      console.log('Attempting to get Figma user data...');
       
-      if (!session?.provider_token) {
-        console.error('No provider token available for Figma API call');
+      // First try to get provider token
+      const session = await this.getSession();
+      const hasSessionToken = !!session?.provider_token;
+      const hasLocalToken = !!localStorage.getItem('figma_provider_token');
+      
+      console.log('Token availability check:', {
+        hasSessionToken,
+        hasLocalToken
+      });
+      
+      if (!hasSessionToken && !hasLocalToken) {
+        console.error('No Figma authentication token available');
         return null;
       }
       
       const userData = await this.callFigmaApi('me');
-      console.log('Figma user data:', userData);
+      console.log('Figma user data retrieved successfully:', userData);
       
       return userData;
     } catch (error) {
@@ -241,49 +302,6 @@ class SupabaseService {
       return true;
     } catch (error) {
       console.error('Unexpected error during sign out:', error);
-      throw error;
-    }
-  }
-
-  // Helper to access Figma API with the user's token
-  async callFigmaApi(endpoint: string) {
-    try {
-      // First try to get the token from the session
-      const session = await this.getSession();
-      let token = session?.provider_token;
-      
-      // If no token in session, check localStorage as fallback
-      if (!token) {
-        console.log('No provider token in session, checking localStorage');
-        token = localStorage.getItem('figma_provider_token');
-        
-        if (token) {
-          console.log('Found Figma provider token in localStorage');
-        }
-      }
-      
-      if (!token) {
-        console.error('No provider token available for Figma API call');
-        throw new Error('No provider token available');
-      }
-
-      console.log(`Calling Figma API: ${endpoint}`);
-      
-      const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Figma API error (${response.status}):`, errorText);
-        throw new Error(`Failed to call Figma API: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`Error calling Figma API (${endpoint}):`, error);
       throw error;
     }
   }

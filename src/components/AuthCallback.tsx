@@ -187,8 +187,31 @@ const AuthCallback: React.FC = () => {
               try {
                 // Store provider token for Figma API access
                 if (providerToken) {
+                  console.log('Storing Figma provider token of length:', providerToken.length);
                   localStorage.setItem('figma_provider_token', providerToken);
                   console.log('Stored Figma provider token in localStorage');
+                } else {
+                  console.error('No provider token found in hash fragment!');
+                  
+                  // Check if the token might be in a different location
+                  // Sometimes OAuth providers use different naming conventions
+                  const possibleTokens: Array<{ key: string, length: number }> = [];
+                  hashParams.forEach((value, key) => {
+                    if (key.includes('token') || key.includes('access')) {
+                      possibleTokens.push({ key, length: value.length });
+                    }
+                  });
+                  
+                  if (possibleTokens.length > 0) {
+                    console.log('Found potential alternative tokens:', possibleTokens);
+                    
+                    // Try to use one of these alternative tokens
+                    const backupToken = hashParams.get('access_token');
+                    if (backupToken) {
+                      console.log('Using access_token as fallback provider token');
+                      localStorage.setItem('figma_provider_token', backupToken);
+                    }
+                  }
                 }
                 
                 // Store access token for authentication
