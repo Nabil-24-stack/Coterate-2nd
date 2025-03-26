@@ -165,16 +165,43 @@ class SupabaseService {
   async getCurrentUser() {
     try {
       console.log('Getting current user from Supabase');
+      
+      // Try standard auth first
       const { data, error } = await supabase.auth.getUser();
       
-      console.log('User data:', data);
-      
-      if (error) {
-        console.error('Error getting user:', error);
-        return null;
+      if (data?.user) {
+        console.log('Got user from Supabase auth:', data.user.email);
+        return data.user;
       }
       
-      return data.user;
+      // Fallback to manually stored token
+      const token = localStorage.getItem('figma_access_token');
+      if (token) {
+        console.log('Trying with manually stored access token');
+        try {
+          const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
+          
+          if (tokenData?.user) {
+            console.log('Got user with stored token:', tokenData.user.email);
+            return tokenData.user;
+          }
+          
+          if (tokenError) {
+            console.error('Error getting user with stored token:', tokenError);
+          }
+        } catch (tokenError) {
+          console.error('Error using stored token:', tokenError);
+        }
+      }
+      
+      // If we reach here, we couldn't get the user
+      if (error) {
+        console.error('Error getting user:', error);
+      } else {
+        console.error('No user found in session or with stored token');
+      }
+      
+      return null;
     } catch (error) {
       console.error('Unexpected error getting user:', error);
       return null;
@@ -221,9 +248,21 @@ class SupabaseService {
   // Helper to access Figma API with the user's token
   async callFigmaApi(endpoint: string) {
     try {
+      // First try to get the token from the session
       const session = await this.getSession();
+      let token = session?.provider_token;
       
-      if (!session?.provider_token) {
+      // If no token in session, check localStorage as fallback
+      if (!token) {
+        console.log('No provider token in session, checking localStorage');
+        token = localStorage.getItem('figma_provider_token');
+        
+        if (token) {
+          console.log('Found Figma provider token in localStorage');
+        }
+      }
+      
+      if (!token) {
         console.error('No provider token available for Figma API call');
         throw new Error('No provider token available');
       }
@@ -232,7 +271,7 @@ class SupabaseService {
       
       const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
         headers: {
-          'Authorization': `Bearer ${session.provider_token}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -342,6 +381,24 @@ class SupabaseService {
     } catch (error) {
       console.error('Error importing frame as page:', error);
       throw error;
+    }
+  }
+
+  // Check if user is authenticated with Figma (includes fallback to localStorage)
+  async isAuthenticatedWithFigma() {
+    try {
+      // Check for session first
+      const session = await this.getSession();
+      if (session?.provider_token) {
+        return true;
+      }
+      
+      // Fallback to localStorage
+      const token = localStorage.getItem('figma_provider_token');
+      return !!token;
+    } catch (error) {
+      console.error('Error checking Figma authentication:', error);
+      return false;
     }
   }
 }

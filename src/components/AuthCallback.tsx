@@ -160,7 +160,94 @@ const AuthCallback: React.FC = () => {
               hasProviderToken: !!providerToken
             });
             
-            // Set the session with these tokens
+            // Log the URLs and configuration to check for issues
+            console.log('Current environment:', {
+              origin: window.location.origin,
+              url: supabaseUrl,
+              keyLength: supabaseAnonKey ? supabaseAnonKey.length : 0
+            });
+            
+            try {
+              // Attempt to manually persist the session to localStorage first
+              const expiresInSeconds = parseInt(expiresIn || '3600');
+              const expiresAtTimestamp = Math.floor(Date.now() / 1000) + expiresInSeconds;
+              
+              // Store session raw in localStorage (debugging approach)
+              const sessionData = {
+                access_token: accessToken,
+                refresh_token: refreshToken || undefined,
+                expires_at: expiresAtTimestamp,
+                provider_token: providerToken,
+                provider_refresh_token: providerRefreshToken
+              };
+              
+              console.log('Manually storing session data:', sessionData);
+              
+              // Try direct approach - store tokens in localStorage manually
+              try {
+                // Store provider token for Figma API access
+                if (providerToken) {
+                  localStorage.setItem('figma_provider_token', providerToken);
+                  console.log('Stored Figma provider token in localStorage');
+                }
+                
+                // Store access token for authentication
+                if (accessToken) {
+                  localStorage.setItem('figma_access_token', accessToken);
+                  console.log('Stored access token in localStorage');
+                }
+                
+                // This is a minimal approach just to get authentication working
+                // In a production app, you'd want to handle this more securely
+                console.log('Successfully stored tokens, redirecting to home page');
+                setStatus('success');
+                setMessage('Authentication successful! Redirecting...');
+                
+                // Redirect back to the main app after a short delay
+                setTimeout(() => {
+                  navigate('/');
+                }, 1000);
+                return;
+              } catch (storageError) {
+                console.error('Error storing tokens in localStorage:', storageError);
+              }
+              
+              // Try an alternate approach - use getUser directly with the access token
+              const { data: userData, error: userError } = await supabase.auth.getUser(accessToken!);
+              
+              console.log('Get user with token result:', {
+                success: !!userData,
+                hasUser: !!userData?.user,
+                error: userError
+              });
+              
+              if (userError) {
+                console.error('Error getting user with token:', userError);
+                throw userError;
+              }
+              
+              if (userData?.user) {
+                console.log('Successfully verified user with token:', userData.user.email);
+                
+                // Try to refresh the session using the API
+                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+                console.log('Session refresh result:', { success: !!refreshData, error: refreshError });
+                
+                setStatus('success');
+                setMessage(`Welcome, ${userData.user.email || 'User'}!`);
+                
+                // Redirect back to the main app after a short delay
+                setTimeout(() => {
+                  navigate('/');
+                }, 2000);
+                return;
+              }
+            } catch (tokenUserError) {
+              console.error('Error getting user with token:', tokenUserError);
+            }
+            
+            // If direct token approach failed, try traditional way
+            console.log('Falling back to traditional setSession approach');
             const { data, error } = await supabase.auth.setSession({
               access_token: accessToken!,
               refresh_token: refreshToken || ''

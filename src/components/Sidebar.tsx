@@ -289,126 +289,77 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
 };
 
 export const Sidebar: React.FC = () => {
-  const { pages, currentPage, setCurrentPage, addPage, renamePage } = usePageContext();
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const { pages, addPage, setCurrentPage, currentPage, updatePage, deletePage } = usePageContext();
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
-  const [editingPageName, setEditingPageName] = useState('');
-  const [isFigmaModalOpen, setIsFigmaModalOpen] = useState(false);
-  
-  // Add user state
-  const [user, setUser] = useState<any>(null);
+  const [editingPageName, setEditingPageName] = useState<string>('');
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [showFigmaModal, setShowFigmaModal] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [figmaUser, setFigmaUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   
   const editInputRef = useRef<HTMLInputElement>(null);
+  const figmaModalRef = useRef<HTMLDivElement>(null);
   
-  // Check auth status on component mount
-  useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        setIsLoading(true);
-        console.log('Checking auth status...');
-        
-        const session = await supabaseService.getSession();
-        console.log('Retrieved session:', session);
-        
-        if (session) {
-          // Get the Supabase user
-          const userData = await supabaseService.getCurrentUser();
-          console.log('Retrieved user data:', userData);
-          
-          setIsAuthenticated(true);
-          setUser(userData);
-          
-          // If we have a provider token, try to get Figma user data
-          if (session.provider_token) {
-            try {
-              console.log('Getting Figma user data...');
-              const figmaUserData = await supabaseService.getFigmaUserData();
-              console.log('Retrieved Figma user data:', figmaUserData);
-              
-              if (figmaUserData) {
-                setFigmaUser(figmaUserData);
-              }
-            } catch (figmaError) {
-              console.error('Error fetching Figma user data:', figmaError);
-            }
-          }
-        } else {
-          setIsAuthenticated(false);
-          setUser(null);
-          setFigmaUser(null);
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        setIsAuthenticated(false);
-        setUser(null);
-        setFigmaUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    checkAuthStatus();
-    
-    // Set up auth state change listener
-    const { data: authListener } = supabaseService.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session);
-      
-      if (session) {
-        try {
-          setIsAuthenticated(true);
-          
-          // Get Supabase user data
-          const userData = await supabaseService.getCurrentUser();
-          setUser(userData);
-          
-          // Get Figma user data if we have a provider token
-          if (session.provider_token) {
-            try {
-              const figmaUserData = await supabaseService.getFigmaUserData();
-              setFigmaUser(figmaUserData);
-            } catch (figmaError) {
-              console.error('Error fetching Figma user data after auth change:', figmaError);
-            }
-          }
-        } catch (error) {
-          console.error('Error processing auth state change:', error);
-        }
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-        setFigmaUser(null);
-      }
-    });
-    
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
-  }, []);
-  
-  const handleSignOut = async () => {
+  // Check authentication status and get user data
+  const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      await supabaseService.signOut();
-      setUser(null);
-      setFigmaUser(null);
-      setIsAuthenticated(false);
+      
+      // Check if authenticated with Figma using our new method
+      const isAuth = await supabaseService.isAuthenticatedWithFigma();
+      console.log('Figma auth status:', isAuth);
+      setIsAuthenticated(isAuth);
+      
+      if (isAuth) {
+        // Try to get user data
+        try {
+          const userData = await supabaseService.getFigmaUserData();
+          console.log('Figma user data:', userData);
+          
+          if (userData) {
+            setFigmaUser(userData);
+          }
+        } catch (userError) {
+          console.error('Error fetching Figma user data:', userError);
+        }
+      }
     } catch (error) {
-      console.error('Error signing out:', error);
-      alert('Failed to sign out. Please try again.');
+      console.error('Error checking auth status:', error);
     } finally {
       setIsLoading(false);
     }
   };
   
+  // Call checkAuthStatus on component mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      // Clear tokens from localStorage
+      localStorage.removeItem('figma_access_token');
+      localStorage.removeItem('figma_provider_token');
+      
+      // Also sign out from Supabase
+      await supabaseService.signOut();
+      
+      setIsAuthenticated(false);
+      setFigmaUser(null);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+  
   const toggleMenu = (pageId: string) => {
-    setOpenMenuId(openMenuId === pageId ? null : pageId);
+    setActiveDropdown(activeDropdown === pageId ? null : pageId);
   };
   
   const closeMenu = () => {
-    setOpenMenuId(null);
+    setActiveDropdown(null);
   };
   
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, page: Page) => {
@@ -441,10 +392,10 @@ export const Sidebar: React.FC = () => {
   
   const savePageName = useCallback(() => {
     if (editingPageId && editingPageName.trim()) {
-      renamePage(editingPageId, editingPageName.trim());
+      updatePage(editingPageId, { name: editingPageName.trim() });
     }
     setEditingPageId(null);
-  }, [editingPageId, editingPageName, renamePage]);
+  }, [editingPageId, editingPageName, updatePage]);
   
   const cancelEditing = () => {
     setEditingPageId(null);
@@ -460,7 +411,7 @@ export const Sidebar: React.FC = () => {
       if (session && session.provider_token) {
         console.log('User already authenticated, showing file selector');
         // User is already authenticated, show the file selector
-        setIsFigmaModalOpen(true);
+        setShowFigmaModal(true);
       } else {
         console.log('User needs to authenticate, starting OAuth flow');
         // User needs to authenticate, start the OAuth flow
@@ -476,7 +427,7 @@ export const Sidebar: React.FC = () => {
   };
   
   const closeFigmaModal = () => {
-    setIsFigmaModalOpen(false);
+    setShowFigmaModal(false);
   };
   
   // Handle clicks outside the edit input
@@ -521,25 +472,11 @@ export const Sidebar: React.FC = () => {
         </FigmaImportButton>
         
         {/* Display user info if authenticated */}
-        {isAuthenticated && (figmaUser || user) && (
+        {isAuthenticated && figmaUser && (
           <UserProfileSection>
-            <UserInfo>
-              <UserName>
-                {figmaUser?.user?.handle || 
-                 user?.user_metadata?.name || 
-                 user?.user_metadata?.full_name || 
-                 'Figma User'}
-              </UserName>
-              <UserEmail>
-                {figmaUser?.user?.email || 
-                 user?.email || 
-                 user?.user_metadata?.email || 
-                 ''}
-              </UserEmail>
-            </UserInfo>
-            <SignOutButton onClick={handleSignOut} disabled={isLoading}>
-              {isLoading ? 'Loading...' : 'Sign Out'}
-            </SignOutButton>
+            <UserName>{figmaUser.handle || 'Figma User'}</UserName>
+            <UserEmail>{figmaUser.email || ''}</UserEmail>
+            <SignOutButton onClick={handleSignOut}>Sign Out</SignOutButton>
           </UserProfileSection>
         )}
       </ButtonsContainer>
@@ -575,7 +512,7 @@ export const Sidebar: React.FC = () => {
                     •••
                   </MoreButton>
                   
-                  {openMenuId === page.id && (
+                  {activeDropdown === page.id && (
                     <Dropdown 
                       pageId={page.id}
                       pageName={page.name}
@@ -592,7 +529,7 @@ export const Sidebar: React.FC = () => {
       
       {/* Figma File Selector Modal */}
       <FigmaFileSelector 
-        isOpen={isFigmaModalOpen} 
+        isOpen={showFigmaModal} 
         onClose={closeFigmaModal}
       />
     </SidebarContainer>
