@@ -82,14 +82,17 @@ class SupabaseService {
         scopes: 'files:read'
       });
       
+      // Use Implicit Grant flow (token in URL fragment) rather than Authorization Code flow
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
           redirectTo: redirectUrl,
           scopes: 'files:read',
+          // Request implicit flow with token response in queryParams
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
+            response_type: 'token' // This requests the implicit flow
           }
         },
       });

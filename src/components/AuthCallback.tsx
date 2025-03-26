@@ -101,6 +101,7 @@ const AuthCallback: React.FC = () => {
         const hashFragment = window.location.hash;
         console.log('Hash fragment raw:', hashFragment);
 
+        // Parse the hash fragment (very important for Figma auth)
         const hashParams = hashFragment 
           ? new URLSearchParams(hashFragment.substring(1))
           : null;
@@ -108,9 +109,9 @@ const AuthCallback: React.FC = () => {
         console.log('Hash params:', hashParams ? Object.fromEntries(hashParams.entries()) : 'none');
 
         // Explicitly check for error parameters
-        const error = urlParams.get('error');
-        const errorDescription = urlParams.get('error_description');
-        const errorCode = urlParams.get('error_code');
+        const error = urlParams.get('error') || hashParams?.get('error');
+        const errorDescription = urlParams.get('error_description') || hashParams?.get('error_description');
+        const errorCode = urlParams.get('error_code') || hashParams?.get('error_code');
         
         if (error) {
           console.error('Auth error in URL:', { 
@@ -138,6 +139,76 @@ const AuthCallback: React.FC = () => {
           console.log('Auth related localStorage keys:', authKeys);
         } catch (storageError) {
           console.error('Error checking localStorage:', storageError);
+        }
+        
+        // First check if we have tokens in the hash fragment (implicit flow from Figma)
+        if (hashParams && hashParams.get('access_token')) {
+          console.log('Found access_token in hash fragment - handling implicit flow');
+          try {
+            // We need to handle the implicit flow by setting session with the token data
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            const expiresIn = hashParams.get('expires_in');
+            const expiresAt = hashParams.get('expires_at');
+            const providerToken = hashParams.get('provider_token');
+            const providerRefreshToken = hashParams.get('provider_refresh_token');
+            
+            console.log('Extracted tokens from hash:', { 
+              hasAccessToken: !!accessToken,
+              hasRefreshToken: !!refreshToken,
+              expiresIn,
+              hasProviderToken: !!providerToken
+            });
+            
+            // Set the session with these tokens
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken!,
+              refresh_token: refreshToken || ''
+            });
+            
+            console.log('Set session result:', {
+              success: !!data,
+              hasSession: !!data?.session,
+              error
+            });
+            
+            if (error) {
+              throw error;
+            }
+            
+            if (data?.session) {
+              console.log('Successfully created session from hash tokens');
+              
+              // Verify we can use the session
+              const { data: userData, error: userError } = await supabase.auth.getUser();
+              
+              if (userError) {
+                throw userError;
+              }
+              
+              if (userData?.user) {
+                console.log('Successfully verified user with hash token session');
+                setStatus('success');
+                setMessage(`Welcome, ${userData.user.email || 'User'}!`);
+                
+                // Redirect back to the main app after a short delay
+                setTimeout(() => {
+                  navigate('/');
+                }, 2000);
+                return;
+              }
+            }
+            
+            throw new Error('Failed to create valid session from hash tokens');
+          } catch (hashTokenError) {
+            console.error('Error handling hash tokens:', hashTokenError);
+            setStatus('error');
+            setMessage('Failed to authenticate with token data');
+            setErrorDetails(hashTokenError instanceof Error 
+              ? hashTokenError.message 
+              : 'Unknown error processing authentication tokens');
+            return;
+          }
         }
         
         // Look for and process authorization code - this is the most important part
