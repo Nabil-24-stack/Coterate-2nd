@@ -81,66 +81,131 @@ const AuthCallback: React.FC = () => {
         setStatus('loading');
         setMessage('Processing your login...');
 
-        // Debug: Log URL parameters
+        // Debug: Log environment and initialization
+        console.log('==== AUTH CALLBACK DEBUGGING ====');
+        console.log('Environment:', {
+          windowLocation: window.location.origin,
+          isDevelopment: process.env.NODE_ENV === 'development'
+        });
+        console.log('Supabase client initialized with:', { 
+          url: supabaseUrl,
+          keyLength: supabaseAnonKey ? supabaseAnonKey.length : 0 
+        });
+
+        // Debug: Log entire URL and parse components
         console.log('Auth callback URL:', window.location.href);
         const urlParams = new URLSearchParams(window.location.search);
         console.log('URL params:', Object.fromEntries(urlParams.entries()));
-
+        
         // Get the hash fragment from the URL if it exists
-        const hashParams = window.location.hash 
-          ? new URLSearchParams(window.location.hash.substring(1))
+        const hashFragment = window.location.hash;
+        console.log('Hash fragment raw:', hashFragment);
+
+        const hashParams = hashFragment 
+          ? new URLSearchParams(hashFragment.substring(1))
           : null;
           
-        console.log('Hash fragment:', hashParams ? Object.fromEntries(hashParams.entries()) : 'none');
+        console.log('Hash params:', hashParams ? Object.fromEntries(hashParams.entries()) : 'none');
 
-        // Explicitly process the auth callback - this is critical for Supabase to set the session
-        const code = urlParams.get('code');
+        // Explicitly check for error parameters
         const error = urlParams.get('error');
         const errorDescription = urlParams.get('error_description');
+        const errorCode = urlParams.get('error_code');
         
-        // Check for errors in URL params
         if (error) {
-          console.error('Error in auth callback URL:', error, errorDescription);
+          console.error('Auth error in URL:', { 
+            error, 
+            errorDescription, 
+            errorCode 
+          });
           setStatus('error');
           setMessage(`Authentication failed: ${error}`);
-          setErrorDetails(errorDescription || 'Unknown error occurred during authentication');
+          setErrorDetails(`${errorDescription || 'Unknown error'} (${errorCode || 'no code'})`);
           return;
         }
         
-        // If we have a code param, we need to exchange it for a session
+        // Clear local storage of any stale auth data that might interfere
+        try {
+          console.log('Checking local storage for stale auth data');
+          const authKeys = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('supabase') || key.includes('figma') || key.includes('auth'))) {
+              authKeys.push(key);
+              console.log('Found potentially stale auth key:', key);
+            }
+          }
+          console.log('Auth related localStorage keys:', authKeys);
+        } catch (storageError) {
+          console.error('Error checking localStorage:', storageError);
+        }
+        
+        // Look for and process authorization code - this is the most important part
+        const code = urlParams.get('code');
+        
         if (code) {
-          console.log('Found code in URL, exchanging for session...');
+          console.log('Found authorization code in URL, length:', code.length);
           try {
-            // Exchange the code for a session
+            // Try exchanging the code for a session
+            console.log('Attempting to exchange code for session...');
             const { data: signInData, error: signInError } = 
               await supabase.auth.exchangeCodeForSession(code);
             
-            console.log('Code exchange result:', signInData);
+            console.log('Code exchange response:', { 
+              success: !!signInData, 
+              hasSession: !!signInData?.session,
+              error: signInError
+            });
             
             if (signInError) {
+              console.error('Error exchanging code:', signInError);
               throw signInError;
             }
             
-            if (signInData.session) {
-              console.log('Successfully got session from code exchange');
-              setStatus('success');
-              setMessage('Successfully authenticated with Figma!');
+            if (signInData?.session) {
+              console.log('Successfully obtained session from code exchange');
               
-              // Redirect back to the main app after a short delay
-              setTimeout(() => {
-                navigate('/');
-              }, 2000);
-              return;
+              // Verify we can actually use the session by checking user data
+              const { data: userData, error: userError } = await supabase.auth.getUser();
+              console.log('User data after session exchange:', { 
+                success: !!userData, 
+                user: userData?.user ? { 
+                  id: userData.user.id,
+                  email: userData.user.email,
+                  provider: userData.user.app_metadata?.provider
+                } : null,
+                error: userError
+              });
+              
+              if (userData?.user) {
+                console.log('Successfully verified user with new session');
+                setStatus('success');
+                setMessage(`Welcome, ${userData.user.email}!`);
+                
+                // Redirect back to the main app after a short delay
+                setTimeout(() => {
+                  navigate('/');
+                }, 2000);
+                return;
+              } else {
+                console.error('Got session but failed to get user data:', userError);
+                throw new Error('Failed to get user data with new session');
+              }
             } else {
+              console.error('No session returned from code exchange');
               throw new Error('No session returned from code exchange');
             }
           } catch (codeExchangeError) {
-            console.error('Error exchanging code for session:', codeExchangeError);
+            console.error('Error in code exchange process:', codeExchangeError);
             setStatus('error');
-            setMessage('Failed to exchange code for session');
-            setErrorDetails(codeExchangeError instanceof Error ? codeExchangeError.message : 'Unknown error');
+            setMessage('Failed to complete authentication');
+            setErrorDetails(codeExchangeError instanceof Error 
+              ? codeExchangeError.message 
+              : 'Unknown error during code exchange');
             return;
           }
+        } else {
+          console.warn('No authorization code found in URL');
         }
         
         // If we get here, check if we already have a session

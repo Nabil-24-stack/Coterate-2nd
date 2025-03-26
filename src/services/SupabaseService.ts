@@ -18,6 +18,20 @@ interface FigmaUser {
 }
 
 class SupabaseService {
+  // Static instance for singleton pattern
+  private static instance: SupabaseService;
+
+  // Static method to get the instance
+  static getInstance(): SupabaseService {
+    if (!SupabaseService.instance) {
+      SupabaseService.instance = new SupabaseService();
+    }
+    return SupabaseService.instance;
+  }
+
+  // Private constructor to prevent multiple instances
+  private constructor() {}
+
   // Get auth state change listener
   onAuthStateChange(callback: (event: string, session: any) => void) {
     return supabase.auth.onAuthStateChange(callback);
@@ -26,22 +40,52 @@ class SupabaseService {
   // Initialize Figma auth flow through Supabase
   async signInWithFigma() {
     try {
-      console.log('Starting Figma auth flow via Supabase');
+      console.log('==== STARTING FIGMA AUTH FLOW ====');
+      console.log('Browser URL:', window.location.href);
+      console.log('Origin:', window.location.origin);
       
       // First check if we already have a session
       const existingSession = await this.getSession();
-      console.log('Existing session check:', existingSession);
+      console.log('Existing session check:', existingSession ? {
+        user: existingSession.user.id,
+        provider: existingSession.user.app_metadata?.provider,
+        expires_at: existingSession.expires_at,
+        has_provider_token: !!existingSession.provider_token
+      } : 'No session');
       
       if (existingSession?.provider_token) {
-        console.log('User already authenticated with Figma');
+        console.log('User already authenticated with Figma, reusing session');
         return { url: null, provider: 'figma', session: existingSession };
       }
       
+      // Construct redirect URL with correct callback location
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      console.log('Using redirectTo URL:', redirectUrl);
+      
+      // Clear any previous auth state from localStorage to avoid conflicts
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.includes('figma_auth_state')) {
+            console.log('Removing stale auth state key:', key);
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (e) {
+        console.warn('Error clearing localStorage:', e);
+      }
+      
       // Use signInWithOAuth which will direct to Figma auth
+      console.log('Initiating OAuth flow with params:', {
+        provider: 'figma', 
+        redirectTo: redirectUrl,
+        scopes: 'files:read'
+      });
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           scopes: 'files:read',
           queryParams: {
             access_type: 'offline',
@@ -50,7 +94,11 @@ class SupabaseService {
         },
       });
 
-      console.log('Supabase OAuth initialization response:', data);
+      console.log('Supabase OAuth initialization response:', data ? {
+        provider: data.provider,
+        url: data.url,
+        hasSession: !!(data as any).session
+      } : 'No data');
 
       if (error) {
         console.error('Error starting Figma auth flow:', error);
@@ -60,6 +108,30 @@ class SupabaseService {
       return data;
     } catch (error) {
       console.error('Error starting Figma auth flow:', error);
+      throw error;
+    }
+  }
+
+  // Test direct code exchange - can be used as fallback
+  async exchangeCodeForSession(code: string) {
+    try {
+      console.log('Manually exchanging code for session, code length:', code.length);
+      
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      
+      console.log('Manual code exchange result:', {
+        success: !!data,
+        hasSession: !!data?.session,
+        error: error
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      return data.session;
+    } catch (error) {
+      console.error('Error exchanging code for session:', error);
       throw error;
     }
   }
@@ -270,5 +342,5 @@ class SupabaseService {
 }
 
 // Create and export a single instance
-const supabaseService = new SupabaseService();
+const supabaseService = SupabaseService.getInstance();
 export default supabaseService; 
