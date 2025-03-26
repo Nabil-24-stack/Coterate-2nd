@@ -4,7 +4,16 @@ import supabaseService from '../services/SupabaseService';
 
 // Types
 interface Session {
-  provider_token?: string;
+  provider_token?: string | null;
+  user: {
+    id: string;
+    email?: string;
+    app_metadata?: {
+      provider?: string;
+    };
+    [key: string]: any;
+  };
+  expires_at?: number;
   [key: string]: any;
 }
 
@@ -84,12 +93,13 @@ const TestAuthPage: React.FC = () => {
         addLog(`Session check result: ${currentSession ? 'Found' : 'Not found'}`);
         
         if (currentSession) {
-          setSession(currentSession);
+          // Cast the Supabase session to our Session type to avoid type errors
+          setSession(currentSession as unknown as Session);
           addLog('Session details: ' + JSON.stringify(currentSession, null, 2));
           
           // Also get user if we have a session
           const currentUser = await supabaseService.getCurrentUser();
-          setUser(currentUser);
+          setUser(currentUser as User);
           addLog('User details: ' + JSON.stringify(currentUser, null, 2));
         }
       } catch (error) {
@@ -100,15 +110,16 @@ const TestAuthPage: React.FC = () => {
     checkSession();
 
     // Listen for auth state changes
-    const { data: authListener } = supabaseService.onAuthStateChange((event: string, newSession: Session | null) => {
+    const { data: authListener } = supabaseService.onAuthStateChange((event: string, newSession: any) => {
       addLog(`Auth state changed: ${event}`);
       addLog(`New session: ${newSession ? 'Available' : 'None'}`);
       
       if (newSession) {
-        setSession(newSession);
+        // Cast the session to our Session type
+        setSession(newSession as unknown as Session);
         // Update user as well
-        supabaseService.getCurrentUser().then((newUser: User | null) => {
-          setUser(newUser);
+        supabaseService.getCurrentUser().then((newUser: any) => {
+          setUser(newUser as User);
           addLog('Updated user details: ' + JSON.stringify(newUser, null, 2));
         });
       } else {
