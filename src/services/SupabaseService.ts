@@ -7,8 +7,12 @@ const supabaseUrl = 'https://tsqfwommnuhtbeupuwwm.supabase.co';
 // We're hardcoding it temporarily to fix the "supabaseKey is required" error
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
 
-// Create Supabase client
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create Supabase client with implicit flow type for better token handling
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'implicit',
+  },
+});
 
 interface FigmaUser {
   id: string;
@@ -82,17 +86,15 @@ class SupabaseService {
         scopes: 'files:read'
       });
       
-      // Use Implicit Grant flow (token in URL fragment) rather than Authorization Code flow
+      // The flowType is configured at the client level, so we don't need to specify it here
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'figma',
         options: {
           redirectTo: redirectUrl,
           scopes: 'files:read',
-          // Request implicit flow with token response in queryParams
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            response_type: 'token' // This requests the implicit flow
           }
         },
       });
