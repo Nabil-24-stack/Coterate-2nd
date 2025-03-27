@@ -57,25 +57,22 @@ const LogoImage = styled.img`
   object-fit: contain;
 `;
 
-// Redesigned Canvas Container
+// Canvas Container
 const CanvasContainer = styled.div`
   position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100vh;
+  flex: 1;
+  height: 100%;
   overflow: hidden;
-  background-color: #f5f5f5;
-  z-index: 1;
+  background-color: #f0f0f0;
 `;
 
 // Infinite Canvas
 const InfiniteCanvas = styled.div<{ scale: number }>`
-  position: relative;
-  width: calc(100% - 230px);
-  height: calc(100vh - 60px);
-  margin-top: 60px; /* Add margin to account for fixed header */
-  margin-left: 230px; /* Add margin to account for sidebar */
+  position: absolute;
+  top: 60px; /* Match header height */
+  right: 0;
+  bottom: 0;
+  left: 230px; /* Match sidebar width */
   overflow: hidden;
   background-color: #f5f5f5;
   background-image: 
@@ -96,16 +93,19 @@ const CanvasContent = styled.div<{ x: number; y: number; scale: number }>`
   display: flex;
   justify-content: center;
   align-items: center;
-  min-width: 100%;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
 `;
 
 // Design elements
 const DesignContainer = styled.div`
   position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   min-width: 100%;
   min-height: 100%;
-  padding: 100px;
+  padding: 20px;
 `;
 
 const DesignCard = styled.div`
@@ -118,9 +118,6 @@ const DesignCard = styled.div`
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 16px;
   max-width: 100%;
-  border: 2px solid transparent;
-  outline: none;
-  z-index: 10;
   cursor: pointer;
 `;
 
@@ -129,18 +126,16 @@ const DesignImage = styled.img`
   height: auto;
   object-fit: contain;
   border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 `;
 
-// Add the EmptyCanvas component
+// Empty Canvas Message
 const EmptyCanvasMessage = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #888;
-  font-size: 18px;
-  margin-top: 100px;
+  font-size: 16px;
   text-align: center;
   max-width: 500px;
   line-height: 1.5;
@@ -266,6 +261,41 @@ export const Canvas: React.FC = () => {
     document.addEventListener('paste', handlePaste);
     return () => {
       document.removeEventListener('paste', handlePaste);
+    };
+  }, [currentPage, updatePage]);
+  
+  // Add keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+0: Reset zoom
+      if (e.ctrlKey && e.key === '0') {
+        e.preventDefault();
+        resetCanvas();
+      }
+      
+      // Ctrl+Plus: Zoom in
+      if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        setScale(prev => Math.min(prev * 1.1, 4));
+      }
+      
+      // Ctrl+Minus: Zoom out
+      if (e.ctrlKey && e.key === '-') {
+        e.preventDefault();
+        setScale(prev => Math.max(prev * 0.9, 0.1));
+      }
+      
+      // Delete/Backspace: Remove selected design
+      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage) {
+        if (currentPage.baseImage) {
+          updatePage(currentPage.id, { baseImage: undefined });
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [currentPage, updatePage]);
   

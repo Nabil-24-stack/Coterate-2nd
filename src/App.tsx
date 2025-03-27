@@ -18,6 +18,14 @@ const AppContainer = styled.div`
   position: relative;
 `;
 
+// Global style to ensure consistent styling across the app
+const AppContent = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: relative;
+`;
+
 function App() {
   return (
     <Router>
@@ -27,13 +35,13 @@ function App() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/test-auth" element={<TestAuthPage />} />
           <Route path="/" element={
-            <>
+            <AppContainer>
               <Header />
-              <AppContainer>
+              <AppContent>
                 <Sidebar />
                 <Canvas />
-              </AppContainer>
-            </>
+              </AppContent>
+            </AppContainer>
           } />
         </Routes>
       </PageProvider>
