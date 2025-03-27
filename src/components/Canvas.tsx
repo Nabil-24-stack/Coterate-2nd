@@ -69,7 +69,7 @@ const DesignContainer = styled.div`
 const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
   background-color: white;
-  border-radius: 8px;
+  border-radius: 5px;
   padding: 0;
   max-width: calc(100vw - 280px);
   cursor: move;
@@ -86,8 +86,9 @@ const DesignImage = styled.img`
   max-width: 100%;
   height: auto;
   display: block;
-  border-radius: 5px;
+  border-radius: 0;
   pointer-events: none; /* Prevent image from interfering with drag */
+  margin: 0;
 `;
 
 // Empty state message
