@@ -70,13 +70,14 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
   background-color: white;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 16px;
   max-width: calc(100vw - 280px);
   cursor: move;
-  border: ${props => props.isSelected ? '3px solid #0066ff' : '2px solid transparent'};
-  box-shadow: ${props => props.isSelected ? '0 0 8px rgba(0, 102, 255, 0.5)' : '0 4px 12px rgba(0, 0, 0, 0.1)'};
-  transition: border 0.2s ease, box-shadow 0.2s ease;
+  border: 3px solid rgba(0, 102, 255, ${props => props.isSelected ? '1' : '0'});
+  box-shadow: ${props => props.isSelected 
+    ? '0 0 0 1px #fff, 0 0 8px rgba(0, 102, 255, 0.5)' 
+    : '0 4px 12px rgba(0, 0, 0, 0.1)'};
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 `;
 
 // The image itself
