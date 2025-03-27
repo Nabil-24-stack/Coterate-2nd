@@ -23,13 +23,13 @@ const Logo = styled.div`
 `;
 
 const LogoImage = styled.img`
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
 `;
 
 const LogoText = styled.span`
-  font-size: 16px;
+  font-size: 24px;
   font-weight: 600;
   color: #333;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -40,7 +40,7 @@ const Header: React.FC = () => {
     <HeaderContainer>
       <Logo>
         <LogoImage src="/Coterate logo.png" alt="Coterate Logo" />
-        <LogoText>Coterate UI</LogoText>
+        <LogoText>Coterate</LogoText>
       </Logo>
     </HeaderContainer>
   );
