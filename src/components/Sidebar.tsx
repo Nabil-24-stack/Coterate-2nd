@@ -17,8 +17,8 @@ const Logo = styled.div`
 `;
 
 const LogoImage = styled.img`
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 `;
 
@@ -451,6 +451,12 @@ export const Sidebar: React.FC = () => {
   
   return (
     <SidebarContainer>
+      <Header>
+        <Logo>
+          <LogoImage src="/logo.png" alt="Coterate Logo" />
+          Coterate
+        </Logo>
+      </Header>
       <SectionTitle>Pages</SectionTitle>
       
       <ButtonsContainer>
