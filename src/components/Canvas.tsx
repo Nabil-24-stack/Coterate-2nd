@@ -74,8 +74,9 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
   padding: 16px;
   max-width: calc(100vw - 280px);
   cursor: move;
-  border: ${props => props.isSelected ? '2px solid #0066ff' : 'none'};
-  transition: border 0.2s ease;
+  border: ${props => props.isSelected ? '3px solid #0066ff' : '2px solid transparent'};
+  box-shadow: ${props => props.isSelected ? '0 0 8px rgba(0, 102, 255, 0.5)' : '0 4px 12px rgba(0, 0, 0, 0.1)'};
+  transition: border 0.2s ease, box-shadow 0.2s ease;
 `;
 
 // The image itself
