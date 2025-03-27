@@ -12,7 +12,7 @@ const HeaderContainer = styled.header`
   top: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 101;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 `;
 

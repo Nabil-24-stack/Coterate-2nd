@@ -85,6 +85,7 @@ const CanvasHeader = styled.div`
   right: 0;
   width: 100%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Enhanced shadow for better visibility */
+  pointer-events: none; /* Allow clicks to pass through to header component */
 `;
 
 const HeaderActions = styled.div`
