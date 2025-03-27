@@ -69,16 +69,17 @@ const DesignContainer = styled.div`
 const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
   background-color: white;
-  border-radius: 5px;
+  border-radius: 0;
   padding: 0;
   max-width: calc(100vw - 280px);
   cursor: move;
   border: 3px solid rgba(0, 102, 255, ${props => props.isSelected ? '1' : '0'});
   box-shadow: ${props => props.isSelected 
-    ? '0 0 0 1px #fff, 0 0 8px rgba(0, 102, 255, 0.5)' 
-    : '0 4px 12px rgba(0, 0, 0, 0.1)'};
+    ? '0 0 8px rgba(0, 102, 255, 0.5)' 
+    : 'none'};
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
   overflow: hidden;
+  line-height: 0;
 `;
 
 // The image itself
@@ -89,6 +90,7 @@ const DesignImage = styled.img`
   border-radius: 0;
   pointer-events: none; /* Prevent image from interfering with drag */
   margin: 0;
+  border: none;
 `;
 
 // Empty state message
