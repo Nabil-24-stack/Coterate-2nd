@@ -1,38 +1,11 @@
-import React, { useState, useEffect, useRef, MouseEvent } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 
-// Global style to remove focus outlines and borders
+// Global style to ensure no focus outlines or borders
 const GlobalStyle = createGlobalStyle`
   * {
     outline: none !important;
-    &:focus, &:focus-visible, &:focus-within {
-      outline: none !important;
-      border-color: transparent !important;
-      box-shadow: none !important;
-    }
-  }
-  
-  img {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  
-  /* Additional reset for all elements */
-  div, img, canvas, section, article, figure {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  
-  /* Override browser default focus styles */
-  :focus {
-    outline: none !important;
-  }
-  
-  ::-moz-focus-inner {
-    border: 0 !important;
   }
   
   button, h1, h2, h3, h4, h5, h6, p, span, div {
@@ -40,40 +13,24 @@ const GlobalStyle = createGlobalStyle`
   }
 `;
 
-// Logo component
-const Logo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 28px;
-  color: #333;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-`;
-
-const LogoImage = styled.img`
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-`;
-
-// Canvas Container
+// Main canvas container that sits next to the sidebar
 const CanvasContainer = styled.div`
-  position: relative;
-  flex: 1;
-  height: 100%;
-  overflow: hidden;
-  background-color: #f0f0f0;
-`;
-
-// Infinite Canvas
-const InfiniteCanvas = styled.div<{ scale: number }>`
   position: absolute;
-  top: 60px; /* Match header height */
+  top: 60px; /* Header height */
   right: 0;
   bottom: 0;
-  left: 230px; /* Match sidebar width */
+  left: 230px; /* Sidebar width */
+  background-color: #f5f5f5;
   overflow: hidden;
+`;
+
+// The infinite canvas with grid background
+const InfiniteCanvas = styled.div<{ scale: number }>`
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background-color: #f5f5f5;
   background-image: 
     linear-gradient(rgba(150, 150, 150, 0.1) 1px, transparent 1px),
@@ -86,54 +43,54 @@ const InfiniteCanvas = styled.div<{ scale: number }>`
   }
 `;
 
+// The canvas content that can be transformed (panned and zoomed)
 const CanvasContent = styled.div<{ x: number; y: number; scale: number }>`
   position: absolute;
-  transform: translate(${props => props.x}px, ${props => props.y}px) scale(${props => props.scale});
-  transform-origin: 0 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  transform: translate(${props => props.x}px, ${props => props.y}px) scale(${props => props.scale});
+  transform-origin: 0 0;
 `;
 
-// Design elements
+// Container for designs
 const DesignContainer = styled.div`
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   justify-content: center;
   align-items: center;
-  min-width: 100%;
-  min-height: 100%;
-  padding: 20px;
 `;
 
+// Design card that holds the image
 const DesignCard = styled.div`
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 16px;
-  max-width: 100%;
-  cursor: pointer;
+  max-width: calc(100vw - 280px);
+  cursor: move;
 `;
 
+// The image itself
 const DesignImage = styled.img`
   max-width: 100%;
   height: auto;
-  object-fit: contain;
+  display: block;
   border-radius: 4px;
+  pointer-events: none; /* Prevent image from interfering with drag */
 `;
 
-// Empty Canvas Message
+// Empty state message
 const EmptyCanvasMessage = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   color: #888;
   font-size: 16px;
   text-align: center;
@@ -150,26 +107,51 @@ export const Canvas: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
+  // State for dragging design
+  const [isDesignDragging, setIsDesignDragging] = useState(false);
+  const [designPosition, setDesignPosition] = useState({ x: 0, y: 0 });
+  const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
+  
   const canvasRef = useRef<HTMLDivElement>(null);
+  const designRef = useRef<HTMLDivElement>(null);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
+    setDesignPosition({ x: 0, y: 0 });
   };
   
-  // Handle canvas mouse interactions
-  const handleCanvasMouseDown = (e: MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('#canvas-content')) {
-      setIsDragging(true);
-      setDragStart({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
+  // Handle canvas mouse down for panning
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // If clicking on the design card, handle design dragging
+    if (designRef.current && designRef.current.contains(e.target as Node)) {
+      setIsDesignDragging(true);
+      setDesignDragStart({
+        x: e.clientX - designPosition.x,
+        y: e.clientY - designPosition.y
       });
+      return;
     }
+    
+    // Otherwise handle canvas panning
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
   };
   
-  const handleCanvasMouseMove = (e: MouseEvent) => {
+  // Handle mouse move for panning and design dragging
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDesignDragging) {
+      setDesignPosition({
+        x: e.clientX - designDragStart.x,
+        y: e.clientY - designDragStart.y
+      });
+      return;
+    }
+    
     if (isDragging) {
       setPosition({
         x: e.clientX - dragStart.x,
@@ -178,11 +160,13 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  const handleCanvasMouseUp = () => {
+  // Handle mouse up to stop dragging
+  const handleMouseUp = () => {
     setIsDragging(false);
+    setIsDesignDragging(false);
   };
   
-  // Handle canvas wheel event for zooming
+  // Handle wheel event for zooming
   useEffect(() => {
     const canvasElement = canvasRef.current;
     if (!canvasElement) return;
@@ -205,9 +189,8 @@ export const Canvas: React.FC = () => {
         newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
       }
       
-      // Get the position of the cursor relative to the canvas
+      // Get cursor position relative to canvas
       const rect = canvasElement.getBoundingClientRect();
-      
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       
@@ -215,7 +198,7 @@ export const Canvas: React.FC = () => {
       const originX = mouseX / scale - position.x / scale;
       const originY = mouseY / scale - position.y / scale;
       
-      // Calculate the new position to keep the cursor point fixed
+      // Calculate the new position to keep cursor point fixed
       const newPositionX = mouseX - originX * newScale;
       const newPositionY = mouseY - originY * newScale;
       
@@ -250,6 +233,9 @@ export const Canvas: React.FC = () => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
               updatePage(currentPage.id, { baseImage: imageUrl });
+              
+              // Reset positions after pasting new image
+              resetCanvas();
             }
           };
           reader.readAsDataURL(blob);
@@ -264,7 +250,7 @@ export const Canvas: React.FC = () => {
     };
   }, [currentPage, updatePage]);
   
-  // Add keyboard shortcuts
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+0: Reset zoom
@@ -286,16 +272,14 @@ export const Canvas: React.FC = () => {
       }
       
       // Delete/Backspace: Remove selected design
-      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage) {
-        if (currentPage.baseImage) {
-          updatePage(currentPage.id, { baseImage: undefined });
-        }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage?.baseImage) {
+        updatePage(currentPage.id, { baseImage: undefined });
       }
     };
     
-    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [currentPage, updatePage]);
   
@@ -307,30 +291,29 @@ export const Canvas: React.FC = () => {
           ref={canvasRef}
           scale={scale}
           onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseUp={handleCanvasMouseUp}
-          onMouseLeave={handleCanvasMouseUp}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
         >
           <CanvasContent
-            id="canvas-content"
             x={position.x}
             y={position.y}
             scale={scale}
           >
-            <DesignContainer>
-              {currentPage && currentPage.baseImage ? (
-                <DesignCard>
+            {currentPage && currentPage.baseImage ? (
+              <DesignContainer style={{ transform: `translate(calc(-50% + ${designPosition.x}px), calc(-50% + ${designPosition.y}px))` }}>
+                <DesignCard ref={designRef}>
                   <DesignImage 
                     src={currentPage.baseImage} 
                     alt={currentPage.name}
                   />
                 </DesignCard>
-              ) : (
-                <EmptyCanvasMessage>
-                  Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
-                </EmptyCanvasMessage>
-              )}
-            </DesignContainer>
+              </DesignContainer>
+            ) : (
+              <EmptyCanvasMessage>
+                Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
+              </EmptyCanvasMessage>
+            )}
           </CanvasContent>
         </InfiniteCanvas>
       </CanvasContainer>

@@ -9,21 +9,13 @@ import FigmaAuthCallback from './components/FigmaAuthCallback';
 import AuthCallback from './components/AuthCallback';
 import TestAuthPage from './components/TestAuthPage';
 
+// Main app container - only used for global styles and positioning
 const AppContainer = styled.div`
-  display: flex;
-  height: 100vh;
   width: 100vw;
+  height: 100vh;
   overflow: hidden;
+  position: relative;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  position: relative;
-`;
-
-// Global style to ensure consistent styling across the app
-const AppContent = styled.div`
-  display: flex;
-  width: 100%;
-  height: 100%;
-  position: relative;
 `;
 
 function App() {
@@ -37,10 +29,8 @@ function App() {
           <Route path="/" element={
             <AppContainer>
               <Header />
-              <AppContent>
-                <Sidebar />
-                <Canvas />
-              </AppContent>
+              <Sidebar />
+              <Canvas />
             </AppContainer>
           } />
         </Routes>
