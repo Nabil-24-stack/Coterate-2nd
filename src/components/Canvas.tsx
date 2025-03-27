@@ -72,11 +72,25 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
   border-radius: 0;
   padding: 0;
   max-width: calc(100vw - 280px);
-  cursor: move;
+  cursor: ${props => props.isSelected ? 'move' : 'pointer'};
   border: none;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
   line-height: 0;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    pointer-events: none;
+    z-index: 10;
+    border: ${props => props.isSelected ? '3px solid #007bff' : '0px solid transparent'};
+    box-shadow: ${props => props.isSelected ? '0 0 8px rgba(0, 123, 255, 0.5)' : 'none'};
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
 `;
 
 // The image itself
