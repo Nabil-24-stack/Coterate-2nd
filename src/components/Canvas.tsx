@@ -130,6 +130,7 @@ export const Canvas: React.FC = () => {
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designPosition, setDesignPosition] = useState({ x: 0, y: 0 });
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
+  const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
   
   // New state for design selection
   const [isDesignSelected, setIsDesignSelected] = useState(false);
@@ -151,8 +152,12 @@ export const Canvas: React.FC = () => {
       setIsDesignDragging(true);
       setIsDesignSelected(true); // Select the design when clicked
       setDesignDragStart({
-        x: e.clientX - designPosition.x,
-        y: e.clientY - designPosition.y
+        x: e.clientX,
+        y: e.clientY
+      });
+      setDesignInitialPosition({
+        x: designPosition.x,
+        y: designPosition.y
       });
       return;
     }
@@ -171,9 +176,18 @@ export const Canvas: React.FC = () => {
   // Handle mouse move for panning and design dragging
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDesignDragging) {
+      // Calculate the delta in screen coordinates
+      const deltaX = e.clientX - designDragStart.x;
+      const deltaY = e.clientY - designDragStart.y;
+      
+      // Convert the delta to canvas coordinates by dividing by the scale
+      const deltaCanvasX = deltaX / scale;
+      const deltaCanvasY = deltaY / scale;
+      
+      // Update design position based on initial position plus scaled delta
       setDesignPosition({
-        x: e.clientX - designDragStart.x,
-        y: e.clientY - designDragStart.y
+        x: designInitialPosition.x + deltaCanvasX,
+        y: designInitialPosition.y + deltaCanvasY
       });
       return;
     }
