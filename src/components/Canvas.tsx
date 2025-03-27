@@ -65,8 +65,8 @@ const DesignContainer = styled.div`
   align-items: center;
 `;
 
-// Design card that holds the image
-const DesignCard = styled.div`
+// Design card that holds the image, now with isSelected prop
+const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
   background-color: white;
   border-radius: 8px;
@@ -74,6 +74,8 @@ const DesignCard = styled.div`
   padding: 16px;
   max-width: calc(100vw - 280px);
   cursor: move;
+  border: ${props => props.isSelected ? '2px solid #0066ff' : 'none'};
+  transition: border 0.2s ease;
 `;
 
 // The image itself
@@ -112,6 +114,9 @@ export const Canvas: React.FC = () => {
   const [designPosition, setDesignPosition] = useState({ x: 0, y: 0 });
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   
+  // New state for design selection
+  const [isDesignSelected, setIsDesignSelected] = useState(false);
+  
   const canvasRef = useRef<HTMLDivElement>(null);
   const designRef = useRef<HTMLDivElement>(null);
   
@@ -127,12 +132,16 @@ export const Canvas: React.FC = () => {
     // If clicking on the design card, handle design dragging
     if (designRef.current && designRef.current.contains(e.target as Node)) {
       setIsDesignDragging(true);
+      setIsDesignSelected(true); // Select the design when clicked
       setDesignDragStart({
         x: e.clientX - designPosition.x,
         y: e.clientY - designPosition.y
       });
       return;
     }
+    
+    // Deselect the design when clicking on the canvas
+    setIsDesignSelected(false);
     
     // Otherwise handle canvas panning
     setIsDragging(true);
@@ -164,6 +173,12 @@ export const Canvas: React.FC = () => {
   const handleMouseUp = () => {
     setIsDragging(false);
     setIsDesignDragging(false);
+  };
+  
+  // Handle click on the design to toggle selection
+  const handleDesignClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDesignSelected(true);
   };
   
   // Handle wheel event for zooming
@@ -236,6 +251,9 @@ export const Canvas: React.FC = () => {
               
               // Reset positions after pasting new image
               resetCanvas();
+              
+              // Auto-select newly pasted image
+              setIsDesignSelected(true);
             }
           };
           reader.readAsDataURL(blob);
@@ -272,8 +290,14 @@ export const Canvas: React.FC = () => {
       }
       
       // Delete/Backspace: Remove selected design
-      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage?.baseImage) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage?.baseImage && isDesignSelected) {
         updatePage(currentPage.id, { baseImage: undefined });
+        setIsDesignSelected(false);
+      }
+      
+      // Escape: Deselect design
+      if (e.key === 'Escape' && isDesignSelected) {
+        setIsDesignSelected(false);
       }
     };
     
@@ -281,7 +305,7 @@ export const Canvas: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentPage, updatePage]);
+  }, [currentPage, updatePage, isDesignSelected]);
   
   return (
     <>
@@ -302,7 +326,11 @@ export const Canvas: React.FC = () => {
           >
             {currentPage && currentPage.baseImage ? (
               <DesignContainer style={{ transform: `translate(calc(-50% + ${designPosition.x}px), calc(-50% + ${designPosition.y}px))` }}>
-                <DesignCard ref={designRef}>
+                <DesignCard 
+                  ref={designRef}
+                  isSelected={isDesignSelected}
+                  onClick={handleDesignClick}
+                >
                   <DesignImage 
                     src={currentPage.baseImage} 
                     alt={currentPage.name}
