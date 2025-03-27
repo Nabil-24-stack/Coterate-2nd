@@ -13,6 +13,7 @@ const HeaderContainer = styled.header`
   left: 0;
   right: 0;
   z-index: 100;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 `;
 
 const Logo = styled.div`
@@ -22,13 +23,13 @@ const Logo = styled.div`
 `;
 
 const LogoImage = styled.img`
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 `;
 
 const LogoText = styled.span`
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -39,7 +40,7 @@ const Header: React.FC = () => {
     <HeaderContainer>
       <Logo>
         <LogoImage src="/Coterate logo.png" alt="Coterate Logo" />
-        <LogoText>Coterate UI</LogoText>
+        <LogoText>Coterate</LogoText>
       </Logo>
     </HeaderContainer>
   );

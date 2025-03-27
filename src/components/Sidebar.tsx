@@ -6,21 +6,24 @@ import FigmaFileSelector from './FigmaFileSelector';
 import supabaseService from '../services/SupabaseService';
 
 const SidebarContainer = styled.div`
-  width: 240px;
-  height: 100vh;
-  background-color: #fff;
-  border-right: 1px solid #e5e5e5;
-  padding: 16px;
+  width: 230px;
+  height: calc(100% - 60px);
+  margin-top: 60px; /* Start below the header */
+  border-right: 1px solid #E3E6EA;
+  border-top: 2px solid #E3E6EA; /* Increased border width for visibility */
+  background-color: #F8F8F8;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  position: relative;
+  z-index: 10;
+  box-shadow: inset 0 1px 0 #E3E6EA; /* Add inset shadow to reinforce top border */
 `;
 
 const SectionTitle = styled.h2`
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
-  color: #666;
-  margin: 0;
+  color: #333;
+  margin: 16px 16px 8px 16px;
 `;
 
 const Header = styled.div`
@@ -431,8 +434,6 @@ export const Sidebar: React.FC = () => {
   
   return (
     <SidebarContainer>
-      <SectionTitle>Pages</SectionTitle>
-      
       <ButtonsContainer>
         <NewPageButton onClick={handleAddPage}>
           + New Page
@@ -466,6 +467,8 @@ export const Sidebar: React.FC = () => {
           </UserProfileSection>
         )}
       </ButtonsContainer>
+      
+      <SectionTitle>Pages</SectionTitle>
       
       <PageList>
         {pages.map(page => (
