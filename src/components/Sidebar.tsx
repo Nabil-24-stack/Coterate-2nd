@@ -5,35 +5,22 @@ import { Page } from '../types';
 import FigmaFileSelector from './FigmaFileSelector';
 import supabaseService from '../services/SupabaseService';
 
-// Logo component
-const Logo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 18px;
-  color: #333;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-`;
-
-const LogoImage = styled.img`
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-`;
-
 const SidebarContainer = styled.div`
-  width: 230px;
-  height: calc(100% - 60px);
-  margin-top: 60px; /* Start below the header */
-  border-right: 1px solid #E3E6EA;
-  border-top: 2px solid #E3E6EA; /* Increased border width for visibility */
-  background-color: #F8F8F8;
+  width: 240px;
+  height: 100vh;
+  background-color: #fff;
+  border-right: 1px solid #e5e5e5;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  position: relative;
-  z-index: 10;
-  box-shadow: inset 0 1px 0 #E3E6EA; /* Add inset shadow to reinforce top border */
+  gap: 16px;
+`;
+
+const SectionTitle = styled.h2`
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  margin: 0;
 `;
 
 const Header = styled.div`
@@ -41,13 +28,6 @@ const Header = styled.div`
   height: 60px;
   display: flex;
   align-items: center;
-`;
-
-const SectionTitle = styled.h2`
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  margin: 16px 16px 8px 16px;
 `;
 
 const Title = styled.h1`
@@ -451,12 +431,6 @@ export const Sidebar: React.FC = () => {
   
   return (
     <SidebarContainer>
-      <Header>
-        <Logo>
-          <LogoImage src="/logo.png" alt="Coterate Logo" />
-          Coterate
-        </Logo>
-      </Header>
       <SectionTitle>Pages</SectionTitle>
       
       <ButtonsContainer>
