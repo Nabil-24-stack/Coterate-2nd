@@ -66,41 +66,16 @@ const CanvasContainer = styled.div`
   height: 100vh;
   overflow: hidden;
   background-color: #f5f5f5;
-  z-index: 1; /* Lower z-index to ensure borders are visible */
-`;
-
-// Canvas header with tabs
-const CanvasHeader = styled.div`
-  display: none; /* Hide this component as we're using the main Header component instead */
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  gap: 12px;
-  justify-self: end;
-`;
-
-const ActionButton = styled.button`
-  padding: 8px 16px;
-  background-color: white;
-  color: #333;
-  border-radius: 8px;
-  font-weight: 600;
-  border: 1px solid #E3E6EA;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  
-  &:hover {
-    background-color: #f5f5f5;
-  }
+  z-index: 1;
 `;
 
 // Infinite Canvas
 const InfiniteCanvas = styled.div<{ scale: number }>`
   position: relative;
-  width: 100%;
+  width: calc(100% - 230px);
   height: calc(100vh - 60px);
   margin-top: 60px; /* Add margin to account for fixed header */
+  margin-left: 230px; /* Add margin to account for sidebar */
   overflow: hidden;
   background-color: #f5f5f5;
   background-image: 
@@ -108,22 +83,9 @@ const InfiniteCanvas = styled.div<{ scale: number }>`
     linear-gradient(90deg, rgba(150, 150, 150, 0.1) 1px, transparent 1px);
   background-size: ${props => 20 * props.scale}px ${props => 20 * props.scale}px;
   cursor: grab;
-  z-index: 1; /* Lower z-index to ensure borders are visible */
-  margin-left: 230px; /* Add margin to prevent overlap with sidebar */
   
   &:active {
     cursor: grabbing;
-  }
-  
-  &:focus, &:focus-visible, &:focus-within {
-    outline: none !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-  
-  * {
-    border: none !important;
-    outline: none !important;
   }
 `;
 
@@ -136,20 +98,6 @@ const CanvasContent = styled.div<{ x: number; y: number; scale: number }>`
   align-items: center;
   min-width: 100%;
   min-height: 100%;
-  border: none !important;
-  outline: none !important;
-  z-index: 1; /* Lower z-index to ensure borders are visible */
-  
-  &:focus, &:focus-visible, &:focus-within {
-    outline: none !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-  
-  * {
-    border: none !important;
-    outline: none !important;
-  }
 `;
 
 // Design elements
@@ -239,7 +187,7 @@ export const Canvas: React.FC = () => {
     setIsDragging(false);
   };
   
-  // Handle canvas wheel event manually instead of using onWheel prop
+  // Handle canvas wheel event for zooming
   useEffect(() => {
     const canvasElement = canvasRef.current;
     if (!canvasElement) return;
@@ -265,8 +213,6 @@ export const Canvas: React.FC = () => {
       // Get the position of the cursor relative to the canvas
       const rect = canvasElement.getBoundingClientRect();
       
-      // Calculate cursor position relative to the transformed content
-      // This is the key part we need to fix:
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       
@@ -327,8 +273,6 @@ export const Canvas: React.FC = () => {
     <>
       <GlobalStyle />
       <CanvasContainer>
-        {/* Remove CanvasHeader from rendering */}
-        
         <InfiniteCanvas
           ref={canvasRef}
           scale={scale}
