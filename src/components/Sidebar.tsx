@@ -10,12 +10,11 @@ const SidebarContainer = styled.div`
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #E3E6EA;
-  border-top: none; /* Remove the top border to avoid conflict with header */
   background-color: #F8F8F8;
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 100; /* Keep z-index lower than header */
+  z-index: 100; /* Lower z-index than header */
 `;
 
 const SectionTitle = styled.h2`

@@ -71,21 +71,7 @@ const CanvasContainer = styled.div`
 
 // Canvas header with tabs
 const CanvasHeader = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 0 20px;
-  height: 60px;
-  background-color: white;
-  border-bottom: 1px solid #E3E6EA;
-  z-index: 100;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Enhanced shadow for better visibility */
-  pointer-events: none; /* Allow clicks to pass through to header component */
+  display: none; /* Hide this component as we're using the main Header component instead */
 `;
 
 const HeaderActions = styled.div`
@@ -122,10 +108,8 @@ const InfiniteCanvas = styled.div<{ scale: number }>`
     linear-gradient(90deg, rgba(150, 150, 150, 0.1) 1px, transparent 1px);
   background-size: ${props => 20 * props.scale}px ${props => 20 * props.scale}px;
   cursor: grab;
-  border: none !important;
-  outline: none !important;
   z-index: 1; /* Lower z-index to ensure borders are visible */
-  margin-left: 1px; /* Add margin to prevent overlap with sidebar border */
+  margin-left: 230px; /* Add margin to prevent overlap with sidebar */
   
   &:active {
     cursor: grabbing;
@@ -343,20 +327,7 @@ export const Canvas: React.FC = () => {
     <>
       <GlobalStyle />
       <CanvasContainer>
-        <CanvasHeader>
-          <Logo>
-            <LogoImage src="/Coterate logo.png" alt="Coterate Logo" />
-            Coterate UI
-          </Logo>
-          
-          <div />
-          
-          <HeaderActions>
-            <ActionButton onClick={resetCanvas}>
-              Reset View
-            </ActionButton>
-          </HeaderActions>
-        </CanvasHeader>
+        {/* Remove CanvasHeader from rendering */}
         
         <InfiniteCanvas
           ref={canvasRef}
