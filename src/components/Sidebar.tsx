@@ -449,7 +449,7 @@ export const Sidebar: React.FC = () => {
               <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
             </svg>
           </FigmaIcon>
-          {isLoading ? 'Loading...' : 'Import with Figma'}
+          {isLoading ? 'Loading...' : 'Sign In with Figma'}
         </FigmaImportButton>
         
         {/* Display user info if authenticated */}
