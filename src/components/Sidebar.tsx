@@ -183,14 +183,16 @@ const EditInput = styled.input`
 
 // Add new styled components for the user profile section
 const UserProfileSection = styled.div`
-  margin: 16px;
   padding: 12px;
-  background-color: #f5f5f5;
+  background-color: white;
   border-radius: 8px;
   border: 1px solid #E3E6EA;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  margin-top: 8px;
 `;
 
 const UserInfo = styled.div`
