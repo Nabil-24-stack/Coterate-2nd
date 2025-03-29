@@ -301,6 +301,47 @@ export const Canvas: React.FC = () => {
     return designRefs.current[id];
   };
   
+  // Handle zoom with mouse wheel
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    const zoomSensitivity = 0.1;
+    const minScale = 0.1;
+    const maxScale = 4;
+    
+    // Calculate new scale
+    let newScale = scale;
+    
+    if (e.deltaY < 0) {
+      // Zoom in
+      newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+    } else {
+      // Zoom out
+      newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+    }
+    
+    // Get canvas element and its rectangle
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+    
+    const rect = canvasElement.getBoundingClientRect();
+    
+    // Get cursor position relative to canvas
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calculate the point on the original content where the cursor is
+    const originX = mouseX / scale - position.x / scale;
+    const originY = mouseY / scale - position.y / scale;
+    
+    // Calculate the new position to keep cursor point fixed
+    const newPositionX = mouseX - originX * newScale;
+    const newPositionY = mouseY - originY * newScale;
+    
+    setScale(newScale);
+    setPosition({ x: newPositionX, y: newPositionY });
+  };
+  
   // Handle canvas mouse down for panning
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     // Check if clicking on any design
@@ -395,12 +436,13 @@ export const Canvas: React.FC = () => {
     // For now we just log to confirm the button works
   };
   
-  // Handle wheel event for zooming
+  // Handle wheel event for zooming via useEffect (as a backup)
   useEffect(() => {
     const canvasElement = canvasRef.current;
     if (!canvasElement) return;
 
-    const handleWheel = (e: WheelEvent) => {
+    // This is a backup handler in case the React onWheel doesn't work
+    const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault();
       
       const zoomSensitivity = 0.1;
@@ -435,10 +477,10 @@ export const Canvas: React.FC = () => {
       setPosition({ x: newPositionX, y: newPositionY });
     };
 
-    canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+    canvasElement.addEventListener('wheel', handleWheelEvent, { passive: false });
     
     return () => {
-      canvasElement.removeEventListener('wheel', handleWheel);
+      canvasElement.removeEventListener('wheel', handleWheelEvent);
     };
   }, [scale, position]);
   
@@ -576,6 +618,7 @@ export const Canvas: React.FC = () => {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
           >
             <CanvasContent
               x={position.x}
