@@ -25,4 +25,5 @@ export interface PageContextType {
   deletePage: (id: string) => void;
   setCurrentPage: (page: Page) => void;
   renamePage: (id: string, newName: string) => void;
+  loading: boolean;
 } 

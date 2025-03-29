@@ -154,8 +154,50 @@ const EmptyCanvasMessage = styled.div`
   line-height: 1.5;
 `;
 
+// Loading indicator
+const LoadingIndicator = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #007bff;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  
+  & svg {
+    animation: rotate 1s linear infinite;
+    margin-bottom: 10px;
+    width: 40px;
+    height: 40px;
+  }
+  
+  @keyframes rotate {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+// Loading spinner SVG
+const LoadingSpinner = () => (
+  <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+    <circle 
+      cx="25" 
+      cy="25" 
+      r="20" 
+      fill="none" 
+      stroke="#007bff" 
+      strokeWidth="4"
+      strokeDasharray="60 20"
+    />
+  </svg>
+);
+
 export const Canvas: React.FC = () => {
-  const { currentPage, updatePage } = usePageContext();
+  const { currentPage, updatePage, loading } = usePageContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -469,53 +511,60 @@ export const Canvas: React.FC = () => {
     <>
       <GlobalStyle />
       <CanvasContainer ref={containerRef}>
-        <InfiniteCanvas
-          ref={canvasRef}
-          scale={scale}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          <CanvasContent
-            x={position.x}
-            y={position.y}
+        {loading ? (
+          <LoadingIndicator>
+            <LoadingSpinner />
+            <span>Loading designs...</span>
+          </LoadingIndicator>
+        ) : (
+          <InfiniteCanvas
+            ref={canvasRef}
             scale={scale}
+            onMouseDown={handleCanvasMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
           >
-            {designs.length > 0 ? (
-              designs.map((design) => (
-                <DesignContainer 
-                  key={design.id}
-                  x={design.position.x}
-                  y={design.position.y}
-                >
-                  <DesignCard 
-                    ref={el => designRefs.current[design.id] = el}
-                    isSelected={selectedDesignId === design.id}
-                    onClick={(e) => handleDesignClick(e, design.id)}
+            <CanvasContent
+              x={position.x}
+              y={position.y}
+              scale={scale}
+            >
+              {designs.length > 0 ? (
+                designs.map((design) => (
+                  <DesignContainer 
+                    key={design.id}
+                    x={design.position.x}
+                    y={design.position.y}
                   >
-                    <DesignImage 
-                      src={design.imageUrl} 
-                      alt={`Design ${design.id}`}
-                    />
-                    {selectedDesignId === design.id && (
-                      <IterationButton
-                        onClick={(e) => handleIterationClick(e, design.id)}
-                        title="Create Iteration"
-                      >
-                        <PlusIcon />
-                      </IterationButton>
-                    )}
-                  </DesignCard>
-                </DesignContainer>
-              ))
-            ) : (
-              <EmptyCanvasMessage>
-                Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
-              </EmptyCanvasMessage>
-            )}
-          </CanvasContent>
-        </InfiniteCanvas>
+                    <DesignCard 
+                      ref={el => designRefs.current[design.id] = el}
+                      isSelected={selectedDesignId === design.id}
+                      onClick={(e) => handleDesignClick(e, design.id)}
+                    >
+                      <DesignImage 
+                        src={design.imageUrl} 
+                        alt={`Design ${design.id}`}
+                      />
+                      {selectedDesignId === design.id && (
+                        <IterationButton
+                          onClick={(e) => handleIterationClick(e, design.id)}
+                          title="Create Iteration"
+                        >
+                          <PlusIcon />
+                        </IterationButton>
+                      )}
+                    </DesignCard>
+                  </DesignContainer>
+                ))
+              ) : (
+                <EmptyCanvasMessage>
+                  Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
+                </EmptyCanvasMessage>
+              )}
+            </CanvasContent>
+          </InfiniteCanvas>
+        )}
       </CanvasContainer>
     </>
   );

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Page, PageContextType } from '../types';
+import supabaseService from '../services/SupabaseService';
 
 // Simple function to generate a UUID
 const generateUUID = (): string => {
@@ -18,7 +19,8 @@ const PageContext = createContext<PageContextType>({
   updatePage: () => {},
   deletePage: () => {},
   setCurrentPage: () => {},
-  renamePage: () => {}
+  renamePage: () => {},
+  loading: false,
 });
 
 // Custom hook to use the context
@@ -27,69 +29,165 @@ export const usePageContext = () => useContext(PageContext);
 // Provider component
 export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // State for pages
-  const [pages, setPages] = useState<Page[]>(() => {
-    // Initialize with a default page
-    const defaultPage: Page = {
-      id: generateUUID(),
-      name: 'Default Page',
-      baseImage: ''
+  const [pages, setPages] = useState<Page[]>([]);
+  // State for current page
+  const [currentPage, setCurrentPage] = useState<Page | null>(null);
+  // Loading state
+  const [loading, setLoading] = useState(true);
+  
+  // Effect to load pages from Supabase when the component mounts
+  useEffect(() => {
+    const loadPages = async () => {
+      try {
+        setLoading(true);
+        // Check if user is authenticated
+        const isAuthenticated = await supabaseService.getSession();
+        
+        if (isAuthenticated) {
+          // Load pages from Supabase
+          const pagesFromDB = await supabaseService.getPages();
+          
+          if (pagesFromDB.length > 0) {
+            setPages(pagesFromDB);
+            setCurrentPage(pagesFromDB[0]);
+          } else {
+            // Create a default page if no pages exist
+            const defaultPage: Page = {
+              id: generateUUID(),
+              name: 'Default Page',
+              baseImage: '',
+              designs: []
+            };
+            
+            // Save the default page to Supabase
+            const savedPage = await supabaseService.createPage(defaultPage);
+            setPages([savedPage]);
+            setCurrentPage(savedPage);
+          }
+        } else {
+          // If not authenticated, use a local default page
+          const defaultPage: Page = {
+            id: generateUUID(),
+            name: 'Default Page',
+            baseImage: '',
+            designs: []
+          };
+          
+          setPages([defaultPage]);
+          setCurrentPage(defaultPage);
+        }
+      } catch (error) {
+        console.error('Error loading pages:', error);
+        // Fallback to local default page on error
+        const defaultPage: Page = {
+          id: generateUUID(),
+          name: 'Default Page',
+          baseImage: '',
+          designs: []
+        };
+        
+        setPages([defaultPage]);
+        setCurrentPage(defaultPage);
+      } finally {
+        setLoading(false);
+      }
     };
     
-    return [defaultPage];
-  });
-  
-  // State for current page
-  const [currentPage, setCurrentPage] = useState<Page | null>(() => pages[0]);
+    loadPages();
+  }, []);
   
   // Add a new page
-  const addPage = (name: string, baseImage?: string) => {
-    const newPage: Page = {
-      id: generateUUID(),
-      name: name || `Page ${pages.length + 1}`,
-      baseImage: baseImage || ''
-    };
-    
-    setPages(prevPages => [...prevPages, newPage]);
-    setCurrentPage(newPage);
-    
-    return newPage;
+  const addPage = async (name: string, baseImage?: string) => {
+    try {
+      const newPage: Page = {
+        id: generateUUID(),
+        name: name || `Page ${pages.length + 1}`,
+        baseImage: baseImage || '',
+        designs: []
+      };
+      
+      // Check if user is authenticated
+      const isAuthenticated = await supabaseService.getSession();
+      
+      let savedPage = newPage;
+      
+      if (isAuthenticated) {
+        // Save the new page to Supabase
+        savedPage = await supabaseService.createPage(newPage);
+      }
+      
+      setPages(prevPages => [...prevPages, savedPage]);
+      setCurrentPage(savedPage);
+      
+      return savedPage;
+    } catch (error) {
+      console.error('Error adding page:', error);
+      throw error;
+    }
   };
   
   // Update a page
-  const updatePage = (id: string, updates: Partial<Page>) => {
-    setPages(prevPages => 
-      prevPages.map(page => 
-        page.id === id ? { ...page, ...updates } : page
-      )
-    );
-    
-    // Update current page if it's the one being updated
-    if (currentPage && currentPage.id === id) {
-      setCurrentPage(prevPage => ({
-        ...prevPage!,
-        ...updates
-      }));
+  const updatePage = async (id: string, updates: Partial<Page>) => {
+    try {
+      // Update local state first for immediate UI feedback
+      setPages(prevPages => 
+        prevPages.map(page => 
+          page.id === id ? { ...page, ...updates } : page
+        )
+      );
+      
+      // Update current page if it's the one being updated
+      if (currentPage && currentPage.id === id) {
+        setCurrentPage(prevPage => ({
+          ...prevPage!,
+          ...updates
+        }));
+      }
+      
+      // Check if user is authenticated
+      const isAuthenticated = await supabaseService.getSession();
+      
+      if (isAuthenticated) {
+        // Save the updated page to Supabase (async, don't await)
+        supabaseService.updatePage(id, updates)
+          .catch(error => console.error('Error saving page update to Supabase:', error));
+      }
+    } catch (error) {
+      console.error('Error updating page:', error);
     }
   };
   
   // Delete a page
-  const deletePage = (id: string) => {
-    // Remove from local state
-    const newPages = pages.filter(page => page.id !== id);
-    setPages(newPages);
-    
-    // If the deleted page was the current page, set a new current page
-    if (currentPage && currentPage.id === id) {
-      if (newPages.length > 0) {
-        setCurrentPage(newPages[0]);
-      } else {
-        setCurrentPage(null);
+  const deletePage = async (id: string) => {
+    try {
+      // Remove from local state first for immediate UI feedback
+      const newPages = pages.filter(page => page.id !== id);
+      setPages(newPages);
+      
+      // If the deleted page was the current page, set a new current page
+      if (currentPage && currentPage.id === id) {
+        if (newPages.length > 0) {
+          setCurrentPage(newPages[0]);
+        } else {
+          setCurrentPage(null);
+        }
       }
+      
+      // Check if user is authenticated
+      const isAuthenticated = await supabaseService.getSession();
+      
+      if (isAuthenticated) {
+        // Delete the page from Supabase (async, don't await)
+        supabaseService.deletePage(id)
+          .catch(error => console.error('Error deleting page from Supabase:', error));
+      }
+    } catch (error) {
+      console.error('Error deleting page:', error);
     }
   };
   
   // Rename a page
-  const renamePage = (id: string, newName: string) => {
+  const renamePage = async (id: string, newName: string) => {
     updatePage(id, { name: newName });
   };
   
@@ -102,7 +200,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePage,
         deletePage,
         setCurrentPage,
-        renamePage
+        renamePage,
+        loading,
       }}
     >
       {children}

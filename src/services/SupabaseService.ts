@@ -419,6 +419,127 @@ class SupabaseService {
       return false;
     }
   }
+
+  // Get all pages for the current user
+  async getPages() {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) {
+        console.error('No user found when trying to get pages');
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('pages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pages:', error);
+        return [];
+      }
+
+      return data as Page[];
+    } catch (error) {
+      console.error('Error in getPages:', error);
+      return [];
+    }
+  }
+
+  // Create a new page
+  async createPage(page: Omit<Page, 'user_id' | 'created_at' | 'updated_at'>) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) {
+        console.error('No user found when trying to create page');
+        throw new Error('User not authenticated');
+      }
+
+      const newPage = {
+        ...page,
+        user_id: user.id,
+      };
+
+      const { data, error } = await supabase
+        .from('pages')
+        .insert([newPage])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating page:', error);
+        throw error;
+      }
+
+      return data as Page;
+    } catch (error) {
+      console.error('Error in createPage:', error);
+      throw error;
+    }
+  }
+
+  // Update an existing page
+  async updatePage(id: string, updates: Partial<Page>) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) {
+        console.error('No user found when trying to update page');
+        throw new Error('User not authenticated');
+      }
+
+      // Add updated_at timestamp
+      const updatedPage = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('pages')
+        .update(updatedPage)
+        .eq('id', id)
+        .eq('user_id', user.id)  // Security: ensure user owns this page
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating page:', error);
+        throw error;
+      }
+
+      return data as Page;
+    } catch (error) {
+      console.error('Error in updatePage:', error);
+      throw error;
+    }
+  }
+
+  // Delete a page
+  async deletePage(id: string) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) {
+        console.error('No user found when trying to delete page');
+        throw new Error('User not authenticated');
+      }
+
+      const { error } = await supabase
+        .from('pages')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);  // Security: ensure user owns this page
+
+      if (error) {
+        console.error('Error deleting page:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in deletePage:', error);
+      throw error;
+    }
+  }
 }
 
 // Create and export a single instance
