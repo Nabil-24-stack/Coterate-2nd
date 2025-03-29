@@ -101,6 +101,38 @@ const DesignImage = styled.img`
   border: none;
 `;
 
+// Iteration button (+ button) that appears next to selected designs
+const IterationButton = styled.button`
+  position: absolute;
+  right: -50px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  
+  &:hover {
+    background-color: #0069d9;
+    transform: translateY(-50%) scale(1.05);
+  }
+  
+  &:active {
+    background-color: #0062cc;
+    transform: translateY(-50%) scale(0.95);
+  }
+`;
+
 // Empty state message
 const EmptyCanvasMessage = styled.div`
   position: absolute;
@@ -258,6 +290,14 @@ export const Canvas: React.FC = () => {
   const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
     setSelectedDesignId(designId);
+  };
+  
+  // Handle iteration button click
+  const handleIterationClick = (e: React.MouseEvent, designId: string) => {
+    e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
+    console.log(`Iteration requested for design: ${designId}`);
+    // This will later trigger the AI analysis and iteration flow (section 2.3.2-2.3.5)
+    // For now we just log to confirm the button works
   };
   
   // Handle wheel event for zooming
@@ -450,6 +490,14 @@ export const Canvas: React.FC = () => {
                       src={design.imageUrl} 
                       alt={`Design ${design.id}`}
                     />
+                    {selectedDesignId === design.id && (
+                      <IterationButton
+                        onClick={(e) => handleIterationClick(e, design.id)}
+                        title="Create Iteration"
+                      >
+                        +
+                      </IterationButton>
+                    )}
                   </DesignCard>
                 </DesignContainer>
               ))
