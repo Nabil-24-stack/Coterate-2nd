@@ -121,6 +121,8 @@ const IterationButton = styled.button`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   z-index: 20;
   transition: background-color 0.2s ease, transform 0.2s ease;
+  padding: 0;
+  line-height: 1;
   
   &:hover {
     background-color: #0069d9;
@@ -131,6 +133,19 @@ const IterationButton = styled.button`
     background-color: #0062cc;
     transform: translateY(-50%) scale(0.95);
   }
+`;
+
+// Plus symbol inside the iteration button
+const PlusSymbol = styled.span`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+  line-height: 1;
+  position: relative;
+  top: -1px; /* Fine-tune vertical alignment */
 `;
 
 // Empty state message
@@ -495,7 +510,7 @@ export const Canvas: React.FC = () => {
                         onClick={(e) => handleIterationClick(e, design.id)}
                         title="Create Iteration"
                       >
-                        +
+                        <PlusSymbol>+</PlusSymbol>
                       </IterationButton>
                     )}
                   </DesignCard>
