@@ -394,7 +394,8 @@ export const Sidebar: React.FC = () => {
       // Check if user is already authenticated with Figma via Supabase
       const session = await supabaseService.getSession();
       
-      if (session && session.provider_token) {
+      // Safely check if session has provider_token property
+      if (session && typeof session === 'object' && 'provider_token' in session) {
         console.log('User already authenticated, showing file selector');
         // User is already authenticated, show the file selector
         setShowFigmaModal(true);
