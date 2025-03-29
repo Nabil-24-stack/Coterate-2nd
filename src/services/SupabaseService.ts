@@ -51,24 +51,13 @@ const getSupabaseUrl = () => {
   const localStorageUrl = localStorage.getItem('supabase_url');
   if (localStorageUrl) return localStorageUrl;
   
-  // Extract from window location if matching Supabase domain
-  const currentDomain = window.location.hostname;
-  if (currentDomain.includes('vercel.app')) {
-    // Try to extract project ID from vercel subdomain
-    const projectId = currentDomain.split('.')[0];
-    if (projectId) {
-      // This is a guess based on common Supabase URL patterns
-      return `https://${projectId}.supabase.co`;
-    }
-  }
-  
-  // Fallback to hardcoded URL
+  // IMPORTANT: This is the correct Supabase project URL - don't try to guess it
   return 'https://tsqfwommnuhtbeupuwwm.supabase.co';
 };
 
 // Try to get Supabase anon key from various sources
 const getSupabaseAnonKey = () => {
-  // Try environment variables in various formats
+  // Try specific environment variables first
   if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (process.env.SUPABASE_ANON_KEY) return process.env.SUPABASE_ANON_KEY;
   if (process.env.REACT_APP_SUPABASE_ANON_KEY) return process.env.REACT_APP_SUPABASE_ANON_KEY;
@@ -82,18 +71,70 @@ const getSupabaseAnonKey = () => {
   const localStorageKey = localStorage.getItem('supabase_anon_key');
   if (localStorageKey) return localStorageKey;
   
-  // Fallback to hardcoded key (this key is already public in your codebase)
+  // Default key that was working before (but may be expired now)
   return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
+};
+
+// Function to try multiple anon keys to find a working one
+const findWorkingAnonKey = async () => {
+  // List of possible keys to try (add any other potential keys here)
+  // Since we're getting "Failed to fetch" errors, it's possible the key is invalid or expired
+  const possibleKeys = [
+    getSupabaseAnonKey(), // First try our primary key finder
+    localStorage.getItem('supabase_anon_key'), // Try any manually set key
+    // Add direct reference to the key in Vercel
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    
+    // Using key from screenshot (visible in the preview, but obscured in Vercel UI)
+    // If you know part of the key, you could try it directly
+    // This is just a generic test to see if your Vercel keys are being loaded at all
+    localStorage.getItem('backup_supabase_anon_key')
+  ].filter(Boolean) as string[]; // Remove any null/undefined values
+  
+  console.log(`Testing ${possibleKeys.length} possible Supabase anon keys...`);
+  
+  // Try each key
+  const url = getSupabaseUrl();
+  for (const key of possibleKeys) {
+    try {
+      const testResult = await testSupabaseConnection(url, key);
+      if (testResult.success) {
+        console.log('Found working Supabase key! Storing it for future use.');
+        
+        // Save the working key to localStorage for future sessions
+        localStorage.setItem('supabase_anon_key', key);
+        return key;
+      }
+    } catch (e) {
+      console.warn('Error testing key:', e);
+    }
+  }
+  
+  console.error('None of the available Supabase keys worked.');
+  return null;
 };
 
 // Get Supabase configuration
 const supabaseUrl = getSupabaseUrl();
 const supabaseAnonKey = getSupabaseAnonKey();
 
-console.log('Supabase configuration:', {
+console.log('Initial Supabase configuration:', {
   url: supabaseUrl,
   keyLength: supabaseAnonKey?.length || 0,
 });
+
+// Try multiple keys to see if we can find a working one
+setTimeout(async () => {
+  const workingKey = await findWorkingAnonKey();
+  if (workingKey && workingKey !== supabaseAnonKey) {
+    console.log('Found a working Supabase key that differs from the initial one! You might need to reload the page to use it.');
+    
+    // Reload the page if we found a better key than our initial one
+    if (confirm('A better Supabase API key was found. Reload the page to use it?')) {
+      window.location.reload();
+    }
+  }
+}, 2000);
 
 // Create a mechanism to manually set API credentials at runtime as a global function
 // This can be useful for debugging or for setting credentials via UI
@@ -130,6 +171,16 @@ class SupabaseService {
   // Static instance for singleton pattern
   private static instance: SupabaseService;
 
+  // Supabase client instance (might be updated if we find a better key)
+  private supabaseClient: ReturnType<typeof createClient>;
+
+  // Add properties for connection status
+  private connectionTested = false;
+  private isConnected = false;
+  
+  // Flag to prevent repeated API key error logging
+  private hasLoggedApiKeyErrorRecently = false;
+
   // Static method to get the instance
   static getInstance(): SupabaseService {
     if (!SupabaseService.instance) {
@@ -139,11 +190,99 @@ class SupabaseService {
   }
 
   // Private constructor to prevent multiple instances
-  private constructor() {}
+  private constructor() {
+    // Initialize with the default client
+    this.supabaseClient = supabase;
+    
+    // Test connection and try to find better keys
+    this.testConnectionAndFixKeys();
+  }
+  
+  // Method to test connection and try to find a better key
+  private async testConnectionAndFixKeys() {
+    setTimeout(async () => {
+      try {
+        // First test with the current configuration
+        const initialTest = await testSupabaseConnection(supabaseUrl, supabaseAnonKey);
+        if (initialTest.success) {
+          console.log('Initial Supabase connection is working correctly!');
+          this.connectionTested = true;
+          this.isConnected = true;
+          return;
+        }
+        
+        // If we're here, the initial configuration didn't work
+        console.warn('Initial Supabase connection failed. Trying to find a working key...');
+        
+        // Try to find a working key
+        const workingKey = await findWorkingAnonKey();
+        if (workingKey && workingKey !== supabaseAnonKey) {
+          console.log('Found a working Supabase key! Updating client...');
+          
+          // Create a new client with the working key
+          this.supabaseClient = createClient(supabaseUrl, workingKey, {
+            auth: {
+              flowType: 'implicit',
+              autoRefreshToken: true,
+              persistSession: true,
+              detectSessionInUrl: true
+            },
+          });
+          
+          // Test the new client
+          const newTest = await this.testConnection();
+          if (newTest.success) {
+            console.log('Successfully updated Supabase client with a working key!');
+            this.isConnected = true;
+          }
+        } else {
+          console.error('Could not find a working Supabase key. Some features may not work correctly.');
+        }
+      } catch (e) {
+        console.error('Error testing Supabase connection:', e);
+      } finally {
+        this.connectionTested = true;
+      }
+    }, 1000);
+  }
+  
+  // Public method to test the connection
+  async testConnection() {
+    try {
+      const { data, error } = await this.supabaseClient.from('pages').select('count').limit(1);
+      
+      if (error) {
+        console.error('Supabase connection test failed:', error);
+        this.isConnected = false;
+        return { success: false, error: error.message };
+      }
+      
+      console.log('Supabase connection test successful:', data);
+      this.isConnected = true;
+      return { success: true, data };
+    } catch (err: any) {
+      console.error('Supabase connection test exception:', err);
+      this.isConnected = false;
+      return { success: false, error: err.message };
+    }
+  }
+  
+  // Getter for the current client
+  getClient() {
+    return this.supabaseClient;
+  }
+  
+  // Getter for connection status
+  getConnectionStatus() {
+    return {
+      tested: this.connectionTested,
+      connected: this.isConnected
+    };
+  }
 
   // Get auth state change listener
   onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback);
+    return this.supabaseClient.auth.onAuthStateChange(callback);
   }
 
   // Initialize Figma auth flow through Supabase
@@ -197,7 +336,7 @@ class SupabaseService {
       });
       
       // The flowType is configured at the client level, so we don't need to specify it here
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await this.supabaseClient.auth.signInWithOAuth({
         provider: 'figma',
         options: {
           redirectTo: redirectUrl,
@@ -232,7 +371,7 @@ class SupabaseService {
     try {
       console.log('Manually exchanging code for session, code length:', code.length);
       
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      const { data, error } = await this.supabaseClient.auth.exchangeCodeForSession(code);
       
       console.log('Manual code exchange result:', {
         success: !!data,
@@ -255,7 +394,7 @@ class SupabaseService {
   async getSession() {
     try {
       console.log('Getting session from Supabase');
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await this.supabaseClient.auth.getSession();
       
       console.log('Session data:', data);
       
@@ -297,7 +436,7 @@ class SupabaseService {
       console.log('Getting current user from Supabase');
       
       // Try standard auth first
-      const { data, error } = await supabase.auth.getUser();
+      const { data, error } = await this.supabaseClient.auth.getUser();
       
       if (data?.user) {
         console.log('Got user from Supabase auth:', data.user.email);
@@ -309,7 +448,7 @@ class SupabaseService {
       if (token) {
         console.log('Trying with manually stored access token');
         try {
-          const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
+          const { data: tokenData, error: tokenError } = await this.supabaseClient.auth.getUser(token);
           
           if (tokenData?.user) {
             console.log('Got user with stored token:', tokenData.user.email);
@@ -433,7 +572,7 @@ class SupabaseService {
   // Sign out the user
   async signOut() {
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await this.supabaseClient.auth.signOut();
       
       if (error) {
         console.error('Error signing out:', error);
@@ -588,9 +727,6 @@ class SupabaseService {
       return fallback;
     }
   }
-  
-  // Flag to prevent repeated API key error logging
-  private hasLoggedApiKeyErrorRecently = false;
 
   // Update the getPages method to use resilient operation
   async getPages() {
@@ -609,7 +745,7 @@ class SupabaseService {
           const userId = session.user?.id || 'local-storage-user';
           
           return await this.resilientOperation('getPages', async () => {
-            const { data, error } = await supabase
+            const { data, error } = await this.supabaseClient
               .from('pages')
               .select('*')
               .eq('user_id', userId)
@@ -627,7 +763,7 @@ class SupabaseService {
 
       console.log('SupabaseService: Fetching pages for user:', user.id);
       return await this.resilientOperation('getPages', async () => {
-        const { data, error } = await supabase
+        const { data, error } = await this.supabaseClient
           .from('pages')
           .select('*')
           .eq('user_id', user.id)
@@ -693,7 +829,7 @@ class SupabaseService {
 
       console.log('SupabaseService: Creating page with data:', JSON.stringify(pageToCreate));
 
-      const { data, error } = await supabase
+      const { data, error } = await this.supabaseClient
         .from('pages')
         .insert([pageToCreate])
         .select()
@@ -726,7 +862,7 @@ class SupabaseService {
     
     return await this.resilientOperation('updatePage', async () => {
       // First get the current page to ensure we don't lose data
-      const { data: existingPage, error: fetchError } = await supabase
+      const { data: existingPage, error: fetchError } = await this.supabaseClient
         .from('pages')
         .select('*')
         .eq('id', id)
@@ -752,7 +888,7 @@ class SupabaseService {
         updatedPage.designs = designsToStore;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await this.supabaseClient
         .from('pages')
         .update(updatedPage)
         .eq('id', id)
@@ -776,7 +912,7 @@ class SupabaseService {
         throw new Error('User not authenticated');
       }
 
-      const { error } = await supabase
+      const { error } = await this.supabaseClient
         .from('pages')
         .delete()
         .eq('id', id)
@@ -797,4 +933,42 @@ class SupabaseService {
 
 // Create and export a single instance
 const supabaseService = SupabaseService.getInstance();
-export default supabaseService; 
+export default supabaseService;
+
+// Add a helper function to test Supabase connection
+const testSupabaseConnection = async (url: string, key: string) => {
+  console.log(`Testing Supabase connection to ${url}...`);
+  try {
+    // Create a temporary client for testing
+    const testClient = createClient(url, key, {
+      auth: { autoRefreshToken: false }
+    });
+    
+    // Try a simple query that should always work with anon key
+    const { data, error } = await testClient.from('pages').select('count').limit(1);
+    
+    if (error) {
+      console.error('Supabase connection test failed:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('Supabase connection test successful:', data);
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('Supabase connection test exception:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+// Test the connection immediately for debugging
+setTimeout(async () => {
+  const result = await testSupabaseConnection(supabaseUrl, supabaseAnonKey);
+  console.log('Connection test result:', result);
+  
+  if (!result.success) {
+    console.warn('⚠️ Failed to connect to Supabase. Please check your environment variables and network connection.');
+    console.warn('🔍 To fix this, use the following command in your browser console:');
+    console.warn(`   window.setSupabaseCredentials('https://tsqfwommnuhtbeupuwwm.supabase.co', 'your-actual-anon-key')`);
+    console.warn('   Replace "your-actual-anon-key" with the valid anon key from your Supabase project settings.');
+  }
+}, 1000); 
