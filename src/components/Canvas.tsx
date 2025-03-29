@@ -325,20 +325,22 @@ export const Canvas: React.FC = () => {
           reader.onload = (event) => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
-              // Calculate the center of the current view in canvas coordinates
+              // Calculate the center of the viewport in canvas coordinates
               const canvasElement = canvasRef.current;
               let centerX = 0;
               let centerY = 0;
               
               if (canvasElement) {
                 const rect = canvasElement.getBoundingClientRect();
-                // Get center of viewport in screen coordinates
-                const screenCenterX = rect.left + rect.width / 2;
-                const screenCenterY = rect.top + rect.height / 2;
+                
+                // Calculate true center of viewport in screen coordinates
+                const viewportCenterX = window.innerWidth / 2;
+                const viewportCenterY = window.innerHeight / 2;
                 
                 // Convert screen coordinates to canvas coordinates
-                centerX = (screenCenterX - position.x) / scale;
-                centerY = (screenCenterY - position.y) / scale;
+                // We subtract position and divide by scale to transform from screen to canvas space
+                centerX = (viewportCenterX - position.x) / scale;
+                centerY = (viewportCenterY - position.y) / scale;
               }
               
               // Create a new design object with unique ID
