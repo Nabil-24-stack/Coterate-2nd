@@ -75,7 +75,7 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
     : '0 4px 12px rgba(0, 0, 0, 0.08)'};
   background: white;
   transition: box-shadow 0.2s ease-in-out;
-  cursor: pointer;
+  cursor: ${props => props.isSelected ? 'move' : 'pointer'};
   
   &:hover {
     box-shadow: ${props => props.isSelected 
@@ -92,6 +92,8 @@ const DesignImage = styled.img`
   object-fit: contain;
   overflow: hidden;
   border-radius: 8px;
+  user-select: none;
+  -webkit-user-drag: none;
 `;
 
 // Iteration button (+ button) that appears next to selected designs
@@ -488,30 +490,19 @@ export const Canvas: React.FC = () => {
     setPosition({ x: newPositionX, y: newPositionY });
   };
   
-  // Handle canvas mouse down for panning
+  // Add back the handleCanvasMouseDown function for canvas panning
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     // Check if clicking on any design
     const clickedDesignId = designs.find(design => {
       const designRef = getDesignRef(design.id);
-      return designRef && designRef.contains(e.target as Node);
+      if (!designRef) return false;
+      
+      // Check if clicking on the design or any of its children
+      return designRef.contains(e.target as Node);
     })?.id;
     
     if (clickedDesignId) {
-      // Clicked on a design
-      setSelectedDesignId(clickedDesignId);
-      setIsDesignDragging(true);
-      
-      const clickedDesign = designs.find(d => d.id === clickedDesignId);
-      if (clickedDesign) {
-        setDesignDragStart({
-          x: e.clientX,
-          y: e.clientY
-        });
-        setDesignInitialPosition({
-          x: clickedDesign.position.x,
-          y: clickedDesign.position.y
-        });
-      }
+      // Handled by the design's own mouse handler
       return;
     }
     
@@ -537,7 +528,7 @@ export const Canvas: React.FC = () => {
       const deltaCanvasX = deltaX / scale;
       const deltaCanvasY = deltaY / scale;
       
-      // Update design position
+      // Update design position immediately for smooth dragging
       setDesigns(prevDesigns => 
         prevDesigns.map(design => 
           design.id === selectedDesignId
@@ -848,6 +839,50 @@ export const Canvas: React.FC = () => {
     };
   }, [selectedDesignId]);
   
+  // Add the handleDesignMouseDown function back
+  const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
+    e.stopPropagation();
+    
+    // Check if this is an iteration to show in analysis panel
+    const isIteration = designs.some(design => 
+      design.iterations?.some(iteration => iteration.id === designId)
+    );
+    
+    if (isIteration) {
+      // Find the iteration to get its analysis data
+      const iteration = designs.flatMap(d => d.iterations || [])
+        .find(it => it.id === designId);
+      
+      if (iteration) {
+        // Set for analysis panel
+        setCurrentAnalysis(iteration);
+        setAnalysisVisible(true);
+      }
+    }
+    
+    // If this design is already selected, start dragging
+    if (selectedDesignId === designId) {
+      setIsDesignDragging(true);
+      
+      const design = designs.find(d => d.id === designId) || 
+        designs.flatMap(d => d.iterations || []).find(i => i.id === designId);
+      
+      if (design) {
+        setDesignDragStart({
+          x: e.clientX,
+          y: e.clientY
+        });
+        setDesignInitialPosition({
+          x: design.position.x,
+          y: design.position.y
+        });
+      }
+    } else {
+      // Otherwise just select it
+      setSelectedDesignId(designId);
+    }
+  };
+  
   return (
     <>
       <GlobalStyle />
@@ -882,11 +917,12 @@ export const Canvas: React.FC = () => {
                       <DesignCard 
                         ref={el => designRefs.current[design.id] = el}
                         isSelected={selectedDesignId === design.id}
-                        onClick={(e) => handleDesignClick(e, design.id)}
+                        onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
                       >
                         <DesignImage 
                           src={design.imageUrl} 
                           alt={`Design ${design.id}`}
+                          draggable={false}
                         />
                         {selectedDesignId === design.id && !design.isProcessing && (
                           <IterationButton
@@ -947,10 +983,7 @@ export const Canvas: React.FC = () => {
                         <DesignCard 
                           ref={el => designRefs.current[iteration.id] = el}
                           isSelected={selectedDesignId === iteration.id}
-                          onClick={(e) => {
-                            handleDesignClick(e, iteration.id);
-                            selectIterationForAnalysis(iteration);
-                          }}
+                          onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
                         >
                           <HtmlDesignRenderer
                             ref={htmlRendererRef}
