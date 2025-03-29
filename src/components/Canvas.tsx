@@ -133,6 +133,7 @@ export const Canvas: React.FC = () => {
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
   
   const canvasRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
   // Effect to load designs from page data
@@ -325,36 +326,37 @@ export const Canvas: React.FC = () => {
           reader.onload = (event) => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
-              // Calculate the center of the viewport in canvas coordinates
+              // Get the canvas element and its container
               const canvasElement = canvasRef.current;
-              let centerX = 0;
-              let centerY = 0;
+              const canvasContainer = containerRef.current;
               
-              if (canvasElement) {
-                const rect = canvasElement.getBoundingClientRect();
+              if (canvasElement && canvasContainer) {
+                // Get the dimensions of the canvas container
+                const containerRect = canvasContainer.getBoundingClientRect();
                 
-                // Calculate true center of viewport in screen coordinates
-                const viewportCenterX = window.innerWidth / 2;
-                const viewportCenterY = window.innerHeight / 2;
+                // Calculate the center of the viewport relative to the container
+                const viewportCenterX = containerRect.width / 2;
+                const viewportCenterY = containerRect.height / 2;
                 
-                // Convert screen coordinates to canvas coordinates
-                // We subtract position and divide by scale to transform from screen to canvas space
-                centerX = (viewportCenterX - position.x) / scale;
-                centerY = (viewportCenterY - position.y) / scale;
+                // Calculate the position in canvas coordinates
+                // First, we need to determine where the center of the screen is in the canvas space
+                // The formula is: (screen_coord - position) / scale
+                const canvasCenterX = (viewportCenterX - position.x) / scale;
+                const canvasCenterY = (viewportCenterY - position.y) / scale;
+                
+                // Create a new design object with unique ID
+                const newDesign: Design = {
+                  id: `design-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                  imageUrl: imageUrl,
+                  position: { x: canvasCenterX, y: canvasCenterY }
+                };
+                
+                // Add the new design to the array
+                setDesigns(prevDesigns => [...prevDesigns, newDesign]);
+                
+                // Select the new design
+                setSelectedDesignId(newDesign.id);
               }
-              
-              // Create a new design object with unique ID
-              const newDesign: Design = {
-                id: `design-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                imageUrl: imageUrl,
-                position: { x: centerX, y: centerY }
-              };
-              
-              // Add the new design to the array
-              setDesigns(prevDesigns => [...prevDesigns, newDesign]);
-              
-              // Select the new design
-              setSelectedDesignId(newDesign.id);
             }
           };
           reader.readAsDataURL(blob);
@@ -411,7 +413,7 @@ export const Canvas: React.FC = () => {
   return (
     <>
       <GlobalStyle />
-      <CanvasContainer>
+      <CanvasContainer ref={containerRef}>
         <InfiniteCanvas
           ref={canvasRef}
           scale={scale}
