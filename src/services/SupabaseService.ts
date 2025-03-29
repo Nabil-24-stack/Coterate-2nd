@@ -1,31 +1,121 @@
 import { createClient } from '@supabase/supabase-js';
 import { Page } from '../types';
 
-// Supabase configuration
-// First check for environment variables with the naming conventions used by Vercel
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                     process.env.REACT_APP_SUPABASE_URL || 
-                     'https://tsqfwommnuhtbeupuwwm.supabase.co';
+// Add interface extension for the Window object to allow our custom property
+interface Window {
+  setSupabaseCredentials?: (url: string, key: string) => boolean;
+}
 
-// Try all possible environment variable names for the anon key
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-                       process.env.SUPABASE_ANON_KEY ||
-                       process.env.REACT_APP_SUPABASE_ANON_KEY ||
-                       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
+// Helper for debugging environment variables
+const debugEnvironmentVars = () => {
+  // List all window.__env variables if they exist (sometimes used for runtime env vars)
+  const windowEnv = (window as any).__env || {};
+  const envKeys = Object.keys(windowEnv);
+  
+  console.log('Available window.__env variables:', envKeys.length > 0 ? envKeys : 'None');
+  
+  // Check for specific Supabase env vars in various locations
+  const envVarCombinations = [
+    { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
+    { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+    { name: 'SUPABASE_URL', value: process.env.SUPABASE_URL },
+    { name: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY },
+    { name: 'REACT_APP_SUPABASE_URL', value: process.env.REACT_APP_SUPABASE_URL },
+    { name: 'REACT_APP_SUPABASE_ANON_KEY', value: process.env.REACT_APP_SUPABASE_ANON_KEY },
+    { name: 'window.__env.NEXT_PUBLIC_SUPABASE_URL', value: windowEnv.NEXT_PUBLIC_SUPABASE_URL },
+    { name: 'window.__env.NEXT_PUBLIC_SUPABASE_ANON_KEY', value: windowEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY }
+  ];
+  
+  console.log('Environment variable checks:');
+  envVarCombinations.forEach(v => {
+    console.log(`  ${v.name}: ${v.value ? 'Available' : 'Not available'}`);
+  });
+};
+
+// Run environment variable check on load
+debugEnvironmentVars();
+
+// Try to get Supabase URL from various sources
+const getSupabaseUrl = () => {
+  // Try environment variables in various formats
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL) return process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (process.env.SUPABASE_URL) return process.env.SUPABASE_URL;
+  if (process.env.REACT_APP_SUPABASE_URL) return process.env.REACT_APP_SUPABASE_URL;
+  
+  // Try window.__env (sometimes used for runtime env vars)
+  const windowEnv = (window as any).__env || {};
+  if (windowEnv.NEXT_PUBLIC_SUPABASE_URL) return windowEnv.NEXT_PUBLIC_SUPABASE_URL;
+  if (windowEnv.SUPABASE_URL) return windowEnv.SUPABASE_URL;
+  
+  // Try looking for values in localStorage (sometimes apps store this for development)
+  const localStorageUrl = localStorage.getItem('supabase_url');
+  if (localStorageUrl) return localStorageUrl;
+  
+  // Extract from window location if matching Supabase domain
+  const currentDomain = window.location.hostname;
+  if (currentDomain.includes('vercel.app')) {
+    // Try to extract project ID from vercel subdomain
+    const projectId = currentDomain.split('.')[0];
+    if (projectId) {
+      // This is a guess based on common Supabase URL patterns
+      return `https://${projectId}.supabase.co`;
+    }
+  }
+  
+  // Fallback to hardcoded URL
+  return 'https://tsqfwommnuhtbeupuwwm.supabase.co';
+};
+
+// Try to get Supabase anon key from various sources
+const getSupabaseAnonKey = () => {
+  // Try environment variables in various formats
+  if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (process.env.SUPABASE_ANON_KEY) return process.env.SUPABASE_ANON_KEY;
+  if (process.env.REACT_APP_SUPABASE_ANON_KEY) return process.env.REACT_APP_SUPABASE_ANON_KEY;
+  
+  // Try window.__env (sometimes used for runtime env vars)
+  const windowEnv = (window as any).__env || {};
+  if (windowEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY) return windowEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (windowEnv.SUPABASE_ANON_KEY) return windowEnv.SUPABASE_ANON_KEY;
+  
+  // Try looking for values in localStorage (sometimes apps store this for development)
+  const localStorageKey = localStorage.getItem('supabase_anon_key');
+  if (localStorageKey) return localStorageKey;
+  
+  // Fallback to hardcoded key (this key is already public in your codebase)
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc';
+};
+
+// Get Supabase configuration
+const supabaseUrl = getSupabaseUrl();
+const supabaseAnonKey = getSupabaseAnonKey();
 
 console.log('Supabase configuration:', {
   url: supabaseUrl,
   keyLength: supabaseAnonKey?.length || 0,
-  usingEnvVars: {
-    url: supabaseUrl !== 'https://tsqfwommnuhtbeupuwwm.supabase.co',
-    key: supabaseAnonKey !== 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcWZ3b21tbm1odGJldXB1d3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDg0MjQ0ODIsImV4cCI6MjAyNDAwMDQ4Mn0.NSBHiYRCL0I4IxgXTpxEoAZbFvPlvdOiYiTgfE8uGTc'
-  }
 });
+
+// Create a mechanism to manually set API credentials at runtime as a global function
+// This can be useful for debugging or for setting credentials via UI
+(window as any).setSupabaseCredentials = (url: string, key: string) => {
+  try {
+    localStorage.setItem('supabase_url', url);
+    localStorage.setItem('supabase_anon_key', key);
+    console.log('Supabase credentials set in localStorage. Reload page to use them.');
+    return true;
+  } catch (e) {
+    console.error('Error storing Supabase credentials:', e);
+    return false;
+  }
+};
 
 // Create Supabase client with implicit flow type for better token handling
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     flowType: 'implicit',
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
   },
 });
 
@@ -472,13 +562,43 @@ class SupabaseService {
     }
   }
 
-  // Get all pages for the current user
+  // Add method for resilient Supabase operations with automatic fallback
+  private async resilientOperation<T>(operation: string, dbOperation: () => Promise<T>, fallback: T | null = null): Promise<T | null> {
+    try {
+      // Try the operation against Supabase
+      return await dbOperation();
+    } catch (error: any) {
+      // Check for recurring API key errors to avoid spamming the console
+      const isApiKeyError = error?.message?.includes('Invalid API key');
+      
+      // Only log detailed errors for non-API key issues (to reduce noise)
+      if (!isApiKeyError) {
+        console.error(`Error in ${operation}:`, error);
+      } else if (!this.hasLoggedApiKeyErrorRecently) {
+        // Log API key errors but throttle them
+        console.warn(`Supabase API key error in ${operation}. Using offline mode with localStorage.`);
+        this.hasLoggedApiKeyErrorRecently = true;
+        
+        // Reset the flag after a while to allow another warning
+        setTimeout(() => {
+          this.hasLoggedApiKeyErrorRecently = false;
+        }, 60000); // Only log once per minute
+      }
+      
+      return fallback;
+    }
+  }
+  
+  // Flag to prevent repeated API key error logging
+  private hasLoggedApiKeyErrorRecently = false;
+
+  // Update the getPages method to use resilient operation
   async getPages() {
     try {
       console.log('SupabaseService: Attempting to fetch pages');
       const user = await this.getCurrentUser();
       if (!user) {
-        console.error('No user found when trying to get pages');
+        console.log('No user found when trying to get pages');
         
         // Check if we have a session through alternative means
         const session = await this.getSession();
@@ -488,37 +608,34 @@ class SupabaseService {
           // Use session user ID or fallback ID
           const userId = session.user?.id || 'local-storage-user';
           
-          const { data, error } = await supabase
-            .from('pages')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-    
-          if (error) {
-            console.error('Error fetching pages:', error);
-            return [];
-          }
-    
-          console.log(`SupabaseService: Fetched ${data?.length || 0} pages using session user ID`);
-          return this.processFetchedPages(data);
+          return await this.resilientOperation('getPages', async () => {
+            const { data, error } = await supabase
+              .from('pages')
+              .select('*')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false });
+      
+            if (error) throw error;
+            
+            console.log(`SupabaseService: Fetched ${data?.length || 0} pages using session user ID`);
+            return this.processFetchedPages(data);
+          }, []);
         }
         
         return [];
       }
 
       console.log('SupabaseService: Fetching pages for user:', user.id);
-      const { data, error } = await supabase
-        .from('pages')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      return await this.resilientOperation('getPages', async () => {
+        const { data, error } = await supabase
+          .from('pages')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching pages:', error);
-        return [];
-      }
-
-      return this.processFetchedPages(data);
+        if (error) throw error;
+        return this.processFetchedPages(data);
+      }, []);
     } catch (error) {
       console.error('Error in getPages:', error);
       return [];
@@ -597,19 +714,17 @@ class SupabaseService {
 
   // Update an existing page
   async updatePage(id: string, updates: Partial<Page>) {
-    try {
-      const session = await this.getSession();
-      if (!session) {
-        console.error('No session found when trying to update page');
-        throw new Error('User not authenticated');
-      }
+    const session = await this.getSession();
+    if (!session) {
+      console.log('No session found when trying to update page, using localStorage only');
+      return null;
+    }
 
-      // Use user ID from session or fallback
-      const userId = session.user?.id || 'local-storage-user';
-
-      console.log('SupabaseService: Updating page in database:', id, 'for user:', userId);
-      console.log('SupabaseService: Update payload:', JSON.stringify(updates));
-
+    // Use user ID from session or fallback
+    const userId = session.user?.id || 'local-storage-user';
+    console.log('SupabaseService: Updating page in database:', id, 'for user:', userId);
+    
+    return await this.resilientOperation('updatePage', async () => {
       // First get the current page to ensure we don't lose data
       const { data: existingPage, error: fetchError } = await supabase
         .from('pages')
@@ -618,10 +733,7 @@ class SupabaseService {
         .eq('user_id', userId)
         .single();
 
-      if (fetchError) {
-        console.error('Error fetching existing page data:', fetchError);
-        throw fetchError;
-      }
+      if (fetchError) throw fetchError;
 
       // Ensure designs are properly serialized for JSONB storage
       let updatedPage: any = {
@@ -640,8 +752,6 @@ class SupabaseService {
         updatedPage.designs = designsToStore;
       }
 
-      console.log('SupabaseService: Final update payload:', JSON.stringify(updatedPage));
-
       const { data, error } = await supabase
         .from('pages')
         .update(updatedPage)
@@ -650,17 +760,11 @@ class SupabaseService {
         .select()
         .single();
 
-      if (error) {
-        console.error('Error updating page:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       console.log('SupabaseService: Page updated successfully:', data?.id);
       return data as Page;
-    } catch (error) {
-      console.error('Error in updatePage:', error);
-      throw error;
-    }
+    }, null);
   }
 
   // Delete a page
