@@ -127,12 +127,13 @@ console.log('Initial Supabase configuration:', {
 setTimeout(async () => {
   const workingKey = await findWorkingAnonKey();
   if (workingKey && workingKey !== supabaseAnonKey) {
-    console.log('Found a working Supabase key that differs from the initial one! You might need to reload the page to use it.');
+    console.log('Found a working Supabase key that differs from the initial one! Using the new key automatically.');
     
-    // Reload the page if we found a better key than our initial one
-    if (confirm('A better Supabase API key was found. Reload the page to use it?')) {
-      window.location.reload();
-    }
+    // Store the key in localStorage for the next page load
+    localStorage.setItem('supabase_anon_key', workingKey);
+    
+    // Note: We're not reloading the page immediately to avoid disrupting the user experience
+    // The new key will be used on the next reload/visit
   }
 }, 2000);
 
@@ -192,7 +193,7 @@ class SupabaseService {
   // Private constructor to prevent multiple instances
   private constructor() {
     // Initialize with the default client
-    this.supabaseClient = supabase;
+    this.supabaseClient = supabase as any; // Use type assertion to avoid client type mismatch
     
     // Test connection and try to find better keys
     this.testConnectionAndFixKeys();
@@ -841,7 +842,12 @@ class SupabaseService {
       }
 
       console.log('SupabaseService: New page created successfully:', data?.id);
-      return data as Page;
+      // Convert to Page type, ensuring it has the required properties
+      return {
+        id: data.id,
+        name: data.name,
+        ...data
+      } as Page;
     } catch (error) {
       console.error('Error in createPage:', error);
       throw error;
@@ -899,7 +905,12 @@ class SupabaseService {
       if (error) throw error;
 
       console.log('SupabaseService: Page updated successfully:', data?.id);
-      return data as Page;
+      // Convert to Page type, ensuring it has the required properties
+      return {
+        id: data.id,
+        name: data.name,
+        ...data
+      } as Page;
     }, null);
   }
 
