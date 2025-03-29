@@ -68,40 +68,28 @@ const DesignContainer = styled.div<{ x: number; y: number }>`
 // Design card that holds the image, now with isSelected prop
 const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
-  background-color: white;
-  border-radius: 0;
-  padding: 0;
-  max-width: calc(100vw - 280px);
-  cursor: ${props => props.isSelected ? 'move' : 'pointer'};
-  border: none;
-  box-shadow: none;
-  overflow: visible;
-  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: ${props => props.isSelected 
+    ? '0 0 0 2px #4f46e5, 0 4px 12px rgba(0, 0, 0, 0.15)' 
+    : '0 4px 12px rgba(0, 0, 0, 0.08)'};
+  background: white;
+  transition: box-shadow 0.2s ease-in-out;
+  cursor: pointer;
   
-  &::before {
-    content: '';
-    position: absolute;
-    top: -3px;
-    left: -3px;
-    right: -3px;
-    bottom: -3px;
-    pointer-events: none;
-    z-index: 10;
-    border: ${props => props.isSelected ? '3px solid #007bff' : '0px solid transparent'};
-    box-shadow: ${props => props.isSelected ? '0 0 8px rgba(0, 123, 255, 0.5)' : 'none'};
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  &:hover {
+    box-shadow: ${props => props.isSelected 
+      ? '0 0 0 2px #4f46e5, 0 6px 16px rgba(0, 0, 0, 0.18)' 
+      : '0 6px 16px rgba(0, 0, 0, 0.12)'};
   }
 `;
 
 // The image itself
 const DesignImage = styled.img`
+  display: block;
   max-width: 100%;
   height: auto;
-  display: block;
-  border-radius: 0;
-  pointer-events: none; /* Prevent image from interfering with drag */
-  margin: 0;
-  border: none;
+  object-fit: contain;
 `;
 
 // Iteration button (+ button) that appears next to selected designs
@@ -199,9 +187,9 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-// New loading overlay for AI processing
-const AIProcessingOverlay = styled.div<{ visible: boolean }>`
-  position: fixed;
+// Replace the AIProcessingOverlay styled component with a more targeted version
+const ProcessingOverlay = styled.div<{ visible: boolean }>`
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
@@ -211,22 +199,69 @@ const AIProcessingOverlay = styled.div<{ visible: boolean }>`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  color: white;
+  z-index: 100;
+  border-radius: 8px;
+`;
+
+const ProcessingContainer = styled.div`
+  background-color: white;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 300px;
+`;
+
+const ProcessingTitle = styled.div`
   font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #333;
+`;
+
+const StepIndicator = styled.div`
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+  color: #666;
+  font-size: 14px;
+  gap: 8px;
+`;
+
+const CheckIcon = styled.span`
+  color: #10b981;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const LoadingIcon = styled.span`
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
   
-  & svg {
-    animation: rotate 1s linear infinite;
-    margin-bottom: 16px;
-    width: 50px;
-    height: 50px;
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
-  
-  @keyframes rotate {
-    100% {
-      transform: rotate(360deg);
-    }
-  }
+`;
+
+const LoadingSpinnerCircle = styled.div`
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 24px;
 `;
 
 // Iteration container to group parent design and its iterations
@@ -294,6 +329,12 @@ const AnalysisToggleButton = styled.button`
   }
 `;
 
+// Update the Design type in the component to include processing fields
+type ExtendedDesign = Design & {
+  isProcessing?: boolean;
+  processingStep?: 'analyzing' | 'recreating' | 'rendering' | null;
+};
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -304,7 +345,7 @@ export const Canvas: React.FC = () => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
   // State for multiple designs
-  const [designs, setDesigns] = useState<Design[]>([]);
+  const [designs, setDesigns] = useState<ExtendedDesign[]>([]);
 
   // Track design initialization
   const [designsInitialized, setDesignsInitialized] = useState(false);
@@ -314,10 +355,6 @@ export const Canvas: React.FC = () => {
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
-  
-  // AI processing state
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState('');
   
   // Analysis panel state
   const [analysisVisible, setAnalysisVisible] = useState(false);
@@ -535,7 +572,7 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(designId);
   };
   
-  // Modified iteration button click handler
+  // Update the handleIterationClick method to use a more granular process status
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     console.log(`Iteration requested for design: ${designId}`);
@@ -553,15 +590,27 @@ export const Canvas: React.FC = () => {
       return;
     }
     
+    // Set processing state for this specific design
+    setDesigns(prevDesigns => 
+      prevDesigns.map(design => 
+        design.id === designId
+          ? { ...design, isProcessing: true, processingStep: 'analyzing' }
+          : design
+      )
+    );
+    
     try {
-      // Show processing overlay
-      setIsProcessing(true);
-      setProcessingStatus('Analyzing design...');
-      
       // Call OpenAI service to analyze the image and generate HTML
       const result = await openAIService.analyzeDesignAndGenerateHTML(designToIterate.imageUrl);
       
-      setProcessingStatus('Creating improved version...');
+      // Update the processing step
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === designId
+            ? { ...design, processingStep: 'recreating' }
+            : design
+        )
+      );
       
       // Generate a unique ID for the iteration
       const iterationId = `iteration-${Date.now()}`;
@@ -590,8 +639,17 @@ export const Canvas: React.FC = () => {
         created_at: new Date().toISOString()
       };
       
-      // Convert HTML content to an image for display on canvas
-      setProcessingStatus('Rendering design...');
+      // Update the processing step
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === designId
+            ? { ...design, processingStep: 'rendering' }
+            : design
+        )
+      );
+      
+      // Short delay to show the rendering step
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Add the new iteration to the design's iterations array
       setDesigns(prevDesigns => 
@@ -599,7 +657,9 @@ export const Canvas: React.FC = () => {
           design.id === designId
             ? {
                 ...design,
-                iterations: [...(design.iterations || []), newIteration]
+                iterations: [...(design.iterations || []), newIteration],
+                isProcessing: false,
+                processingStep: null
               }
             : design
         )
@@ -614,8 +674,15 @@ export const Canvas: React.FC = () => {
     } catch (error) {
       console.error('Error creating iteration:', error);
       alert(`Failed to create iteration: ${error}`);
-    } finally {
-      setIsProcessing(false);
+      
+      // Clear processing state
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === designId
+            ? { ...design, isProcessing: false, processingStep: null }
+            : design
+        )
+      );
     }
   };
   
@@ -819,13 +886,51 @@ export const Canvas: React.FC = () => {
                           src={design.imageUrl} 
                           alt={`Design ${design.id}`}
                         />
-                        {selectedDesignId === design.id && (
+                        {selectedDesignId === design.id && !design.isProcessing && (
                           <IterationButton
                             onClick={(e) => handleIterationClick(e, design.id)}
                             title="Create Iteration"
                           >
                             <PlusIcon />
                           </IterationButton>
+                        )}
+                        
+                        {/* Processing overlay for this specific design */}
+                        {design.isProcessing && (
+                          <ProcessingOverlay visible={true}>
+                            <ProcessingContainer>
+                              <LoadingSpinnerCircle />
+                              <ProcessingTitle>Iterating your design...</ProcessingTitle>
+                              <StepIndicator>
+                                {design.processingStep === 'analyzing' || design.processingStep === 'recreating' || design.processingStep === 'rendering' ? (
+                                  <CheckIcon>✓</CheckIcon>
+                                ) : (
+                                  <LoadingIcon />
+                                )}
+                                <span>Analysing the UI</span>
+                              </StepIndicator>
+                              <StepIndicator>
+                                {design.processingStep === 'recreating' || design.processingStep === 'rendering' ? (
+                                  <CheckIcon>✓</CheckIcon>
+                                ) : design.processingStep === 'analyzing' ? (
+                                  <LoadingIcon />
+                                ) : (
+                                  <LoadingIcon style={{ opacity: 0.3 }} />
+                                )}
+                                <span>Recreating components</span>
+                              </StepIndicator>
+                              <StepIndicator>
+                                {design.processingStep === 'rendering' ? (
+                                  <CheckIcon>✓</CheckIcon>
+                                ) : design.processingStep === 'recreating' ? (
+                                  <LoadingIcon />
+                                ) : (
+                                  <LoadingIcon style={{ opacity: 0.3 }} />
+                                )}
+                                <span>Rendering onto canvas</span>
+                              </StepIndicator>
+                            </ProcessingContainer>
+                          </ProcessingOverlay>
                         )}
                       </DesignCard>
                     </DesignContainer>
@@ -884,12 +989,6 @@ export const Canvas: React.FC = () => {
             </CanvasContent>
           </InfiniteCanvas>
         )}
-        
-        {/* AI Processing Overlay */}
-        <AIProcessingOverlay visible={isProcessing}>
-          <LoadingSpinner />
-          <div>{processingStatus}</div>
-        </AIProcessingOverlay>
         
         {/* Analysis Panel */}
         <AnalysisToggleButton 
