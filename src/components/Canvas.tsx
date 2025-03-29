@@ -69,7 +69,7 @@ const DesignContainer = styled.div<{ x: number; y: number }>`
 const DesignCard = styled.div<{ isSelected: boolean }>`
   position: relative;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: ${props => props.isSelected 
     ? '0 0 0 2px #4f46e5, 0 4px 12px rgba(0, 0, 0, 0.15)' 
     : '0 4px 12px rgba(0, 0, 0, 0.08)'};
@@ -90,6 +90,8 @@ const DesignImage = styled.img`
   max-width: 100%;
   height: auto;
   object-fit: contain;
+  overflow: hidden;
+  border-radius: 8px;
 `;
 
 // Iteration button (+ button) that appears next to selected designs
