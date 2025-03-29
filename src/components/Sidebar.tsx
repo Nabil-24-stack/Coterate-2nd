@@ -468,8 +468,6 @@ export const Sidebar: React.FC = () => {
         )}
       </ButtonsContainer>
       
-      <SectionTitle>Pages</SectionTitle>
-      
       <PageList>
         {pages.map(page => (
           <PageItem 
