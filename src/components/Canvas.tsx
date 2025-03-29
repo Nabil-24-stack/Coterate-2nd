@@ -207,6 +207,9 @@ export const Canvas: React.FC = () => {
   
   // State for multiple designs
   const [designs, setDesigns] = useState<Design[]>([]);
+
+  // Track design initialization
+  const [designsInitialized, setDesignsInitialized] = useState(false);
   
   // Selected design state
   const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
@@ -217,28 +220,34 @@ export const Canvas: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  // Debounced update function to avoid too many database calls
+  const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Effect to load designs from page data
+  // Effect to load designs from page data - only runs once per page change
   useEffect(() => {
     if (currentPage) {
       console.log('Canvas: Current page changed:', currentPage.id, currentPage.name);
       console.log('Canvas: Current page designs:', currentPage.designs);
       
-      // If the page has a baseImage (legacy format), convert it to our new designs array
-      if (currentPage.baseImage && designs.length === 0) {
+      if (currentPage.designs && Array.isArray(currentPage.designs) && currentPage.designs.length > 0) {
+        // If the page already has designs array, use it
+        console.log('Canvas: Loading designs from page:', currentPage.designs.length, 'designs');
+        setDesigns(currentPage.designs);
+      } else if (currentPage.baseImage && !designsInitialized) {
+        // If the page has a baseImage (legacy format), convert it to our new designs array
         console.log('Canvas: Converting legacy baseImage to design');
         setDesigns([{
           id: 'legacy-design',
           imageUrl: currentPage.baseImage,
           position: { x: 0, y: 0 }
         }]);
-      } else if (currentPage.designs && currentPage.designs.length > 0) {
-        // If the page already has designs array, use it
-        console.log('Canvas: Loading designs from page:', currentPage.designs.length, 'designs');
-        setDesigns(currentPage.designs);
       } else {
         console.log('Canvas: No designs found in current page');
+        setDesigns([]);
       }
+
+      setDesignsInitialized(true);
     } else {
       console.log('Canvas: No current page available');
     }
@@ -246,11 +255,37 @@ export const Canvas: React.FC = () => {
   
   // Save designs to page whenever they change
   useEffect(() => {
-    if (currentPage && designs.length > 0) {
-      console.log('Canvas: Designs changed, saving to page:', designs.length, 'designs');
-      updatePage(currentPage.id, { designs: designs, baseImage: undefined });
+    // Skip during initial load or when no designs
+    if (!currentPage || !designsInitialized) {
+      return;
     }
-  }, [designs, currentPage]);
+
+    // Cancel any pending update
+    if (debouncedUpdateRef.current) {
+      clearTimeout(debouncedUpdateRef.current);
+    }
+
+    // Debounce updates to avoid too many database calls
+    debouncedUpdateRef.current = setTimeout(() => {
+      console.log('Canvas: Saving designs to page:', designs.length, 'designs');
+      
+      // Deep clone the designs array to avoid reference issues
+      const designsToSave = JSON.parse(JSON.stringify(designs));
+      
+      updatePage(currentPage.id, { 
+        designs: designsToSave,
+        // Clear baseImage if we have designs (migration from old format)
+        baseImage: designs.length > 0 ? undefined : currentPage.baseImage
+      });
+    }, 500);
+
+    // Cleanup timeout
+    return () => {
+      if (debouncedUpdateRef.current) {
+        clearTimeout(debouncedUpdateRef.current);
+      }
+    };
+  }, [designs, currentPage, designsInitialized]);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
@@ -407,7 +442,7 @@ export const Canvas: React.FC = () => {
     };
   }, [scale, position]);
   
-  // Handle image pasting - updated for multiple images
+  // Handle image pasting
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (!currentPage) {
@@ -483,7 +518,7 @@ export const Canvas: React.FC = () => {
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage, updatePage, position, scale]);
+  }, [currentPage, position, scale]);
   
   // Keyboard shortcuts
   useEffect(() => {

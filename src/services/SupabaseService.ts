@@ -471,14 +471,30 @@ class SupabaseService {
         throw new Error('User not authenticated');
       }
 
-      const newPage = {
+      console.log('SupabaseService: Creating new page in database');
+
+      // Ensure designs are properly handled for storage
+      let pageToCreate: any = {
         ...page,
         user_id: user.id,
       };
 
+      // If designs are included, ensure they are properly serialized
+      if (page.designs && Array.isArray(page.designs)) {
+        console.log('SupabaseService: Processing designs array for new page, count:', page.designs.length);
+        // Clone to avoid reference issues
+        const designsToStore = JSON.parse(JSON.stringify(page.designs));
+        pageToCreate.designs = designsToStore;
+      } else {
+        // Ensure designs is at least an empty array
+        pageToCreate.designs = [];
+      }
+
+      console.log('SupabaseService: Creating page with data:', JSON.stringify(pageToCreate));
+
       const { data, error } = await supabase
         .from('pages')
-        .insert([newPage])
+        .insert([pageToCreate])
         .select()
         .single();
 
@@ -487,6 +503,7 @@ class SupabaseService {
         throw error;
       }
 
+      console.log('SupabaseService: New page created successfully:', data?.id);
       return data as Page;
     } catch (error) {
       console.error('Error in createPage:', error);
@@ -506,17 +523,33 @@ class SupabaseService {
       console.log('SupabaseService: Updating page in database:', id);
       console.log('SupabaseService: Update payload:', JSON.stringify(updates));
 
+      // First get the current page to ensure we don't lose data
+      const { data: existingPage, error: fetchError } = await supabase
+        .from('pages')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching existing page data:', fetchError);
+        throw fetchError;
+      }
+
       // Ensure designs are properly serialized for JSONB storage
       let updatedPage: any = {
+        ...existingPage,
         ...updates,
         updated_at: new Date().toISOString(),
       };
 
       // If designs are included, ensure they are properly serialized
-      if (updates.designs) {
-        console.log('SupabaseService: Processing designs array for storage, count:', updates.designs.length);
+      if (updates.designs !== undefined) {
+        console.log('SupabaseService: Processing designs array for storage, count:', updates.designs?.length || 0);
         // Clone to avoid reference issues
-        const designsToStore = JSON.parse(JSON.stringify(updates.designs));
+        const designsToStore = updates.designs && Array.isArray(updates.designs) 
+          ? JSON.parse(JSON.stringify(updates.designs))
+          : [];
         updatedPage.designs = designsToStore;
       }
 
