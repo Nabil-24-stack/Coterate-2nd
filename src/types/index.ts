@@ -1,8 +1,16 @@
+// Interface for Design
+export interface Design {
+  id: string;
+  imageUrl: string;
+  position: { x: number; y: number };
+}
+
 // Interface for Page
 export interface Page {
   id: string;
   name: string;
   baseImage?: string;
+  designs?: Design[];
   user_id?: string;
   created_at?: string;
   updated_at?: string;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
+import { Design } from '../types';
 
 // Global style to ensure no focus outlines or borders
 const GlobalStyle = createGlobalStyle`
@@ -51,11 +52,11 @@ const CanvasContent = styled.div<{ x: number; y: number; scale: number }>`
 `;
 
 // Container for designs
-const DesignContainer = styled.div`
+const DesignContainer = styled.div<{ x: number; y: number }>`
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(calc(-50% + ${props => props.x}px), calc(-50% + ${props => props.y}px));
   display: flex;
   justify-content: center;
   align-items: center;
@@ -122,46 +123,87 @@ export const Canvas: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
-  // State for dragging design
+  // State for multiple designs
+  const [designs, setDesigns] = useState<Design[]>([]);
+  
+  // Selected design state
+  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
   const [isDesignDragging, setIsDesignDragging] = useState(false);
-  const [designPosition, setDesignPosition] = useState({ x: 0, y: 0 });
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
   
-  // New state for design selection
-  const [isDesignSelected, setIsDesignSelected] = useState(false);
-  
   const canvasRef = useRef<HTMLDivElement>(null);
-  const designRef = useRef<HTMLDivElement>(null);
+  const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
+  // Effect to load designs from page data
+  useEffect(() => {
+    if (currentPage) {
+      // If the page has a baseImage (legacy format), convert it to our new designs array
+      if (currentPage.baseImage && designs.length === 0) {
+        setDesigns([{
+          id: 'legacy-design',
+          imageUrl: currentPage.baseImage,
+          position: { x: 0, y: 0 }
+        }]);
+      } else if (currentPage.designs) {
+        // If the page already has designs array, use it
+        setDesigns(currentPage.designs);
+      }
+    }
+  }, [currentPage]);
+  
+  // Save designs to page whenever they change
+  useEffect(() => {
+    if (currentPage && designs.length > 0) {
+      updatePage(currentPage.id, { designs: designs, baseImage: undefined });
+    }
+  }, [designs]);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
-    setDesignPosition({ x: 0, y: 0 });
+  };
+  
+  // Find the selected design
+  const selectedDesign = designs.find(d => d.id === selectedDesignId);
+  
+  // Helper to get a specific design reference
+  const getDesignRef = (id: string) => {
+    return designRefs.current[id];
   };
   
   // Handle canvas mouse down for panning
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    // If clicking on the design card, handle design dragging
-    if (designRef.current && designRef.current.contains(e.target as Node)) {
+    // Check if clicking on any design
+    const clickedDesignId = designs.find(design => {
+      const designRef = getDesignRef(design.id);
+      return designRef && designRef.contains(e.target as Node);
+    })?.id;
+    
+    if (clickedDesignId) {
+      // Clicked on a design
+      setSelectedDesignId(clickedDesignId);
       setIsDesignDragging(true);
-      setIsDesignSelected(true); // Select the design when clicked
-      setDesignDragStart({
-        x: e.clientX,
-        y: e.clientY
-      });
-      setDesignInitialPosition({
-        x: designPosition.x,
-        y: designPosition.y
-      });
+      
+      const clickedDesign = designs.find(d => d.id === clickedDesignId);
+      if (clickedDesign) {
+        setDesignDragStart({
+          x: e.clientX,
+          y: e.clientY
+        });
+        setDesignInitialPosition({
+          x: clickedDesign.position.x,
+          y: clickedDesign.position.y
+        });
+      }
       return;
     }
     
-    // Deselect the design when clicking on the canvas
-    setIsDesignSelected(false);
+    // Deselect designs when clicking on empty canvas
+    setSelectedDesignId(null);
     
-    // Otherwise handle canvas panning
+    // Handle canvas panning
     setIsDragging(true);
     setDragStart({
       x: e.clientX - position.x,
@@ -171,7 +213,7 @@ export const Canvas: React.FC = () => {
   
   // Handle mouse move for panning and design dragging
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDesignDragging) {
+    if (isDesignDragging && selectedDesignId) {
       // Calculate the delta in screen coordinates
       const deltaX = e.clientX - designDragStart.x;
       const deltaY = e.clientY - designDragStart.y;
@@ -180,11 +222,20 @@ export const Canvas: React.FC = () => {
       const deltaCanvasX = deltaX / scale;
       const deltaCanvasY = deltaY / scale;
       
-      // Update design position based on initial position plus scaled delta
-      setDesignPosition({
-        x: designInitialPosition.x + deltaCanvasX,
-        y: designInitialPosition.y + deltaCanvasY
-      });
+      // Update design position
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === selectedDesignId
+            ? {
+                ...design,
+                position: {
+                  x: designInitialPosition.x + deltaCanvasX,
+                  y: designInitialPosition.y + deltaCanvasY
+                }
+              }
+            : design
+        )
+      );
       return;
     }
     
@@ -202,10 +253,10 @@ export const Canvas: React.FC = () => {
     setIsDesignDragging(false);
   };
   
-  // Handle click on the design to toggle selection
-  const handleDesignClick = (e: React.MouseEvent) => {
+  // Handle click on a design
+  const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
-    setIsDesignSelected(true);
+    setSelectedDesignId(designId);
   };
   
   // Handle wheel event for zooming
@@ -255,7 +306,7 @@ export const Canvas: React.FC = () => {
     };
   }, [scale, position]);
   
-  // Handle image pasting
+  // Handle image pasting - updated for multiple images
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (!currentPage) return;
@@ -274,13 +325,18 @@ export const Canvas: React.FC = () => {
           reader.onload = (event) => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
-              updatePage(currentPage.id, { baseImage: imageUrl });
+              // Create a new design object with unique ID
+              const newDesign: Design = {
+                id: `design-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                imageUrl: imageUrl,
+                position: { x: 0, y: 0 }
+              };
               
-              // Reset positions after pasting new image
-              resetCanvas();
+              // Add the new design to the array
+              setDesigns(prevDesigns => [...prevDesigns, newDesign]);
               
-              // Auto-select newly pasted image
-              setIsDesignSelected(true);
+              // Select the new design
+              setSelectedDesignId(newDesign.id);
             }
           };
           reader.readAsDataURL(blob);
@@ -317,14 +373,14 @@ export const Canvas: React.FC = () => {
       }
       
       // Delete/Backspace: Remove selected design
-      if ((e.key === 'Delete' || e.key === 'Backspace') && currentPage?.baseImage && isDesignSelected) {
-        updatePage(currentPage.id, { baseImage: undefined });
-        setIsDesignSelected(false);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDesignId) {
+        setDesigns(prevDesigns => prevDesigns.filter(d => d.id !== selectedDesignId));
+        setSelectedDesignId(null);
       }
       
       // Escape: Deselect design
-      if (e.key === 'Escape' && isDesignSelected) {
-        setIsDesignSelected(false);
+      if (e.key === 'Escape' && selectedDesignId) {
+        setSelectedDesignId(null);
       }
     };
     
@@ -332,7 +388,7 @@ export const Canvas: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentPage, updatePage, isDesignSelected]);
+  }, [selectedDesignId]);
   
   return (
     <>
@@ -351,19 +407,25 @@ export const Canvas: React.FC = () => {
             y={position.y}
             scale={scale}
           >
-            {currentPage && currentPage.baseImage ? (
-              <DesignContainer style={{ transform: `translate(calc(-50% + ${designPosition.x}px), calc(-50% + ${designPosition.y}px))` }}>
-                <DesignCard 
-                  ref={designRef}
-                  isSelected={isDesignSelected}
-                  onClick={handleDesignClick}
+            {designs.length > 0 ? (
+              designs.map((design) => (
+                <DesignContainer 
+                  key={design.id}
+                  x={design.position.x}
+                  y={design.position.y}
                 >
-                  <DesignImage 
-                    src={currentPage.baseImage} 
-                    alt={currentPage.name}
-                  />
-                </DesignCard>
-              </DesignContainer>
+                  <DesignCard 
+                    ref={el => designRefs.current[design.id] = el}
+                    isSelected={selectedDesignId === design.id}
+                    onClick={(e) => handleDesignClick(e, design.id)}
+                  >
+                    <DesignImage 
+                      src={design.imageUrl} 
+                      alt={`Design ${design.id}`}
+                    />
+                  </DesignCard>
+                </DesignContainer>
+              ))
             ) : (
               <EmptyCanvasMessage>
                 Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
