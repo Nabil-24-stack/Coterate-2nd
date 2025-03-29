@@ -20,7 +20,7 @@ const CanvasContainer = styled.div`
   right: 0;
   bottom: 0;
   left: 230px; /* Sidebar width */
-  background-color: #f5f5f5;
+  background-color: #DBDBDB;
   overflow: hidden;
 `;
 
@@ -31,11 +31,7 @@ const InfiniteCanvas = styled.div<{ scale: number }>`
   right: 0;
   bottom: 0;
   left: 0;
-  background-color: #f5f5f5;
-  background-image: 
-    linear-gradient(rgba(150, 150, 150, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(150, 150, 150, 0.1) 1px, transparent 1px);
-  background-size: ${props => 20 * props.scale}px ${props => 20 * props.scale}px;
+  background-color: #DBDBDB;
   cursor: grab;
   
   &:active {
