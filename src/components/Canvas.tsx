@@ -142,10 +142,15 @@ const PlusSymbol = styled.span`
   justify-content: center;
   width: 100%;
   height: 100%;
-  font-size: 28px;
-  line-height: 1;
+  font-size: 22px;
+  line-height: 0;
   position: relative;
-  top: -1px; /* Fine-tune vertical alignment */
+  top: 0;
+  
+  &::before {
+    content: '+';
+    display: block;
+  }
 `;
 
 // Empty state message
@@ -510,7 +515,7 @@ export const Canvas: React.FC = () => {
                         onClick={(e) => handleIterationClick(e, design.id)}
                         title="Create Iteration"
                       >
-                        <PlusSymbol>+</PlusSymbol>
+                        <PlusSymbol />
                       </IterationButton>
                     )}
                   </DesignCard>
