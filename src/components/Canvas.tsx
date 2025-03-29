@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
-import { Design } from '../types';
+import { Design, DesignIteration } from '../types';
 import supabaseService from '../services/SupabaseService';
+import openAIService from '../services/OpenAIService';
+import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
 
 // Global style to ensure no focus outlines or borders
 const GlobalStyle = createGlobalStyle`
@@ -197,6 +199,101 @@ const LoadingSpinner = () => (
   </svg>
 );
 
+// New loading overlay for AI processing
+const AIProcessingOverlay = styled.div<{ visible: boolean }>`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: ${props => props.visible ? 'flex' : 'none'};
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  color: white;
+  font-size: 18px;
+  
+  & svg {
+    animation: rotate 1s linear infinite;
+    margin-bottom: 16px;
+    width: 50px;
+    height: 50px;
+  }
+  
+  @keyframes rotate {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+// Iteration container to group parent design and its iterations
+const IterationContainer = styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 40px;
+`;
+
+// Analysis panel to show strengths and weaknesses
+const AnalysisPanel = styled.div<{ visible: boolean }>`
+  position: fixed;
+  top: 70px;
+  right: ${props => props.visible ? '0' : '-350px'};
+  width: 350px;
+  height: calc(100vh - 70px);
+  background-color: white;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  overflow-y: auto;
+  transition: right 0.3s ease;
+  padding: 20px;
+  
+  h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  
+  h4 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+  }
+  
+  ul {
+    margin: 0 0 16px 0;
+    padding-left: 20px;
+  }
+  
+  li {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+`;
+
+const AnalysisToggleButton = styled.button`
+  position: fixed;
+  top: 75px;
+  right: ${props => props.theme.analysisVisible ? '360px' : '10px'};
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  z-index: 101;
+  transition: right 0.3s ease;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -218,9 +315,18 @@ export const Canvas: React.FC = () => {
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
   
+  // AI processing state
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
+  
+  // Analysis panel state
+  const [analysisVisible, setAnalysisVisible] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<DesignIteration | null>(null);
+  
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
 
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
@@ -429,61 +535,100 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(designId);
   };
   
-  // Handle iteration button click
-  const handleIterationClick = (e: React.MouseEvent, designId: string) => {
+  // Modified iteration button click handler
+  const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     console.log(`Iteration requested for design: ${designId}`);
-    // This will later trigger the AI analysis and iteration flow (section 2.3.2-2.3.5)
-    // For now we just log to confirm the button works
+    
+    // Find the design to iterate on
+    const designToIterate = designs.find(d => d.id === designId);
+    if (!designToIterate) {
+      console.error(`Could not find design with ID: ${designId}`);
+      return;
+    }
+    
+    // Check if OpenAI API key is available
+    if (!openAIService.hasApiKey()) {
+      alert('OpenAI API key is not configured. Please set it in your environment variables.');
+      return;
+    }
+    
+    try {
+      // Show processing overlay
+      setIsProcessing(true);
+      setProcessingStatus('Analyzing design...');
+      
+      // Call OpenAI service to analyze the image and generate HTML
+      const result = await openAIService.analyzeDesignAndGenerateHTML(designToIterate.imageUrl);
+      
+      setProcessingStatus('Creating improved version...');
+      
+      // Generate a unique ID for the iteration
+      const iterationId = `iteration-${Date.now()}`;
+      
+      // Create the new iteration
+      const newIteration: DesignIteration = {
+        id: iterationId,
+        parentId: designId,
+        htmlContent: result.htmlCode,
+        cssContent: result.cssCode,
+        position: {
+          // Position to the right of the original design
+          x: designToIterate.position.x + 400, 
+          y: designToIterate.position.y
+        },
+        analysis: {
+          strengths: result.analysis.strengths,
+          weaknesses: result.analysis.weaknesses,
+          improvementAreas: result.analysis.improvementAreas,
+          metadata: {
+            colors: result.metadata.colors,
+            fonts: result.metadata.fonts,
+            components: result.metadata.components
+          }
+        },
+        created_at: new Date().toISOString()
+      };
+      
+      // Convert HTML content to an image for display on canvas
+      setProcessingStatus('Rendering design...');
+      
+      // Add the new iteration to the design's iterations array
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === designId
+            ? {
+                ...design,
+                iterations: [...(design.iterations || []), newIteration]
+              }
+            : design
+        )
+      );
+      
+      // Set the newly created iteration for analysis panel
+      setCurrentAnalysis(newIteration);
+      setAnalysisVisible(true);
+      
+      // Success message
+      console.log('Successfully created iteration:', newIteration);
+    } catch (error) {
+      console.error('Error creating iteration:', error);
+      alert(`Failed to create iteration: ${error}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
-  // Handle wheel event for zooming via useEffect (as a backup)
-  useEffect(() => {
-    const canvasElement = canvasRef.current;
-    if (!canvasElement) return;
-
-    // This is a backup handler in case the React onWheel doesn't work
-    const handleWheelEvent = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      const zoomSensitivity = 0.1;
-      const minScale = 0.1;
-      const maxScale = 4;
-      
-      // Calculate new scale
-      let newScale = scale;
-      
-      if (e.deltaY < 0) {
-        // Zoom in
-        newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
-      } else {
-        // Zoom out
-        newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
-      }
-      
-      // Get cursor position relative to canvas
-      const rect = canvasElement.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      // Calculate the point on the original content where the cursor is
-      const originX = mouseX / scale - position.x / scale;
-      const originY = mouseY / scale - position.y / scale;
-      
-      // Calculate the new position to keep cursor point fixed
-      const newPositionX = mouseX - originX * newScale;
-      const newPositionY = mouseY - originY * newScale;
-      
-      setScale(newScale);
-      setPosition({ x: newPositionX, y: newPositionY });
-    };
-
-    canvasElement.addEventListener('wheel', handleWheelEvent, { passive: false });
-    
-    return () => {
-      canvasElement.removeEventListener('wheel', handleWheelEvent);
-    };
-  }, [scale, position]);
+  // Toggle analysis panel visibility
+  const toggleAnalysisPanel = () => {
+    setAnalysisVisible(prev => !prev);
+  };
+  
+  // Select an iteration for viewing in the analysis panel
+  const selectIterationForAnalysis = (iteration: DesignIteration) => {
+    setCurrentAnalysis(iteration);
+    setAnalysisVisible(true);
+  };
   
   // Handle image pasting
   useEffect(() => {
@@ -546,6 +691,54 @@ export const Canvas: React.FC = () => {
       document.removeEventListener('paste', handlePaste);
     };
   }, [currentPage]);
+  
+  // Handle wheel event for zooming via useEffect (as a backup)
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+
+    // This is a backup handler in case the React onWheel doesn't work
+    const handleWheelEvent = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      const zoomSensitivity = 0.1;
+      const minScale = 0.1;
+      const maxScale = 4;
+      
+      // Calculate new scale
+      let newScale = scale;
+      
+      if (e.deltaY < 0) {
+        // Zoom in
+        newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+      } else {
+        // Zoom out
+        newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+      }
+      
+      // Get cursor position relative to canvas
+      const rect = canvasElement.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      // Calculate the point on the original content where the cursor is
+      const originX = mouseX / scale - position.x / scale;
+      const originY = mouseY / scale - position.y / scale;
+      
+      // Calculate the new position to keep cursor point fixed
+      const newPositionX = mouseX - originX * newScale;
+      const newPositionY = mouseY - originY * newScale;
+      
+      setScale(newScale);
+      setPosition({ x: newPositionX, y: newPositionY });
+    };
+
+    canvasElement.addEventListener('wheel', handleWheelEvent, { passive: false });
+    
+    return () => {
+      canvasElement.removeEventListener('wheel', handleWheelEvent);
+    };
+  }, [scale, position]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -612,30 +805,76 @@ export const Canvas: React.FC = () => {
             >
               {designs.length > 0 ? (
                 designs.map((design) => (
-                  <DesignContainer 
-                    key={design.id}
-                    x={design.position.x}
-                    y={design.position.y}
-                  >
-                    <DesignCard 
-                      ref={el => designRefs.current[design.id] = el}
-                      isSelected={selectedDesignId === design.id}
-                      onClick={(e) => handleDesignClick(e, design.id)}
+                  <React.Fragment key={design.id}>
+                    <DesignContainer 
+                      x={design.position.x}
+                      y={design.position.y}
                     >
-                      <DesignImage 
-                        src={design.imageUrl} 
-                        alt={`Design ${design.id}`}
-                      />
-                      {selectedDesignId === design.id && (
-                        <IterationButton
-                          onClick={(e) => handleIterationClick(e, design.id)}
-                          title="Create Iteration"
+                      <DesignCard 
+                        ref={el => designRefs.current[design.id] = el}
+                        isSelected={selectedDesignId === design.id}
+                        onClick={(e) => handleDesignClick(e, design.id)}
+                      >
+                        <DesignImage 
+                          src={design.imageUrl} 
+                          alt={`Design ${design.id}`}
+                        />
+                        {selectedDesignId === design.id && (
+                          <IterationButton
+                            onClick={(e) => handleIterationClick(e, design.id)}
+                            title="Create Iteration"
+                          >
+                            <PlusIcon />
+                          </IterationButton>
+                        )}
+                      </DesignCard>
+                    </DesignContainer>
+                    
+                    {/* Render iterations for this design */}
+                    {design.iterations?.map((iteration) => (
+                      <DesignContainer 
+                        key={iteration.id}
+                        x={iteration.position.x}
+                        y={iteration.position.y}
+                      >
+                        <DesignCard 
+                          ref={el => designRefs.current[iteration.id] = el}
+                          isSelected={selectedDesignId === iteration.id}
+                          onClick={(e) => {
+                            handleDesignClick(e, iteration.id);
+                            selectIterationForAnalysis(iteration);
+                          }}
                         >
-                          <PlusIcon />
-                        </IterationButton>
-                      )}
-                    </DesignCard>
-                  </DesignContainer>
+                          <HtmlDesignRenderer
+                            ref={htmlRendererRef}
+                            htmlContent={iteration.htmlContent}
+                            cssContent={iteration.cssContent}
+                            width={Math.min(800, design.imageUrl ? designRefs.current[design.id]?.clientWidth || 800 : 800)}
+                            height={design.imageUrl ? designRefs.current[design.id]?.clientHeight || 600 : 600}
+                          />
+                          
+                          {/* Add a small badge indicating this is an iteration */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            left: '-10px',
+                            background: '#007bff',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}>
+                            AI
+                          </div>
+                        </DesignCard>
+                      </DesignContainer>
+                    ))}
+                  </React.Fragment>
                 ))
               ) : (
                 <EmptyCanvasMessage>
@@ -645,6 +884,87 @@ export const Canvas: React.FC = () => {
             </CanvasContent>
           </InfiniteCanvas>
         )}
+        
+        {/* AI Processing Overlay */}
+        <AIProcessingOverlay visible={isProcessing}>
+          <LoadingSpinner />
+          <div>{processingStatus}</div>
+        </AIProcessingOverlay>
+        
+        {/* Analysis Panel */}
+        <AnalysisToggleButton 
+          onClick={toggleAnalysisPanel}
+          theme={{ analysisVisible }}
+        >
+          {analysisVisible ? 'Hide Analysis' : 'Show Analysis'}
+        </AnalysisToggleButton>
+        
+        <AnalysisPanel visible={analysisVisible}>
+          <h3>Design Analysis</h3>
+          
+          {currentAnalysis ? (
+            <>
+              <h4>Strengths</h4>
+              <ul>
+                {currentAnalysis.analysis?.strengths.map((strength, index) => (
+                  <li key={`strength-${index}`}>{strength}</li>
+                ))}
+              </ul>
+              
+              <h4>Weaknesses</h4>
+              <ul>
+                {currentAnalysis.analysis?.weaknesses.map((weakness, index) => (
+                  <li key={`weakness-${index}`}>{weakness}</li>
+                ))}
+              </ul>
+              
+              <h4>Improvements Made</h4>
+              <ul>
+                {currentAnalysis.analysis?.improvementAreas.map((improvement, index) => (
+                  <li key={`improvement-${index}`}>{improvement}</li>
+                ))}
+              </ul>
+              
+              {currentAnalysis.analysis?.metadata?.colors && (
+                <>
+                  <h4>Color Palette</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                    {Object.entries(currentAnalysis.analysis.metadata.colors).map(([category, colors]) => 
+                      colors?.map((color, index) => (
+                        <div 
+                          key={`color-${category}-${index}`} 
+                          style={{ 
+                            width: '24px',
+                            height: '24px',
+                            background: color,
+                            borderRadius: '4px',
+                            border: '1px solid #ddd',
+                            position: 'relative',
+                            cursor: 'pointer'
+                          }} 
+                          data-color-info={`${category}: ${color}`}
+                        />
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+              
+              {currentAnalysis.analysis?.metadata?.fonts && currentAnalysis.analysis.metadata.fonts.length > 0 && (
+                <>
+                  <h4>Fonts</h4>
+                  <ul>
+                    {currentAnalysis.analysis.metadata.fonts.map((font, index) => (
+                      <li key={`font-${index}`}>{font}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          ) : (
+            <p>Select an iteration to see its analysis</p>
+          )}
+        </AnalysisPanel>
       </CanvasContainer>
     </>
   );

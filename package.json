@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@animaapp/anima-sdk": "^0.3.4",
     "@supabase/supabase-js": "^2.49.3",
     "@types/node": "^16.18.0",
     "@types/react": "^18.2.0",
