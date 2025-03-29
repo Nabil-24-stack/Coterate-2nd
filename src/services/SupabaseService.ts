@@ -1030,6 +1030,134 @@ class SupabaseService {
       throw error;
     }
   }
+
+  // Add storage methods for handling images
+  async uploadImageToStorage(imageBlob: Blob, fileName: string): Promise<string | null> {
+    try {
+      this.logInfo('storage-upload', `Uploading image ${fileName} to Supabase Storage`);
+      
+      // Skip storage upload for local-storage users
+      const session = await this.getSession();
+      if (!session || session.user.id === 'local-storage-user') {
+        this.logInfo('storage-local', 'Local storage user, converting to data URL instead');
+        // For local users, convert the image to a data URL and store that instead
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(imageBlob);
+        });
+      }
+      
+      // For authenticated users, upload to Supabase Storage
+      const userId = session.user.id;
+      // Create a unique file path including the user ID to avoid conflicts
+      const filePath = `${userId}/${fileName}`;
+      
+      const { data, error } = await this.supabaseClient
+        .storage
+        .from('designs') // Use 'designs' as the bucket name
+        .upload(filePath, imageBlob, {
+          cacheControl: '3600',
+          upsert: true // Overwrite if exists
+        });
+      
+      if (error) {
+        this.logError('storage-error', 'Error uploading to Supabase Storage:', error);
+        throw error;
+      }
+      
+      // Get public URL for the uploaded file
+      const { data: urlData } = this.supabaseClient
+        .storage
+        .from('designs')
+        .getPublicUrl(filePath);
+      
+      this.logInfo('storage-success', `Successfully uploaded image to ${urlData.publicUrl}`);
+      return urlData.publicUrl;
+    } catch (error) {
+      this.logError('storage-exception', 'Exception uploading to Supabase Storage:', error);
+      return null;
+    }
+  }
+
+  // Convert base64 data URI to Blob
+  dataURItoBlob(dataURI: string): Blob {
+    // convert base64/URLEncoded data component to raw binary data held in a string
+    let byteString;
+    if (dataURI.split(',')[0].indexOf('base64') >= 0) {
+      byteString = atob(dataURI.split(',')[1]);
+    } else {
+      byteString = decodeURIComponent(dataURI.split(',')[1]);
+    }
+    
+    // separate out the mime component
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+    
+    // write the bytes of the string to a typed array
+    const ia = new Uint8Array(byteString.length);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    
+    return new Blob([ia], { type: mimeString });
+  }
+
+  // Upload an image from a data URI
+  async uploadImageFromDataURI(dataURI: string, fileName: string): Promise<string | null> {
+    try {
+      // Convert data URI to Blob
+      const blob = this.dataURItoBlob(dataURI);
+      // Upload to storage
+      return await this.uploadImageToStorage(blob, fileName);
+    } catch (error) {
+      this.logError('storage-data-uri', 'Error uploading image from data URI:', error);
+      return null;
+    }
+  }
+
+  // Delete an image from storage
+  async deleteImageFromStorage(imageUrl: string): Promise<boolean> {
+    try {
+      // Skip for local storage users or data URIs
+      if (imageUrl.startsWith('data:')) {
+        this.logInfo('storage-delete-skip', 'Skipping delete for data URI');
+        return true;
+      }
+      
+      const session = await this.getSession();
+      if (!session || session.user.id === 'local-storage-user') {
+        this.logInfo('storage-delete-local', 'Local storage user, skipping storage delete');
+        return true;
+      }
+      
+      // Extract the path from the URL
+      // URL will be like: https://tsqfwommnuhtbeupuwwm.supabase.co/storage/v1/object/public/designs/userId/fileName
+      const urlParts = imageUrl.split('/public/designs/');
+      if (urlParts.length !== 2) {
+        this.logError('storage-delete-path', 'Cannot extract path from URL:', imageUrl);
+        return false;
+      }
+      
+      const filePath = urlParts[1];
+      this.logInfo('storage-delete', `Deleting file from storage: ${filePath}`);
+      
+      const { error } = await this.supabaseClient
+        .storage
+        .from('designs')
+        .remove([filePath]);
+      
+      if (error) {
+        this.logError('storage-delete-error', 'Error deleting from storage:', error);
+        return false;
+      }
+      
+      this.logInfo('storage-delete-success', `Successfully deleted image from storage`);
+      return true;
+    } catch (error) {
+      this.logError('storage-delete-exception', 'Exception deleting from storage:', error);
+      return false;
+    }
+  }
 }
 
 // Create and export a single instance

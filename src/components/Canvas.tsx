@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Design } from '../types';
+import supabaseService from '../services/SupabaseService';
 
 // Global style to ensure no focus outlines or borders
 const GlobalStyle = createGlobalStyle`
@@ -486,7 +487,7 @@ export const Canvas: React.FC = () => {
   
   // Handle image pasting
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       if (!currentPage) {
         console.log('Canvas: No current page available for paste');
         return;
@@ -509,49 +510,33 @@ export const Canvas: React.FC = () => {
             continue;
           }
           
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const imageUrl = event.target?.result as string;
-            if (imageUrl && currentPage) {
-              // Get the canvas element and its container
-              const canvasElement = canvasRef.current;
-              const canvasContainer = containerRef.current;
-              
-              if (canvasElement && canvasContainer) {
-                // Get the dimensions of the canvas container
-                const containerRect = canvasContainer.getBoundingClientRect();
-                
-                // Calculate the center point *within* the container (in container coordinates)
-                const containerCenterX = containerRect.width / 2;
-                const containerCenterY = containerRect.height / 2;
-
-                // Convert the container center point to canvas coordinates
-                // We need to account for the canvas panning (position) and zoom (scale)
-                // Formula: canvasCoord = (containerCoord - pan) / scale
-                const canvasCenterX = (containerCenterX - position.x) / scale;
-                const canvasCenterY = (containerCenterY - position.y) / scale;
-
-                console.log('Canvas: Creating new design from pasted image');
-                
-                // Create a new design object with unique ID
-                const newDesign: Design = {
-                  id: `design-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                  imageUrl: imageUrl,
-                  position: { x: canvasCenterX, y: canvasCenterY }
-                };
-                
-                console.log('Canvas: New design created:', newDesign.id);
-                
-                // Add the new design to the array
-                setDesigns(prevDesigns => [...prevDesigns, newDesign]);
-                
-                // Select the new design
-                setSelectedDesignId(newDesign.id);
-              }
+          try {
+            // Generate a unique filename for the pasted image
+            const timestamp = new Date().getTime();
+            const filename = `pasted-image-${timestamp}.${blob.type.split('/')[1] || 'png'}`;
+            
+            // Upload the image to Supabase Storage or convert to data URL
+            console.log('Canvas: Uploading pasted image to storage');
+            const imageUrl = await supabaseService.uploadImageToStorage(blob, filename);
+            
+            if (!imageUrl) {
+              console.error('Canvas: Failed to upload image to storage');
+              continue;
             }
-          };
-          reader.readAsDataURL(blob);
-          break;
+            
+            // Add the image to designs
+            const newDesign = {
+              id: `design-${timestamp}`,
+              imageUrl,
+              position: { x: 0, y: 0 }
+            };
+            
+            console.log('Canvas: Adding new design with image URL:', imageUrl);
+            setDesigns(prev => [...prev, newDesign]);
+            setDesignsInitialized(true);
+          } catch (error) {
+            console.error('Canvas: Error handling pasted image:', error);
+          }
         }
       }
     };
@@ -560,7 +545,7 @@ export const Canvas: React.FC = () => {
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage, position, scale]);
+  }, [currentPage]);
   
   // Keyboard shortcuts
   useEffect(() => {
