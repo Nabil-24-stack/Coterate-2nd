@@ -423,12 +423,14 @@ class SupabaseService {
   // Get all pages for the current user
   async getPages() {
     try {
+      console.log('SupabaseService: Attempting to fetch pages');
       const user = await this.getCurrentUser();
       if (!user) {
         console.error('No user found when trying to get pages');
         return [];
       }
 
+      console.log('SupabaseService: Fetching pages for user:', user.id);
       const { data, error } = await supabase
         .from('pages')
         .select('*')
@@ -438,6 +440,19 @@ class SupabaseService {
       if (error) {
         console.error('Error fetching pages:', error);
         return [];
+      }
+
+      console.log(`SupabaseService: Fetched ${data?.length || 0} pages`);
+      
+      // Examine the designs for each page
+      if (data && data.length > 0) {
+        data.forEach((page, index) => {
+          console.log(`SupabaseService: Page ${index + 1}/${data.length} (${page.id}):`, {
+            name: page.name,
+            hasDesigns: !!page.designs,
+            designsCount: page.designs?.length || 0
+          });
+        });
       }
 
       return data as Page[];
@@ -488,11 +503,24 @@ class SupabaseService {
         throw new Error('User not authenticated');
       }
 
-      // Add updated_at timestamp
-      const updatedPage = {
+      console.log('SupabaseService: Updating page in database:', id);
+      console.log('SupabaseService: Update payload:', JSON.stringify(updates));
+
+      // Ensure designs are properly serialized for JSONB storage
+      let updatedPage: any = {
         ...updates,
         updated_at: new Date().toISOString(),
       };
+
+      // If designs are included, ensure they are properly serialized
+      if (updates.designs) {
+        console.log('SupabaseService: Processing designs array for storage, count:', updates.designs.length);
+        // Clone to avoid reference issues
+        const designsToStore = JSON.parse(JSON.stringify(updates.designs));
+        updatedPage.designs = designsToStore;
+      }
+
+      console.log('SupabaseService: Final update payload:', JSON.stringify(updatedPage));
 
       const { data, error } = await supabase
         .from('pages')
@@ -507,6 +535,7 @@ class SupabaseService {
         throw error;
       }
 
+      console.log('SupabaseService: Page updated successfully:', data?.id);
       return data as Page;
     } catch (error) {
       console.error('Error in updatePage:', error);

@@ -221,26 +221,36 @@ export const Canvas: React.FC = () => {
   // Effect to load designs from page data
   useEffect(() => {
     if (currentPage) {
+      console.log('Canvas: Current page changed:', currentPage.id, currentPage.name);
+      console.log('Canvas: Current page designs:', currentPage.designs);
+      
       // If the page has a baseImage (legacy format), convert it to our new designs array
       if (currentPage.baseImage && designs.length === 0) {
+        console.log('Canvas: Converting legacy baseImage to design');
         setDesigns([{
           id: 'legacy-design',
           imageUrl: currentPage.baseImage,
           position: { x: 0, y: 0 }
         }]);
-      } else if (currentPage.designs) {
+      } else if (currentPage.designs && currentPage.designs.length > 0) {
         // If the page already has designs array, use it
+        console.log('Canvas: Loading designs from page:', currentPage.designs.length, 'designs');
         setDesigns(currentPage.designs);
+      } else {
+        console.log('Canvas: No designs found in current page');
       }
+    } else {
+      console.log('Canvas: No current page available');
     }
   }, [currentPage]);
   
   // Save designs to page whenever they change
   useEffect(() => {
     if (currentPage && designs.length > 0) {
+      console.log('Canvas: Designs changed, saving to page:', designs.length, 'designs');
       updatePage(currentPage.id, { designs: designs, baseImage: undefined });
     }
-  }, [designs]);
+  }, [designs, currentPage]);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
@@ -400,17 +410,27 @@ export const Canvas: React.FC = () => {
   // Handle image pasting - updated for multiple images
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      if (!currentPage) return;
+      if (!currentPage) {
+        console.log('Canvas: No current page available for paste');
+        return;
+      }
       
       const items = e.clipboardData?.items;
-      if (!items) return;
+      if (!items) {
+        console.log('Canvas: No clipboard data items available');
+        return;
+      }
       
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         
         if (item.type.indexOf('image') !== -1) {
+          console.log('Canvas: Found image in clipboard');
           const blob = item.getAsFile();
-          if (!blob) continue;
+          if (!blob) {
+            console.log('Canvas: Could not get file from clipboard item');
+            continue;
+          }
           
           const reader = new FileReader();
           reader.onload = (event) => {
@@ -434,12 +454,7 @@ export const Canvas: React.FC = () => {
                 const canvasCenterX = (containerCenterX - position.x) / scale;
                 const canvasCenterY = (containerCenterY - position.y) / scale;
 
-                console.log('--- Paste Event ---');
-                console.log('Container Rect:', containerRect);
-                console.log('Container Center:', { x: containerCenterX, y: containerCenterY });
-                console.log('Canvas Position (Pan):', position);
-                console.log('Canvas Scale (Zoom):', scale);
-                console.log('Calculated Canvas Center:', { x: canvasCenterX, y: canvasCenterY });
+                console.log('Canvas: Creating new design from pasted image');
                 
                 // Create a new design object with unique ID
                 const newDesign: Design = {
@@ -447,6 +462,8 @@ export const Canvas: React.FC = () => {
                   imageUrl: imageUrl,
                   position: { x: canvasCenterX, y: canvasCenterY }
                 };
+                
+                console.log('Canvas: New design created:', newDesign.id);
                 
                 // Add the new design to the array
                 setDesigns(prevDesigns => [...prevDesigns, newDesign]);

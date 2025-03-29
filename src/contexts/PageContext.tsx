@@ -40,18 +40,24 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadPages = async () => {
       try {
         setLoading(true);
+        console.log('PageContext: Loading pages from Supabase');
         // Check if user is authenticated
         const isAuthenticated = await supabaseService.getSession();
+        console.log('PageContext: User authentication status:', !!isAuthenticated);
         
         if (isAuthenticated) {
           // Load pages from Supabase
           const pagesFromDB = await supabaseService.getPages();
+          console.log('PageContext: Loaded pages from Supabase:', pagesFromDB);
           
           if (pagesFromDB.length > 0) {
+            console.log('PageContext: Using existing pages from DB');
             setPages(pagesFromDB);
             setCurrentPage(pagesFromDB[0]);
+            console.log('PageContext: First page designs:', pagesFromDB[0].designs);
           } else {
             // Create a default page if no pages exist
+            console.log('PageContext: No pages found, creating default page');
             const defaultPage: Page = {
               id: generateUUID(),
               name: 'Default Page',
@@ -61,11 +67,13 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Save the default page to Supabase
             const savedPage = await supabaseService.createPage(defaultPage);
+            console.log('PageContext: Created new default page in DB:', savedPage);
             setPages([savedPage]);
             setCurrentPage(savedPage);
           }
         } else {
           // If not authenticated, use a local default page
+          console.log('PageContext: User not authenticated, using local default page');
           const defaultPage: Page = {
             id: generateUUID(),
             name: 'Default Page',
@@ -79,6 +87,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Error loading pages:', error);
         // Fallback to local default page on error
+        console.log('PageContext: Error loading pages, using fallback default page');
         const defaultPage: Page = {
           id: generateUUID(),
           name: 'Default Page',
@@ -113,7 +122,9 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (isAuthenticated) {
         // Save the new page to Supabase
+        console.log('PageContext: Creating new page in Supabase:', newPage);
         savedPage = await supabaseService.createPage(newPage);
+        console.log('PageContext: Saved new page to Supabase:', savedPage);
       }
       
       setPages(prevPages => [...prevPages, savedPage]);
@@ -129,6 +140,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Update a page
   const updatePage = async (id: string, updates: Partial<Page>) => {
     try {
+      console.log(`PageContext: Updating page ${id} with:`, updates);
+      
       // Update local state first for immediate UI feedback
       setPages(prevPages => 
         prevPages.map(page => 
@@ -146,11 +159,16 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Check if user is authenticated
       const isAuthenticated = await supabaseService.getSession();
+      console.log('PageContext: User authentication status for update:', !!isAuthenticated);
       
       if (isAuthenticated) {
-        // Save the updated page to Supabase (async, don't await)
+        // Save the updated page to Supabase
+        console.log('PageContext: Saving page update to Supabase');
         supabaseService.updatePage(id, updates)
+          .then(result => console.log('PageContext: Successfully updated page in Supabase:', result))
           .catch(error => console.error('Error saving page update to Supabase:', error));
+      } else {
+        console.log('PageContext: User not authenticated, skipping Supabase update');
       }
     } catch (error) {
       console.error('Error updating page:', error);
