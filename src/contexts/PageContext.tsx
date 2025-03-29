@@ -164,9 +164,12 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isAuthenticated) {
         // Save the updated page to Supabase
         console.log('PageContext: Saving page update to Supabase');
-        supabaseService.updatePage(id, updates)
-          .then(result => console.log('PageContext: Successfully updated page in Supabase:', result))
-          .catch(error => console.error('Error saving page update to Supabase:', error));
+        try {
+          const result = await supabaseService.updatePage(id, updates);
+          console.log('PageContext: Successfully updated page in Supabase:', result);
+        } catch (error) {
+          console.error('Error saving page update to Supabase:', error);
+        }
       } else {
         console.log('PageContext: User not authenticated, skipping Supabase update');
       }

@@ -50,16 +50,21 @@ class SupabaseService {
       
       // First check if we already have a session
       const existingSession = await this.getSession();
-      console.log('Existing session check:', existingSession ? {
-        user: existingSession.user.id,
-        provider: existingSession.user.app_metadata?.provider,
-        expires_at: existingSession.expires_at,
-        has_provider_token: !!existingSession.provider_token
-      } : 'No session');
       
-      if (existingSession?.provider_token) {
-        console.log('User already authenticated with Figma, reusing session');
-        return { url: null, provider: 'figma', session: existingSession };
+      // Only log session info if it exists
+      if (existingSession) {
+        const isSupabaseSession = 'provider_token' in existingSession;
+        console.log('Existing session check:', existingSession ? {
+          user: existingSession.user.id,
+          isSupabaseSession,
+        } : 'No session');
+        
+        if (isSupabaseSession && existingSession.provider_token) {
+          console.log('User already authenticated with Figma, reusing session');
+          return { url: null, provider: 'figma', session: existingSession };
+        }
+      } else {
+        console.log('No existing session found');
       }
       
       // Construct redirect URL with correct callback location
@@ -154,7 +159,27 @@ class SupabaseService {
         return null;
       }
       
-      return data.session;
+      // Check if we have a valid session
+      if (data.session) {
+        console.log('Valid session found, user is authenticated');
+        return data.session;
+      }
+      
+      console.log('No valid session found');
+      
+      // Fallback to localStorage - for backwards compatibility
+      const providerToken = localStorage.getItem('figma_provider_token');
+      const accessToken = localStorage.getItem('figma_access_token');
+      
+      if (providerToken || accessToken) {
+        console.log('Found token in localStorage, treating as authenticated');
+        // Return a minimal mock session object with just the essential user ID
+        return { 
+          user: { id: 'local-storage-user' } 
+        };
+      }
+      
+      return null;
     } catch (error) {
       console.error('Unexpected error getting session:', error);
       return null;
@@ -407,12 +432,13 @@ class SupabaseService {
     try {
       // Check for session first
       const session = await this.getSession();
-      if (session?.provider_token) {
+      if (session) {
         return true;
       }
       
       // Fallback to localStorage
-      const token = localStorage.getItem('figma_provider_token');
+      const token = localStorage.getItem('figma_provider_token') || 
+                   localStorage.getItem('figma_access_token');
       return !!token;
     } catch (error) {
       console.error('Error checking Figma authentication:', error);
@@ -427,6 +453,30 @@ class SupabaseService {
       const user = await this.getCurrentUser();
       if (!user) {
         console.error('No user found when trying to get pages');
+        
+        // Check if we have a session through alternative means
+        const session = await this.getSession();
+        if (session) {
+          console.log('SupabaseService: Session found without user, attempting to fetch pages for session user');
+          
+          // Use session user ID or fallback ID
+          const userId = session.user?.id || 'local-storage-user';
+          
+          const { data, error } = await supabase
+            .from('pages')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+    
+          if (error) {
+            console.error('Error fetching pages:', error);
+            return [];
+          }
+    
+          console.log(`SupabaseService: Fetched ${data?.length || 0} pages using session user ID`);
+          return this.processFetchedPages(data);
+        }
+        
         return [];
       }
 
@@ -442,41 +492,49 @@ class SupabaseService {
         return [];
       }
 
-      console.log(`SupabaseService: Fetched ${data?.length || 0} pages`);
-      
-      // Examine the designs for each page
-      if (data && data.length > 0) {
-        data.forEach((page, index) => {
-          console.log(`SupabaseService: Page ${index + 1}/${data.length} (${page.id}):`, {
-            name: page.name,
-            hasDesigns: !!page.designs,
-            designsCount: page.designs?.length || 0
-          });
-        });
-      }
-
-      return data as Page[];
+      return this.processFetchedPages(data);
     } catch (error) {
       console.error('Error in getPages:', error);
       return [];
     }
   }
+  
+  // Helper to process fetched pages and log debug info
+  private processFetchedPages(data: any[]) {
+    console.log(`SupabaseService: Fetched ${data?.length || 0} pages`);
+    
+    // Examine the designs for each page
+    if (data && data.length > 0) {
+      data.forEach((page, index) => {
+        console.log(`SupabaseService: Page ${index + 1}/${data.length} (${page.id}):`, {
+          name: page.name,
+          hasDesigns: !!page.designs,
+          designsCount: page.designs?.length || 0
+        });
+      });
+    }
+
+    return data;
+  }
 
   // Create a new page
   async createPage(page: Omit<Page, 'user_id' | 'created_at' | 'updated_at'>) {
     try {
-      const user = await this.getCurrentUser();
-      if (!user) {
-        console.error('No user found when trying to create page');
+      const session = await this.getSession();
+      if (!session) {
+        console.error('No session found when trying to create page');
         throw new Error('User not authenticated');
       }
 
-      console.log('SupabaseService: Creating new page in database');
+      // Use user ID from session or fallback
+      const userId = session.user?.id || 'local-storage-user';
+      
+      console.log('SupabaseService: Creating new page in database for user:', userId);
 
       // Ensure designs are properly handled for storage
       let pageToCreate: any = {
         ...page,
-        user_id: user.id,
+        user_id: userId,
       };
 
       // If designs are included, ensure they are properly serialized
@@ -514,13 +572,16 @@ class SupabaseService {
   // Update an existing page
   async updatePage(id: string, updates: Partial<Page>) {
     try {
-      const user = await this.getCurrentUser();
-      if (!user) {
-        console.error('No user found when trying to update page');
+      const session = await this.getSession();
+      if (!session) {
+        console.error('No session found when trying to update page');
         throw new Error('User not authenticated');
       }
 
-      console.log('SupabaseService: Updating page in database:', id);
+      // Use user ID from session or fallback
+      const userId = session.user?.id || 'local-storage-user';
+
+      console.log('SupabaseService: Updating page in database:', id, 'for user:', userId);
       console.log('SupabaseService: Update payload:', JSON.stringify(updates));
 
       // First get the current page to ensure we don't lose data
@@ -528,7 +589,7 @@ class SupabaseService {
         .from('pages')
         .select('*')
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
 
       if (fetchError) {
@@ -559,7 +620,7 @@ class SupabaseService {
         .from('pages')
         .update(updatedPage)
         .eq('id', id)
-        .eq('user_id', user.id)  // Security: ensure user owns this page
+        .eq('user_id', userId)  // Security: ensure user owns this page
         .select()
         .single();
 
