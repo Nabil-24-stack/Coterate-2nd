@@ -286,7 +286,7 @@ export const Canvas: React.FC = () => {
         clearTimeout(debouncedUpdateRef.current);
       }
     };
-  }, [designs, currentPage, designsInitialized]);
+  }, [designs, currentPage?.id, designsInitialized, updatePage]);
   
   // Reset canvas position and scale
   const resetCanvas = () => {
