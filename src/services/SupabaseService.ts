@@ -181,6 +181,47 @@ class SupabaseService {
   
   // Flag to prevent repeated API key error logging
   private hasLoggedApiKeyErrorRecently = false;
+  
+  // Add throttling for common log messages
+  private logThrottles: Record<string, number> = {};
+  private lastLogs: Record<string, string> = {};
+  
+  // Log throttling method to reduce console spam
+  private throttledLog(key: string, level: 'log' | 'warn' | 'error', message: string, ...args: any[]) {
+    const now = Date.now();
+    const lastLog = this.lastLogs[key];
+    
+    // If this is a duplicate of the last message and within throttle period, skip it
+    if (lastLog === message && this.logThrottles[key] && now < this.logThrottles[key]) {
+      return;
+    }
+    
+    // Update throttle time (5 seconds for most messages)
+    this.logThrottles[key] = now + 5000;
+    this.lastLogs[key] = message;
+    
+    // Use the appropriate console method
+    if (level === 'error') {
+      console.error(message, ...args);
+    } else if (level === 'warn') {
+      console.warn(message, ...args);
+    } else {
+      console.log(message, ...args);
+    }
+  }
+  
+  // Logging shortcuts
+  private logInfo(key: string, message: string, ...args: any[]) {
+    this.throttledLog(key, 'log', message, ...args);
+  }
+  
+  private logWarning(key: string, message: string, ...args: any[]) {
+    this.throttledLog(key, 'warn', message, ...args);
+  }
+  
+  private logError(key: string, message: string, ...args: any[]) {
+    this.throttledLog(key, 'error', message, ...args);
+  }
 
   // Static method to get the instance
   static getInstance(): SupabaseService {
@@ -394,30 +435,28 @@ class SupabaseService {
   // Get the current user session
   async getSession() {
     try {
-      console.log('Getting session from Supabase');
+      this.logInfo('get-session', 'Getting session from Supabase');
       const { data, error } = await this.supabaseClient.auth.getSession();
       
-      console.log('Session data:', data);
-      
       if (error) {
-        console.error('Error getting session:', error);
+        this.logError('session-error', 'Error getting session:', error);
         return null;
       }
       
       // Check if we have a valid session
       if (data.session) {
-        console.log('Valid session found, user is authenticated');
+        this.logInfo('session-found', 'Valid session found, user is authenticated');
         return data.session;
       }
       
-      console.log('No valid session found');
+      this.logInfo('no-session', 'No valid session found');
       
       // Fallback to localStorage - for backwards compatibility
       const providerToken = localStorage.getItem('figma_provider_token');
       const accessToken = localStorage.getItem('figma_access_token');
       
       if (providerToken || accessToken) {
-        console.log('Found token in localStorage, treating as authenticated');
+        this.logInfo('local-token', 'Found token in localStorage, treating as authenticated');
         // Return a minimal mock session object with just the essential user ID
         return { 
           user: { id: 'local-storage-user' } 
@@ -426,7 +465,7 @@ class SupabaseService {
       
       return null;
     } catch (error) {
-      console.error('Unexpected error getting session:', error);
+      this.logError('session-unexpected', 'Unexpected error getting session:', error);
       return null;
     }
   }
@@ -732,18 +771,49 @@ class SupabaseService {
   // Update the getPages method to use resilient operation
   async getPages() {
     try {
-      console.log('SupabaseService: Attempting to fetch pages');
+      this.logInfo('get-pages', 'Attempting to fetch pages');
       const user = await this.getCurrentUser();
-      if (!user) {
-        console.log('No user found when trying to get pages');
-        
-        // Check if we have a session through alternative means
-        const session = await this.getSession();
-        if (session) {
-          console.log('SupabaseService: Session found without user, attempting to fetch pages for session user');
-          
-          // Use session user ID or fallback ID
-          const userId = session.user?.id || 'local-storage-user';
+      
+      // Check if we have a session through alternative means
+      const session = await this.getSession();
+      
+      // If we have a session but it's a local-storage-user, skip Supabase queries
+      if (session?.user?.id === 'local-storage-user') {
+        this.logInfo('local-pages', 'Using localStorage user, skipping Supabase queries');
+        // Try to load from localStorage
+        try {
+          const storedPages = localStorage.getItem('coterate_pages');
+          if (storedPages) {
+            const parsedPages = JSON.parse(storedPages) as Page[];
+            this.logInfo('loaded-local', `Loaded ${parsedPages.length} pages from localStorage`);
+            return parsedPages;
+          }
+        } catch (e) {
+          this.logError('parse-local', 'Error parsing localStorage pages:', e);
+        }
+        return [];
+      }
+      
+      // If we have a regular user, proceed with Supabase queries
+      if (user) {
+        this.logInfo('user-pages', `Fetching pages for user: ${user.id}`);
+        return await this.resilientOperation('getPages', async () => {
+          const { data, error } = await this.supabaseClient
+            .from('pages')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          return this.processFetchedPages(data);
+        }, []);
+      }
+      
+      // If we have a session but no user, try using the session user ID
+      if (session) {
+        const userId = session.user?.id;
+        if (userId && userId !== 'local-storage-user') {
+          this.logInfo('session-pages', `Attempting to fetch pages for session user: ${userId}`);
           
           return await this.resilientOperation('getPages', async () => {
             const { data, error } = await this.supabaseClient
@@ -751,30 +821,20 @@ class SupabaseService {
               .select('*')
               .eq('user_id', userId)
               .order('created_at', { ascending: false });
-      
+    
             if (error) throw error;
             
-            console.log(`SupabaseService: Fetched ${data?.length || 0} pages using session user ID`);
+            this.logInfo('pages-fetched', `Fetched ${data?.length || 0} pages using session user ID`);
             return this.processFetchedPages(data);
           }, []);
         }
-        
-        return [];
       }
-
-      console.log('SupabaseService: Fetching pages for user:', user.id);
-      return await this.resilientOperation('getPages', async () => {
-        const { data, error } = await this.supabaseClient
-          .from('pages')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        return this.processFetchedPages(data);
-      }, []);
+      
+      // If we reach here, we have no valid user or session
+      this.logInfo('no-user', 'No valid user or session found for fetching pages');
+      return [];
     } catch (error) {
-      console.error('Error in getPages:', error);
+      this.logError('get-pages-error', 'Error in getPages:', error);
       return [];
     }
   }
@@ -802,14 +862,30 @@ class SupabaseService {
     try {
       const session = await this.getSession();
       if (!session) {
-        console.error('No session found when trying to create page');
+        this.logError('create-no-session', 'No session found when trying to create page');
         throw new Error('User not authenticated');
       }
 
       // Use user ID from session or fallback
       const userId = session.user?.id || 'local-storage-user';
       
-      console.log('SupabaseService: Creating new page in database for user:', userId);
+      // Skip Supabase updates for local-storage-user since they'll always fail with 401
+      if (userId === 'local-storage-user') {
+        this.logInfo('create-local-user', 'Using local storage user, skipping Supabase create');
+        
+        // Return a local page with the properties needed for the app to function
+        const localPage: Page = {
+          ...page,
+          id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          user_id: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        return localPage;
+      }
+      
+      this.logInfo('create-page', `Creating new page in database for user: ${userId}`);
 
       // Ensure designs are properly handled for storage
       let pageToCreate: any = {
@@ -819,7 +895,7 @@ class SupabaseService {
 
       // If designs are included, ensure they are properly serialized
       if (page.designs && Array.isArray(page.designs)) {
-        console.log('SupabaseService: Processing designs array for new page, count:', page.designs.length);
+        this.logInfo('create-designs', `Processing designs array for new page, count: ${page.designs.length}`);
         // Clone to avoid reference issues
         const designsToStore = JSON.parse(JSON.stringify(page.designs));
         pageToCreate.designs = designsToStore;
@@ -828,8 +904,6 @@ class SupabaseService {
         pageToCreate.designs = [];
       }
 
-      console.log('SupabaseService: Creating page with data:', JSON.stringify(pageToCreate));
-
       const { data, error } = await this.supabaseClient
         .from('pages')
         .insert([pageToCreate])
@@ -837,11 +911,11 @@ class SupabaseService {
         .single();
 
       if (error) {
-        console.error('Error creating page:', error);
+        this.logError('create-error', 'Error creating page:', error);
         throw error;
       }
 
-      console.log('SupabaseService: New page created successfully:', data?.id);
+      this.logInfo('create-success', `New page created successfully: ${data?.id}`);
       // Convert to Page type, ensuring it has the required properties
       return {
         id: data.id,
@@ -849,7 +923,7 @@ class SupabaseService {
         ...data
       } as Page;
     } catch (error) {
-      console.error('Error in createPage:', error);
+      this.logError('create-exception', 'Error in createPage:', error);
       throw error;
     }
   }
@@ -858,13 +932,20 @@ class SupabaseService {
   async updatePage(id: string, updates: Partial<Page>) {
     const session = await this.getSession();
     if (!session) {
-      console.log('No session found when trying to update page, using localStorage only');
+      this.logInfo('update-no-session', 'No session found when trying to update page, using localStorage only');
       return null;
     }
 
     // Use user ID from session or fallback
     const userId = session.user?.id || 'local-storage-user';
-    console.log('SupabaseService: Updating page in database:', id, 'for user:', userId);
+    
+    // Skip Supabase updates for local-storage-user since they'll always fail with 401
+    if (userId === 'local-storage-user') {
+      this.logInfo('update-local-user', 'Using local storage user, skipping Supabase update');
+      return null;
+    }
+    
+    this.logInfo('update-page', `Updating page in database: ${id} for user: ${userId}`);
     
     return await this.resilientOperation('updatePage', async () => {
       // First get the current page to ensure we don't lose data
@@ -917,26 +998,35 @@ class SupabaseService {
   // Delete a page
   async deletePage(id: string) {
     try {
-      const user = await this.getCurrentUser();
-      if (!user) {
-        console.error('No user found when trying to delete page');
+      const session = await this.getSession();
+      if (!session) {
+        this.logError('delete-no-session', 'No session found when trying to delete page');
         throw new Error('User not authenticated');
+      }
+      
+      // Use user ID from session
+      const userId = session.user?.id;
+      
+      // Skip Supabase calls for local-storage-user
+      if (userId === 'local-storage-user') {
+        this.logInfo('delete-local-user', 'Using local storage user, skipping Supabase delete');
+        return true;
       }
 
       const { error } = await this.supabaseClient
         .from('pages')
         .delete()
         .eq('id', id)
-        .eq('user_id', user.id);  // Security: ensure user owns this page
+        .eq('user_id', userId);  // Security: ensure user owns this page
 
       if (error) {
-        console.error('Error deleting page:', error);
+        this.logError('delete-error', 'Error deleting page:', error);
         throw error;
       }
 
       return true;
     } catch (error) {
-      console.error('Error in deletePage:', error);
+      this.logError('delete-exception', 'Error in deletePage:', error);
       throw error;
     }
   }
