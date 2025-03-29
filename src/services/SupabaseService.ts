@@ -238,7 +238,15 @@ class SupabaseService {
     try {
       // First try to get the token from the session
       const session = await this.getSession();
-      let token = session?.provider_token;
+      let token: string | null = null;
+      
+      // Safely check for provider_token in session
+      if (session && typeof session === 'object' && 'provider_token' in session) {
+        const providerToken = session.provider_token;
+        if (typeof providerToken === 'string') {
+          token = providerToken;
+        }
+      }
       
       // If no token in session, check localStorage as fallback
       if (!token) {
@@ -291,7 +299,10 @@ class SupabaseService {
       
       // First try to get provider token
       const session = await this.getSession();
-      const hasSessionToken = !!session?.provider_token;
+      
+      // Safely check for provider_token
+      const hasSessionToken = session && typeof session === 'object' && 
+                            'provider_token' in session && !!session.provider_token;
       const hasLocalToken = !!localStorage.getItem('figma_provider_token');
       
       console.log('Token availability check:', {
