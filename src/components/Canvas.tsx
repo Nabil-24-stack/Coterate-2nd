@@ -334,15 +334,22 @@ export const Canvas: React.FC = () => {
                 // Get the dimensions of the canvas container
                 const containerRect = canvasContainer.getBoundingClientRect();
                 
-                // Calculate the center of the viewport relative to the container
-                const viewportCenterX = containerRect.width / 2;
-                const viewportCenterY = containerRect.height / 2;
-                
-                // Calculate the position in canvas coordinates
-                // First, we need to determine where the center of the screen is in the canvas space
-                // The formula is: (screen_coord - position) / scale
-                const canvasCenterX = (viewportCenterX - position.x) / scale;
-                const canvasCenterY = (viewportCenterY - position.y) / scale;
+                // Calculate the center point *within* the container (in container coordinates)
+                const containerCenterX = containerRect.width / 2;
+                const containerCenterY = containerRect.height / 2;
+
+                // Convert the container center point to canvas coordinates
+                // We need to account for the canvas panning (position) and zoom (scale)
+                // Formula: canvasCoord = (containerCoord - pan) / scale
+                const canvasCenterX = (containerCenterX - position.x) / scale;
+                const canvasCenterY = (containerCenterY - position.y) / scale;
+
+                console.log('--- Paste Event ---');
+                console.log('Container Rect:', containerRect);
+                console.log('Container Center:', { x: containerCenterX, y: containerCenterY });
+                console.log('Canvas Position (Pan):', position);
+                console.log('Canvas Scale (Zoom):', scale);
+                console.log('Calculated Canvas Center:', { x: canvasCenterX, y: canvasCenterY });
                 
                 // Create a new design object with unique ID
                 const newDesign: Design = {
