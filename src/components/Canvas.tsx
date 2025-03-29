@@ -113,7 +113,6 @@ const IterationButton = styled.button`
   color: white;
   border: none;
   border-radius: 50%;
-  font-size: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,7 +121,6 @@ const IterationButton = styled.button`
   z-index: 20;
   transition: background-color 0.2s ease, transform 0.2s ease;
   padding: 0;
-  line-height: 1;
   
   &:hover {
     background-color: #0069d9;
@@ -135,23 +133,13 @@ const IterationButton = styled.button`
   }
 `;
 
-// Plus symbol inside the iteration button
-const PlusSymbol = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 22px;
-  line-height: 0;
-  position: relative;
-  top: 0;
-  
-  &::before {
-    content: '+';
-    display: block;
-  }
-`;
+// SVG Plus icon for perfect centering
+const PlusIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 2V14" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M2 8H14" stroke="white" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
 
 // Empty state message
 const EmptyCanvasMessage = styled.div`
@@ -515,7 +503,7 @@ export const Canvas: React.FC = () => {
                         onClick={(e) => handleIterationClick(e, design.id)}
                         title="Create Iteration"
                       >
-                        <PlusSymbol />
+                        <PlusIcon />
                       </IterationButton>
                     )}
                   </DesignCard>
