@@ -325,11 +325,27 @@ export const Canvas: React.FC = () => {
           reader.onload = (event) => {
             const imageUrl = event.target?.result as string;
             if (imageUrl && currentPage) {
+              // Calculate the center of the current view in canvas coordinates
+              const canvasElement = canvasRef.current;
+              let centerX = 0;
+              let centerY = 0;
+              
+              if (canvasElement) {
+                const rect = canvasElement.getBoundingClientRect();
+                // Get center of viewport in screen coordinates
+                const screenCenterX = rect.left + rect.width / 2;
+                const screenCenterY = rect.top + rect.height / 2;
+                
+                // Convert screen coordinates to canvas coordinates
+                centerX = (screenCenterX - position.x) / scale;
+                centerY = (screenCenterY - position.y) / scale;
+              }
+              
               // Create a new design object with unique ID
               const newDesign: Design = {
                 id: `design-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                 imageUrl: imageUrl,
-                position: { x: 0, y: 0 }
+                position: { x: centerX, y: centerY }
               };
               
               // Add the new design to the array
@@ -349,7 +365,7 @@ export const Canvas: React.FC = () => {
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage, updatePage]);
+  }, [currentPage, updatePage, position, scale]);
   
   // Keyboard shortcuts
   useEffect(() => {
