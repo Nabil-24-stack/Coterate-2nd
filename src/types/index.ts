@@ -15,6 +15,7 @@ export interface DesignIteration {
   htmlContent: string;
   cssContent: string;
   position: { x: number; y: number };
+  dimensions?: { width: number; height: number };
   analysis?: DesignAnalysis;
   created_at?: string;
 }

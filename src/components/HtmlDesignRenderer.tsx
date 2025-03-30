@@ -18,6 +18,7 @@ const RendererContainer = styled.div<{ width?: number; height?: number }>`
   position: relative;
   width: ${props => props.width ? `${props.width}px` : 'auto'};
   height: ${props => props.height ? `${props.height}px` : 'auto'};
+  min-width: 320px;
   overflow: hidden;
   background-color: white;
 `;
@@ -40,7 +41,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Combine HTML and CSS content
+  // Combine HTML and CSS content with viewport settings to ensure proper sizing
   const combinedContent = `
     <!DOCTYPE html>
     <html>
@@ -54,10 +55,18 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           padding: 0;
           box-sizing: border-box;
         }
+        
+        html, body {
+          width: ${width ? `${width}px` : '100%'};
+          height: ${height ? `${height}px` : '100%'};
+          overflow: hidden;
+        }
+        
         body {
           font-family: 'Arial', sans-serif;
           line-height: 1.5;
         }
+        
         /* Custom CSS */
         ${cssContent || ''}
       </style>
@@ -98,7 +107,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     };
     
     renderHtml();
-  }, [htmlContent, cssContent, combinedContent, onRender]);
+  }, [htmlContent, cssContent, combinedContent, onRender, width, height]);
 
   // Method to convert the rendered HTML to an image
   const convertToImage = async (): Promise<string | null> => {
@@ -115,6 +124,8 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         useCORS: true,
         logging: false,
         scale: 2, // Higher scale for better quality
+        width: width,
+        height: height
       });
 
       // Convert canvas to data URL
@@ -141,6 +152,9 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           ref={iframeRef} 
           title="Design Renderer"
           sandbox="allow-same-origin"
+          width={width}
+          height={height}
+          style={{ width: width ? `${width}px` : '100%', height: height ? `${height}px` : '100%' }}
         />
       )}
     </RendererContainer>

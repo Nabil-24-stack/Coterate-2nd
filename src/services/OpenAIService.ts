@@ -64,6 +64,9 @@ class OpenAIService {
         base64Image = await this.blobToBase64(blob);
       }
       
+      // Get image dimensions
+      const dimensions = await this.getImageDimensions(imageUrl);
+      
       const requestBody = {
         model: 'gpt-4o',
         messages: [
@@ -72,15 +75,22 @@ class OpenAIService {
             content: `You are a UI/UX expert who analyzes designs and creates improved versions.
             First, carefully analyze the design image to identify all UI elements, layout structure, colors, typography, and spacing.
             Identify specific strengths and weaknesses of the design, focusing on visual hierarchy, contrast, component selection, spacing, alignment, and overall usability.
+            
             Then, create an improved HTML and CSS version addressing the identified issues while maintaining the original purpose and branding.
-            The HTML/CSS should be complete and ready to render directly in a browser.`
+            The HTML/CSS should be complete and ready to render directly in a browser.
+
+            IMPORTANT: The generated HTML/CSS must match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height.
+            Make sure all elements are properly positioned and sized to exactly match the original layout's scale and proportions.
+            The entire design must be visible at these dimensions without scrolling.`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Analyze this UI design and create an improved HTML/CSS version addressing any issues you find with visual hierarchy, contrast, spacing, or usability while maintaining the original purpose and style.'
+                text: `Analyze this UI design and create an improved HTML/CSS version addressing any issues you find with visual hierarchy, contrast, spacing, or usability while maintaining the original purpose and style. 
+                
+                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your HTML/CSS version maintains these EXACT dimensions and scales all elements appropriately.`
               },
               {
                 type: 'image_url',
@@ -139,6 +149,27 @@ class OpenAIService {
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
+    });
+  }
+  
+  // Add a helper function to get image dimensions
+  private async getImageDimensions(src: string): Promise<{width: number, height: number}> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({
+          width: img.naturalWidth,
+          height: img.naturalHeight
+        });
+      };
+      img.onerror = () => {
+        // Default dimensions if we can't get the actual ones
+        resolve({
+          width: 800,
+          height: 600
+        });
+      };
+      img.src = src;
     });
   }
   

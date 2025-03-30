@@ -565,7 +565,7 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(designId);
   };
   
-  // Update the handleIterationClick method to use a more granular process status
+  // Update the handleIterationClick method to preserve original image dimensions
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     console.log(`Iteration requested for design: ${designId}`);
@@ -593,6 +593,10 @@ export const Canvas: React.FC = () => {
     );
     
     try {
+      // Get the original image dimensions before proceeding
+      const originalDimensions = await getImageDimensions(designToIterate.imageUrl);
+      console.log('Original image dimensions:', originalDimensions);
+      
       // Call OpenAI service to analyze the image and generate HTML
       const result = await openAIService.analyzeDesignAndGenerateHTML(designToIterate.imageUrl);
       
@@ -629,6 +633,7 @@ export const Canvas: React.FC = () => {
             components: result.metadata.components
           }
         },
+        dimensions: originalDimensions, // Add the original dimensions to the iteration
         created_at: new Date().toISOString()
       };
       
@@ -677,6 +682,23 @@ export const Canvas: React.FC = () => {
         )
       );
     }
+  };
+  
+  // Add a helper function to get image dimensions
+  const getImageDimensions = (src: string): Promise<{width: number, height: number}> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({
+          width: img.naturalWidth,
+          height: img.naturalHeight
+        });
+      };
+      img.onerror = (err) => {
+        reject(err);
+      };
+      img.src = src;
+    });
   };
   
   // Toggle analysis panel visibility
@@ -989,8 +1011,8 @@ export const Canvas: React.FC = () => {
                             ref={htmlRendererRef}
                             htmlContent={iteration.htmlContent}
                             cssContent={iteration.cssContent}
-                            width={Math.min(800, design.imageUrl ? designRefs.current[design.id]?.clientWidth || 800 : 800)}
-                            height={design.imageUrl ? designRefs.current[design.id]?.clientHeight || 600 : 600}
+                            width={iteration.dimensions?.width || (design.imageUrl ? designRefs.current[design.id]?.clientWidth || 800 : 800)}
+                            height={iteration.dimensions?.height || (design.imageUrl ? designRefs.current[design.id]?.clientHeight || 600 : 600)}
                           />
                           
                           {/* Add a small badge indicating this is an iteration */}
