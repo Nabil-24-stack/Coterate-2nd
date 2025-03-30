@@ -98,6 +98,16 @@ class OpenAIService {
             4. Use specific, descriptive keywords that match the original image content (e.g., "business,meeting,office" for a corporate meeting)
             5. Make sure the alt text is descriptive and accessible
             6. Apply proper sizing and styling to match the original design's dimensions and aspect ratio
+            7. IMPORTANT: Do not use lazy loading attributes or srcset as they won't work in the iframe
+            8. Apply width and height attributes directly to the img tag to ensure proper rendering
+            9. If image is not displaying properly, check that the src URL is correctly formed without any spaces
+            10. For best results, wrap each img in a div with specific dimensions and overflow:hidden
+            
+            Image implementation example:
+            <div style="width: 300px; height: 200px; overflow: hidden;">
+              <img src="https://source.unsplash.com/random/?mountain,landscape" alt="Beautiful mountain landscape" 
+                   width="300" height="200" style="object-fit: cover; width: 100%; height: 100%;">
+            </div>
             
             Include the Font Awesome CDN link in the <head> section of your HTML.
             Examples of common Font Awesome icons:
@@ -127,6 +137,8 @@ class OpenAIService {
                 1. Identify what each image represents (e.g., product, profile, landscape, etc.)
                 2. Use Unsplash photos that match the same theme with the format: <img src="https://source.unsplash.com/random/?[specific keywords]">
                 3. Ensure images maintain the same dimensions and aspect ratio as the original
+                4. Always include explicit width and height attributes on img tags
+                5. Wrap images in a container div with overflow:hidden and the exact dimensions needed
                 
                 Include the Font Awesome CDN in your HTML head.`
               },

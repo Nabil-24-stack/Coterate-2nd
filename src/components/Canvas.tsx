@@ -1110,6 +1110,11 @@ export const Canvas: React.FC = () => {
               <h4>Images</h4>
               <p style={{ fontSize: '14px', marginBottom: '12px' }}>
                 Royalty-free stock photos from Unsplash are used to replace placeholder images in the design.
+                Images are dynamically loaded using the Unsplash Random Photo API with relevant keyword tags.
+              </p>
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
+                Note: If an image doesn't appear immediately, it may still be loading from Unsplash.
+                Each refresh generates new random images that match the keywords.
               </p>
               
               {currentAnalysis.analysis?.metadata?.colors && (

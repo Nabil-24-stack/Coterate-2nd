@@ -48,6 +48,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob: 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com;">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       <style>
         /* Reset styles */
@@ -72,11 +73,74 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         img[src*="unsplash.com"] {
           object-fit: cover;
           background-color: #f0f0f0; /* Light gray placeholder */
+          display: block !important;
+          visibility: visible !important;
+          width: 100%;
+          height: 100%;
+        }
+        
+        .img-container {
+          position: relative;
+          overflow: hidden;
         }
         
         /* Custom CSS */
         ${cssContent || ''}
       </style>
+      <script>
+        // Helper script to ensure images load properly
+        document.addEventListener('DOMContentLoaded', function() {
+          // Process all Unsplash images
+          const unsplashImages = document.querySelectorAll('img[src*="unsplash.com"]');
+          
+          unsplashImages.forEach(img => {
+            // Create correct URL format if needed
+            let src = img.getAttribute('src');
+            if (src) {
+              // Remove any spaces from the URL
+              src = src.replace(/\s+/g, '');
+              
+              // Check if URL is properly formatted
+              if (!src.includes('https://') && !src.startsWith('data:')) {
+                src = 'https://' + src.replace(/^[^\w]*/, '');
+              }
+              
+              // Update the src attribute
+              img.setAttribute('src', src);
+              
+              // Ensure image has dimensions
+              if (!img.getAttribute('width')) {
+                img.setAttribute('width', '100%');
+              }
+              if (!img.getAttribute('height')) {
+                img.setAttribute('height', '100%');
+              }
+              
+              // If parent is not a div with img-container class, wrap it
+              const parent = img.parentElement;
+              if (!parent.classList.contains('img-container')) {
+                const width = img.getAttribute('width');
+                const height = img.getAttribute('height');
+                
+                // Create wrapper
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('img-container');
+                wrapper.style.width = width.includes('%') ? width : width + 'px';
+                wrapper.style.height = height.includes('%') ? height : height + 'px';
+                
+                // Replace img with wrapper containing img
+                parent.replaceChild(wrapper, img);
+                wrapper.appendChild(img);
+                
+                // Update image styles
+                img.style.objectFit = 'cover';
+                img.style.width = '100%';
+                img.style.height = '100%';
+              }
+            }
+          });
+        });
+      </script>
     </head>
     <body>
       ${htmlContent || '<div>No content to display</div>'}
@@ -158,7 +222,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         <IsolatedFrame 
           ref={iframeRef} 
           title="Design Renderer"
-          sandbox="allow-same-origin allow-scripts allow-popups"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
           width={width}
           height={height}
           style={{ width: width ? `${width}px` : '100%', height: height ? `${height}px` : '100%' }}
