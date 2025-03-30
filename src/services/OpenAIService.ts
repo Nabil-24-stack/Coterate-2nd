@@ -94,19 +94,23 @@ class OpenAIService {
             For any images or photos identified in the UI:
             1. Identify the purpose and content of each image (e.g., product photo, hero image, profile picture, etc.)
             2. Use Unsplash for royalty-free stock photos that match the theme and purpose
-            3. Implement using this format: <img src="https://source.unsplash.com/random/?[keywords]" alt="[descriptive text]">
-            4. Use specific, descriptive keywords that match the original image content (e.g., "business,meeting,office" for a corporate meeting)
-            5. Make sure the alt text is descriptive and accessible
-            6. Apply proper sizing and styling to match the original design's dimensions and aspect ratio
-            7. IMPORTANT: Do not use lazy loading attributes or srcset as they won't work in the iframe
-            8. Apply width and height attributes directly to the img tag to ensure proper rendering
-            9. If image is not displaying properly, check that the src URL is correctly formed without any spaces
-            10. For best results, wrap each img in a div with specific dimensions and overflow:hidden
+            3. IMPORTANT: Use this EXACT format for image implementation (copy this exactly):
+               <div style="width: [width]px; height: [height]px; position: relative; overflow: hidden;">
+                 <img src="https://source.unsplash.com/random/[width]x[height]/?[keywords]" alt="[descriptive text]" 
+                     width="[width]" height="[height]" style="object-fit: cover; width: 100%; height: 100%;">
+               </div>
+            4. Replace [width] and [height] with the exact dimensions of the image in the original design
+            5. Replace [keywords] with specific, descriptive keywords that match the original image content (e.g., "cabin,woods,forest,nature" for a cabin image)
+            6. Replace [descriptive text] with accessible alt text
+            7. Always use the EXACT URL format: https://source.unsplash.com/random/[width]x[height]/?[keywords]
+            8. CRITICAL: Make sure there are NO SPACES in the URL, especially in the keywords
+            9. Use comma-separated keywords without spaces (e.g., "cabin,woods,nature")
+            10. Do not use lazy loading attributes or srcset
             
-            Image implementation example:
-            <div style="width: 300px; height: 200px; overflow: hidden;">
-              <img src="https://source.unsplash.com/random/?mountain,landscape" alt="Beautiful mountain landscape" 
-                   width="300" height="200" style="object-fit: cover; width: 100%; height: 100%;">
+            Image implementation example (THIS IS THE EXACT FORMAT TO USE):
+            <div style="width: 600px; height: 400px; position: relative; overflow: hidden;">
+              <img src="https://source.unsplash.com/random/600x400/?cabin,woods,forest" alt="Cabin in the woods" 
+                   width="600" height="400" style="object-fit: cover; width: 100%; height: 100%;">
             </div>
             
             Include the Font Awesome CDN link in the <head> section of your HTML.
@@ -135,10 +139,13 @@ class OpenAIService {
                 
                 For images in the UI:
                 1. Identify what each image represents (e.g., product, profile, landscape, etc.)
-                2. Use Unsplash photos that match the same theme with the format: <img src="https://source.unsplash.com/random/?[specific keywords]">
-                3. Ensure images maintain the same dimensions and aspect ratio as the original
-                4. Always include explicit width and height attributes on img tags
-                5. Wrap images in a container div with overflow:hidden and the exact dimensions needed
+                2. Use EXACTLY this format for Unsplash images: 
+                   <img src="https://source.unsplash.com/random/[width]x[height]/?[keywords]">
+                3. Always include the dimensions in the URL as shown above
+                4. Do not put spaces in the URL, especially in the keyword section
+                5. Use comma-separated keywords without spaces (e.g., "cabin,woods,nature")
+                6. Always wrap images in a div with position: relative; overflow: hidden; and the exact dimensions
+                7. Always include width and height attributes matching the original dimensions
                 
                 Include the Font Awesome CDN in your HTML head.`
               },

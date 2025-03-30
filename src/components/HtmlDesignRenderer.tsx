@@ -105,6 +105,24 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
                 src = 'https://' + src.replace(/^[^\w]*/, '');
               }
               
+              // Fix common Unsplash URL issues
+              if (src.includes('unsplash.com/random')) {
+                // Make sure it uses the correct format
+                src = src.replace(/unsplash\.com\/random\/?/, 'source.unsplash.com/random/');
+                
+                // Add dimensions if not present in URL
+                if (!src.includes('/random/')) {
+                  src = src.replace('/random', '/random/1200x800');
+                }
+              }
+              
+              // Force reload by adding a cache-busting parameter
+              if (!src.includes('?')) {
+                src += '?t=' + new Date().getTime();
+              } else {
+                src += '&t=' + new Date().getTime();
+              }
+              
               // Update the src attribute
               img.setAttribute('src', src);
               
@@ -115,6 +133,44 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
               if (!img.getAttribute('height')) {
                 img.setAttribute('height', '100%');
               }
+              
+              // Create a fallback mechanism for when the Unsplash image fails to load
+              img.onerror = function() {
+                console.error('Failed to load Unsplash image:', src);
+                
+                // Get original keywords from URL
+                let keywords = 'landscape';
+                const matchKeywords = src.match(/random\/(?:\d+x\d+\/)?([^?&]+)/);
+                if (matchKeywords && matchKeywords[1]) {
+                  keywords = matchKeywords[1];
+                }
+                
+                // Try a different approach with Picsum (reliable placeholder service)
+                this.src = 'https://picsum.photos/seed/' + keywords.replace(/,/g, '-') + '/800/600';
+                
+                // Add a note that this is a fallback image
+                const parent = this.parentElement;
+                if (parent) {
+                  const note = document.createElement('div');
+                  note.style.position = 'absolute';
+                  note.style.bottom = '5px';
+                  note.style.right = '5px';
+                  note.style.background = 'rgba(0,0,0,0.7)';
+                  note.style.color = 'white';
+                  note.style.padding = '2px 5px';
+                  note.style.fontSize = '10px';
+                  note.style.borderRadius = '3px';
+                  note.textContent = 'Placeholder Image';
+                  parent.appendChild(note);
+                }
+              };
+              
+              // Force image to load by setting src again
+              const tempSrc = img.src;
+              img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Tiny transparent gif
+              setTimeout(() => {
+                img.src = tempSrc;
+              }, 10);
               
               // If parent is not a div with img-container class, wrap it
               const parent = img.parentElement;
@@ -127,6 +183,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
                 wrapper.classList.add('img-container');
                 wrapper.style.width = width.includes('%') ? width : width + 'px';
                 wrapper.style.height = height.includes('%') ? height : height + 'px';
+                wrapper.style.position = 'relative'; // Ensure absolute positioning works inside
                 
                 // Replace img with wrapper containing img
                 parent.replaceChild(wrapper, img);
@@ -139,6 +196,25 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
               }
             }
           });
+          
+          // Create a utility function to preload images
+          function preloadImage(url) {
+            return new Promise((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(url);
+              img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+              img.src = url;
+            });
+          }
+          
+          // Preload all Unsplash images after a slight delay
+          setTimeout(() => {
+            unsplashImages.forEach(img => {
+              preloadImage(img.src)
+                .then(() => console.log('Preloaded image:', img.src))
+                .catch(err => console.error(err));
+            });
+          }, 500);
         });
       </script>
     </head>
