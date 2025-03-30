@@ -68,6 +68,12 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           line-height: 1.5;
         }
         
+        /* Ensure Unsplash images load properly and maintain aspect ratio */
+        img[src*="unsplash.com"] {
+          object-fit: cover;
+          background-color: #f0f0f0; /* Light gray placeholder */
+        }
+        
         /* Custom CSS */
         ${cssContent || ''}
       </style>

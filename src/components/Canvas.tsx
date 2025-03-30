@@ -1107,6 +1107,11 @@ export const Canvas: React.FC = () => {
                 Icons from Font Awesome 6 are used to match the original design where possible.
               </p>
               
+              <h4>Images</h4>
+              <p style={{ fontSize: '14px', marginBottom: '12px' }}>
+                Royalty-free stock photos from Unsplash are used to replace placeholder images in the design.
+              </p>
+              
               {currentAnalysis.analysis?.metadata?.colors && (
                 <>
                   <h4>Color Palette</h4>

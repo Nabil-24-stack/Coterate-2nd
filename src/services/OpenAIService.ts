@@ -90,6 +90,15 @@ class OpenAIService {
             3. Implement the icon using the proper Font Awesome classes (e.g., <i class="fas fa-home"></i>)
             4. If a close match isn't available in Font Awesome, use a semantically appropriate alternative
             
+            IMAGE REQUIREMENTS:
+            For any images or photos identified in the UI:
+            1. Identify the purpose and content of each image (e.g., product photo, hero image, profile picture, etc.)
+            2. Use Unsplash for royalty-free stock photos that match the theme and purpose
+            3. Implement using this format: <img src="https://source.unsplash.com/random/?[keywords]" alt="[descriptive text]">
+            4. Use specific, descriptive keywords that match the original image content (e.g., "business,meeting,office" for a corporate meeting)
+            5. Make sure the alt text is descriptive and accessible
+            6. Apply proper sizing and styling to match the original design's dimensions and aspect ratio
+            
             Include the Font Awesome CDN link in the <head> section of your HTML.
             Examples of common Font Awesome icons:
             - Navigation: fa-home, fa-bars, fa-search, fa-user, fa-cog
@@ -113,6 +122,11 @@ class OpenAIService {
                 1. Identify what type of icon it is (e.g., hamburger menu, search, profile, etc.)
                 2. Find a matching icon in Font Awesome
                 3. Implement it properly in the HTML using Font Awesome classes
+                
+                For images in the UI:
+                1. Identify what each image represents (e.g., product, profile, landscape, etc.)
+                2. Use Unsplash photos that match the same theme with the format: <img src="https://source.unsplash.com/random/?[specific keywords]">
+                3. Ensure images maintain the same dimensions and aspect ratio as the original
                 
                 Include the Font Awesome CDN in your HTML head.`
               },
