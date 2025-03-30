@@ -339,6 +339,14 @@ type ExtendedDesign = Design & {
   processingStep?: 'analyzing' | 'recreating' | 'rendering' | null;
 };
 
+// Add a debug function to log the designs state
+const logDesignsState = (designs: ExtendedDesign[], message: string) => {
+  console.log(`${message}: ${designs.length} designs`);
+  designs.forEach((design, index) => {
+    console.log(`Design ${index}: id=${design.id}, iterations=${design.iterations?.length || 0}`);
+  });
+};
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -565,7 +573,7 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(designId);
   };
   
-  // Update the handleIterationClick method to preserve original image dimensions
+  // Update the handleIterationClick method to preserve the original design when adding an iteration
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     console.log(`Iteration requested for design: ${designId}`);
@@ -649,19 +657,29 @@ export const Canvas: React.FC = () => {
       // Short delay to show the rendering step
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Add the new iteration to the design's iterations array
-      setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === designId
-            ? {
-                ...design,
-                iterations: [...(design.iterations || []), newIteration],
-                isProcessing: false,
-                processingStep: null
-              }
-            : design
-        )
-      );
+      // Update designs with a properly immutable state update
+      setDesigns(prevDesigns => {
+        return prevDesigns.map(design => {
+          if (design.id === designId) {
+            // Create a new object for the design being updated
+            return {
+              ...design,
+              // Make sure to preserve the original design properties
+              imageUrl: design.imageUrl,
+              position: design.position,
+              // Add the iteration to iterations array (or create a new array)
+              iterations: [...(design.iterations || []), newIteration],
+              // Clear processing state
+              isProcessing: false,
+              processingStep: null
+            };
+          }
+          return design;
+        });
+      });
+      
+      // Log the state for debugging
+      console.log('Successfully added iteration to design:', designId);
       
       // Set the newly created iteration for analysis panel
       setCurrentAnalysis(newIteration);
@@ -933,6 +951,7 @@ export const Canvas: React.FC = () => {
                 designs.map((design) => (
                   <React.Fragment key={design.id}>
                     <DesignContainer 
+                      key={`container-${design.id}`}
                       x={design.position.x}
                       y={design.position.y}
                     >
@@ -942,6 +961,7 @@ export const Canvas: React.FC = () => {
                         onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
                       >
                         <DesignImage 
+                          key={`img-${design.id}`}
                           src={design.imageUrl} 
                           alt={`Design ${design.id}`}
                           draggable={false}
@@ -998,7 +1018,7 @@ export const Canvas: React.FC = () => {
                     {/* Render iterations for this design */}
                     {design.iterations?.map((iteration) => (
                       <DesignContainer 
-                        key={iteration.id}
+                        key={`iteration-container-${iteration.id}`}
                         x={iteration.position.x}
                         y={iteration.position.y}
                       >
@@ -1008,6 +1028,7 @@ export const Canvas: React.FC = () => {
                           onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
                         >
                           <HtmlDesignRenderer
+                            key={`renderer-${iteration.id}`}
                             ref={htmlRendererRef}
                             htmlContent={iteration.htmlContent}
                             cssContent={iteration.cssContent}
