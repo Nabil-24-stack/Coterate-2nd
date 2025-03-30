@@ -81,7 +81,24 @@ class OpenAIService {
 
             IMPORTANT: The generated HTML/CSS must match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height.
             Make sure all elements are properly positioned and sized to exactly match the original layout's scale and proportions.
-            The entire design must be visible at these dimensions without scrolling.`
+            The entire design must be visible at these dimensions without scrolling.
+            
+            ICON REQUIREMENTS:
+            For any icons identified in the UI:
+            1. Use the Font Awesome icon library (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
+            2. Find the most appropriate Font Awesome icon that matches each icon in the original design
+            3. Implement the icon using the proper Font Awesome classes (e.g., <i class="fas fa-home"></i>)
+            4. If a close match isn't available in Font Awesome, use a semantically appropriate alternative
+            
+            Include the Font Awesome CDN link in the <head> section of your HTML.
+            Examples of common Font Awesome icons:
+            - Navigation: fa-home, fa-bars, fa-search, fa-user, fa-cog
+            - Actions: fa-plus, fa-minus, fa-check, fa-times, fa-trash
+            - Media: fa-play, fa-pause, fa-volume-up, fa-image
+            - Social: fa-facebook, fa-twitter, fa-instagram, fa-linkedin
+            - E-commerce: fa-shopping-cart, fa-tag, fa-credit-card
+            
+            Always select the most semantically appropriate icon for each element.`
           },
           {
             role: 'user',
@@ -90,7 +107,14 @@ class OpenAIService {
                 type: 'text',
                 text: `Analyze this UI design and create an improved HTML/CSS version addressing any issues you find with visual hierarchy, contrast, spacing, or usability while maintaining the original purpose and style. 
                 
-                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your HTML/CSS version maintains these EXACT dimensions and scales all elements appropriately.`
+                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your HTML/CSS version maintains these EXACT dimensions and scales all elements appropriately.
+                
+                For icons in the UI:
+                1. Identify what type of icon it is (e.g., hamburger menu, search, profile, etc.)
+                2. Find a matching icon in Font Awesome
+                3. Implement it properly in the HTML using Font Awesome classes
+                
+                Include the Font Awesome CDN in your HTML head.`
               },
               {
                 type: 'image_url',
