@@ -19,7 +19,7 @@ const HeaderContainer = styled.header`
 const Logo = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 `;
 
 const LogoImage = styled.img`
