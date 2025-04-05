@@ -351,8 +351,40 @@ export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
   // Canvas state
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(() => {
+    try {
+      const pageId = currentPage?.id;
+      if (pageId) {
+        const savedData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
+        if (savedData) {
+          const { scale } = JSON.parse(savedData);
+          console.log('Canvas: Initializing with saved scale:', scale);
+          return scale;
+        }
+      }
+    } catch (error) {
+      console.error('Canvas: Error loading initial scale:', error);
+    }
+    return 1; // Default scale
+  });
+
+  const [position, setPosition] = useState(() => {
+    try {
+      const pageId = currentPage?.id;
+      if (pageId) {
+        const savedData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
+        if (savedData) {
+          const { position } = JSON.parse(savedData);
+          console.log('Canvas: Initializing with saved position:', position);
+          return position;
+        }
+      }
+    } catch (error) {
+      console.error('Canvas: Error loading initial position:', error);
+    }
+    return { x: 0, y: 0 }; // Default position
+  });
+
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
@@ -380,39 +412,69 @@ export const Canvas: React.FC = () => {
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Add a function to load canvas position and scale from localStorage
+  // Improved function to load canvas position and scale from localStorage
   const loadCanvasPosition = useCallback((pageId: string) => {
+    if (!pageId) {
+      console.warn('Canvas: No page ID provided for loading position');
+      return;
+    }
+    
     try {
       const savedPositionData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
       if (savedPositionData) {
-        const { position: savedPosition, scale: savedScale } = JSON.parse(savedPositionData);
-        setPosition(savedPosition);
-        setScale(savedScale);
-        console.log('Canvas: Loaded position and scale from localStorage for page:', pageId);
+        const data = JSON.parse(savedPositionData);
+        
+        if (data.position && typeof data.position.x === 'number' && typeof data.position.y === 'number') {
+          setPosition(data.position);
+          console.log('Canvas: Loaded position from localStorage:', data.position);
+        } else {
+          console.warn('Canvas: Invalid position data format in localStorage');
+        }
+        
+        if (typeof data.scale === 'number' && data.scale > 0) {
+          setScale(data.scale);
+          console.log('Canvas: Loaded scale from localStorage:', data.scale);
+        } else {
+          console.warn('Canvas: Invalid scale data format in localStorage');
+        }
+      } else {
+        console.log('Canvas: No saved position/scale found for page:', pageId);
       }
     } catch (error) {
       console.error('Canvas: Error loading position from localStorage:', error);
     }
   }, []);
 
-  // Add effect to save canvas position and scale to localStorage when they change
+  // Function to save canvas position and scale to localStorage
+  const saveCanvasPosition = useCallback((pageId: string, pos: {x: number, y: number}, scl: number) => {
+    if (!pageId) {
+      console.warn('Canvas: No page ID provided for saving position');
+      return;
+    }
+    
+    try {
+      const positionData = {
+        position: pos,
+        scale: scl
+      };
+      localStorage.setItem(`coterate_canvas_position_${pageId}`, JSON.stringify(positionData));
+      console.log('Canvas: Saved position and scale to localStorage:', positionData);
+    } catch (error) {
+      console.error('Canvas: Error saving position to localStorage:', error);
+    }
+  }, []);
+
+  // Modified effect to save canvas position and scale to localStorage when they change
   useEffect(() => {
     if (currentPage?.id) {
-      try {
-        const positionData = {
-          position,
-          scale
-        };
-        localStorage.setItem(`coterate_canvas_position_${currentPage.id}`, JSON.stringify(positionData));
-      } catch (error) {
-        console.error('Canvas: Error saving position to localStorage:', error);
-      }
+      saveCanvasPosition(currentPage.id, position, scale);
     }
-  }, [position, scale, currentPage?.id]);
+  }, [position, scale, currentPage?.id, saveCanvasPosition]);
 
   // Effect to load position and scale when page changes
   useEffect(() => {
     if (currentPage?.id) {
+      console.log('Canvas: Page changed, loading saved position for:', currentPage.id);
       loadCanvasPosition(currentPage.id);
     }
   }, [currentPage?.id, loadCanvasPosition]);
@@ -482,12 +544,15 @@ export const Canvas: React.FC = () => {
   
   // Reset canvas position and scale
   const resetCanvas = () => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
+    const newPosition = { x: 0, y: 0 };
+    const newScale = 1;
+    
+    setScale(newScale);
+    setPosition(newPosition);
     
     // Also clear the saved position in localStorage
     if (currentPage?.id) {
-      localStorage.removeItem(`coterate_canvas_position_${currentPage.id}`);
+      saveCanvasPosition(currentPage.id, newPosition, newScale);
     }
   };
   
@@ -596,10 +661,18 @@ export const Canvas: React.FC = () => {
     }
     
     if (isDragging) {
-      setPosition({
+      const newPosition = {
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y,
-      });
+      };
+      setPosition(newPosition);
+      
+      // Save position immediately after significant changes (throttled to reduce calls)
+      if (currentPage?.id && 
+          (Math.abs(newPosition.x - position.x) > 50 || 
+           Math.abs(newPosition.y - position.y) > 50)) {
+        saveCanvasPosition(currentPage.id, newPosition, scale);
+      }
     }
   };
   
@@ -763,7 +836,7 @@ export const Canvas: React.FC = () => {
   
   // Toggle analysis panel visibility
   const toggleAnalysisPanel = () => {
-    setAnalysisVisible(prev => !prev);
+    setAnalysisVisible((prev: boolean) => !prev);
   };
   
   // Select an iteration for viewing in the analysis panel

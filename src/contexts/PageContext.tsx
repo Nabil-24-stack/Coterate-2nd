@@ -169,7 +169,34 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         setPages(loadedPages);
-        setCurrentPage(loadedPages[0]);
+        
+        // Try to load the last active page ID from localStorage
+        try {
+          const lastActivePageId = localStorage.getItem('coterate_last_active_page');
+          logInfo('last-active', 'Last active page ID from localStorage:', lastActivePageId);
+          
+          if (lastActivePageId) {
+            // Find the page with the stored ID
+            const lastActivePage = loadedPages.find(page => page.id === lastActivePageId);
+            
+            if (lastActivePage) {
+              logInfo('restore-page', 'Restoring last active page:', lastActivePage.name);
+              setCurrentPage(lastActivePage);
+            } else {
+              // If the page doesn't exist anymore, use the first page
+              logInfo('page-not-found', 'Last active page not found, using first page');
+              setCurrentPage(loadedPages[0]);
+            }
+          } else {
+            // No stored page ID, use the first page
+            logInfo('no-last-page', 'No last active page stored, using first page');
+            setCurrentPage(loadedPages[0]);
+          }
+        } catch (error) {
+          logError('last-page-error', 'Error getting last active page:', error);
+          setCurrentPage(loadedPages[0]);
+        }
+        
         logInfo('success', 'Pages loaded successfully');
       } catch (error) {
         logError('exception', 'Error loading pages:', error);
@@ -190,6 +217,18 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     loadPages();
   }, []);
+  
+  // Effect to save the current page ID to localStorage when it changes
+  useEffect(() => {
+    if (currentPage?.id) {
+      try {
+        localStorage.setItem('coterate_last_active_page', currentPage.id);
+        logInfo('saved-current-page', `Saved current page ID to localStorage: ${currentPage.id}`);
+      } catch (error) {
+        logError('save-current-page-error', 'Error saving current page ID to localStorage:', error);
+      }
+    }
+  }, [currentPage?.id]);
   
   // Add a new page
   const addPage = async (name: string, baseImage?: string) => {
