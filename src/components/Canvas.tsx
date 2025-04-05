@@ -144,10 +144,21 @@ const EmptyCanvasMessage = styled.div`
   left: 50%;
   transform: translate(-50%, -50%);
   color: #888;
-  font-size: 16px;
   text-align: center;
   max-width: 500px;
   line-height: 1.5;
+
+  h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #555;
+  }
+
+  p {
+    font-size: 16px;
+    color: #888;
+  }
 `;
 
 // Loading indicator
@@ -1613,7 +1624,8 @@ export const Canvas: React.FC = () => {
                 ))
               ) : (
                 <EmptyCanvasMessage>
-                  Copy a UI design to your clipboard and press Ctrl+V (or Cmd+V) to paste it here
+                  <h2>Copy a Figma frame</h2>
+                  <p>Select a frame and press Command+L on your keyboard</p>
                 </EmptyCanvasMessage>
               )}
             </CanvasContent>
