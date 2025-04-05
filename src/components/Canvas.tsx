@@ -347,6 +347,25 @@ const logDesignsState = (designs: ExtendedDesign[], message: string) => {
   });
 };
 
+// Debug button
+const DebugButton = styled.button`
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background-color: #ff5722;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 9999;
+  
+  &:hover {
+    background-color: #e64a19;
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -358,13 +377,14 @@ export const Canvas: React.FC = () => {
         const savedData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
         if (savedData) {
           const { scale } = JSON.parse(savedData);
-          console.log('Canvas: Initializing with saved scale:', scale);
+          console.log('Canvas INIT: Loading saved scale from localStorage:', scale);
           return scale;
         }
       }
     } catch (error) {
       console.error('Canvas: Error loading initial scale:', error);
     }
+    console.log('Canvas INIT: Using default scale: 1');
     return 1; // Default scale
   });
 
@@ -375,13 +395,14 @@ export const Canvas: React.FC = () => {
         const savedData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
         if (savedData) {
           const { position } = JSON.parse(savedData);
-          console.log('Canvas: Initializing with saved position:', position);
+          console.log('Canvas INIT: Loading saved position from localStorage:', position);
           return position;
         }
       }
     } catch (error) {
       console.error('Canvas: Error loading initial position:', error);
     }
+    console.log('Canvas INIT: Using default position: {x:0, y:0}');
     return { x: 0, y: 0 }; // Default position
   });
 
@@ -412,73 +433,159 @@ export const Canvas: React.FC = () => {
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Improved function to load canvas position and scale from localStorage
-  const loadCanvasPosition = useCallback((pageId: string) => {
-    if (!pageId) {
-      console.warn('Canvas: No page ID provided for loading position');
-      return;
-    }
+  // Debugging: Check localStorage on component mount
+  useEffect(() => {
+    console.log('Canvas: Component mounted');
+    // Log all coterate position keys in localStorage
+    const positionKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('coterate_canvas_position_')
+    );
     
-    try {
-      const savedPositionData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
-      if (savedPositionData) {
-        const data = JSON.parse(savedPositionData);
-        
-        if (data.position && typeof data.position.x === 'number' && typeof data.position.y === 'number') {
-          setPosition(data.position);
-          console.log('Canvas: Loaded position from localStorage:', data.position);
-        } else {
-          console.warn('Canvas: Invalid position data format in localStorage');
-        }
-        
-        if (typeof data.scale === 'number' && data.scale > 0) {
-          setScale(data.scale);
-          console.log('Canvas: Loaded scale from localStorage:', data.scale);
-        } else {
-          console.warn('Canvas: Invalid scale data format in localStorage');
-        }
+    console.log('Canvas: Found position keys in localStorage:', positionKeys);
+    
+    // Check current page ID
+    console.log('Canvas: Current page ID:', currentPage?.id);
+    
+    // If we have a current page, check if its position data exists
+    if (currentPage?.id) {
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        console.log(`Canvas: Found saved position data for current page:`, JSON.parse(savedData));
       } else {
-        console.log('Canvas: No saved position/scale found for page:', pageId);
+        console.log(`Canvas: No saved position data found for current page (${key})`);
       }
-    } catch (error) {
-      console.error('Canvas: Error loading position from localStorage:', error);
     }
   }, []);
 
-  // Function to save canvas position and scale to localStorage
-  const saveCanvasPosition = useCallback((pageId: string, pos: {x: number, y: number}, scl: number) => {
-    if (!pageId) {
-      console.warn('Canvas: No page ID provided for saving position');
-      return;
+  // Function to manually save canvas position for debugging
+  const debugSavePosition = () => {
+    if (currentPage?.id) {
+      try {
+        const data = {
+          position,
+          scale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(data));
+        console.log('DEBUG: Manually saved position to localStorage:', key, data);
+        
+        // Verify it was saved
+        const savedData = localStorage.getItem(key);
+        if (savedData) {
+          console.log('DEBUG: Verification - data in localStorage:', JSON.parse(savedData));
+        }
+      } catch (error) {
+        console.error('DEBUG: Error saving position:', error);
+      }
     }
-    
-    try {
-      const positionData = {
-        position: pos,
-        scale: scl
-      };
-      localStorage.setItem(`coterate_canvas_position_${pageId}`, JSON.stringify(positionData));
-      console.log('Canvas: Saved position and scale to localStorage:', positionData);
-    } catch (error) {
-      console.error('Canvas: Error saving position to localStorage:', error);
-    }
-  }, []);
+  };
 
   // Modified effect to save canvas position and scale to localStorage when they change
   useEffect(() => {
     if (currentPage?.id) {
-      saveCanvasPosition(currentPage.id, position, scale);
+      try {
+        const positionData = {
+          position,
+          scale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(positionData));
+        console.log('Canvas: Saved position to localStorage:', key, positionData);
+        
+        // Verify storage
+        const savedData = localStorage.getItem(key);
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          console.log('Canvas: Verification - position saved correctly:', 
+            position.x === parsedData.position.x && 
+            position.y === parsedData.position.y);
+        }
+      } catch (error) {
+        console.error('Canvas: Error saving position to localStorage:', error);
+      }
     }
-  }, [position, scale, currentPage?.id, saveCanvasPosition]);
+  }, [position, scale, currentPage?.id]);
+
+  // Extra effect to log position changes for debugging
+  useEffect(() => {
+    console.log('Canvas: Position changed to:', position);
+  }, [position]);
 
   // Effect to load position and scale when page changes
   useEffect(() => {
     if (currentPage?.id) {
-      console.log('Canvas: Page changed, loading saved position for:', currentPage.id);
-      loadCanvasPosition(currentPage.id);
+      console.log('Canvas: Page changed to:', currentPage.id, currentPage.name);
+      
+      // First log the current position before loading
+      console.log('Canvas: Current position before loading:', position);
+      
+      // Check if we have saved position data
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        console.log('Canvas: Found saved position data for this page:', JSON.parse(savedData));
+        
+        try {
+          const parsedData = JSON.parse(savedData);
+          if (parsedData.position && typeof parsedData.position.x === 'number') {
+            console.log('Canvas: Setting position to saved value:', parsedData.position);
+            setPosition(parsedData.position);
+          }
+          
+          if (typeof parsedData.scale === 'number') {
+            console.log('Canvas: Setting scale to saved value:', parsedData.scale);
+            setScale(parsedData.scale);
+          }
+        } catch (error) {
+          console.error('Canvas: Error parsing saved position data:', error);
+        }
+      } else {
+        console.log('Canvas: No saved position data found for this page');
+      }
     }
-  }, [currentPage?.id, loadCanvasPosition]);
-  
+  }, [currentPage?.id]);
+
+  // One-time effect to ensure position is initialized on component mount
+  // This ensures we load position data properly after the initial render
+  useEffect(() => {
+    if (currentPage?.id) {
+      console.log('Canvas: Initial mount - ensuring position data is loaded');
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          // Check if current position matches stored position
+          const currentPositionX = position.x;
+          const currentPositionY = position.y;
+          const storedPositionX = parsedData.position.x;
+          const storedPositionY = parsedData.position.y;
+          
+          // Only set position if it doesn't match stored values
+          if (currentPositionX !== storedPositionX || currentPositionY !== storedPositionY) {
+            console.log('Canvas: Initial position differs from stored position, updating:', 
+              {current: {x: currentPositionX, y: currentPositionY}, 
+               stored: {x: storedPositionX, y: storedPositionY}});
+            
+            // Use a timeout to ensure this happens after other initializations
+            setTimeout(() => {
+              setPosition(parsedData.position);
+              console.log('Canvas: Forced position update to stored value');
+            }, 100);
+          } else {
+            console.log('Canvas: Initial position already matches stored position');
+          }
+        } catch (error) {
+          console.error('Canvas: Error in initial position check:', error);
+        }
+      }
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
+
   // Effect to load designs from page data - only runs once per page change
   useEffect(() => {
     if (currentPage) {
@@ -507,7 +614,7 @@ export const Canvas: React.FC = () => {
       console.log('Canvas: No current page available');
     }
   }, [currentPage]);
-  
+
   // Save designs to page whenever they change
   useEffect(() => {
     // Skip during initial load or when no designs
@@ -541,18 +648,28 @@ export const Canvas: React.FC = () => {
       }
     };
   }, [designs, currentPage?.id, designsInitialized, updatePage]);
-  
+
   // Reset canvas position and scale
   const resetCanvas = () => {
+    console.log('Canvas: Resetting canvas to default position and scale');
     const newPosition = { x: 0, y: 0 };
     const newScale = 1;
     
     setScale(newScale);
     setPosition(newPosition);
     
-    // Also clear the saved position in localStorage
+    // Also save the reset position in localStorage
     if (currentPage?.id) {
-      saveCanvasPosition(currentPage.id, newPosition, newScale);
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const data = { position: newPosition, scale: newScale };
+      localStorage.setItem(key, JSON.stringify(data));
+      console.log('Canvas: Saved reset position to localStorage');
+      
+      // Verify it was saved
+      const savedData = localStorage.getItem(key);
+      if (savedData) {
+        console.log('Canvas: Verification - reset position saved:', JSON.parse(savedData));
+      }
     }
   };
   
@@ -666,18 +783,24 @@ export const Canvas: React.FC = () => {
         y: e.clientY - dragStart.y,
       };
       setPosition(newPosition);
-      
-      // Save position immediately after significant changes (throttled to reduce calls)
-      if (currentPage?.id && 
-          (Math.abs(newPosition.x - position.x) > 50 || 
-           Math.abs(newPosition.y - position.y) > 50)) {
-        saveCanvasPosition(currentPage.id, newPosition, scale);
-      }
     }
   };
   
   // Handle mouse up to stop dragging
   const handleMouseUp = () => {
+    // Check if we were dragging the canvas (panning)
+    if (isDragging && currentPage?.id) {
+      console.log('Canvas: Panning ended, saving final position:', position);
+      // Save the position when panning stops
+      const positionData = {
+        position,
+        scale
+      };
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      localStorage.setItem(key, JSON.stringify(positionData));
+      console.log('Canvas: Saved final position after panning');
+    }
+    
     setIsDragging(false);
     setIsDesignDragging(false);
   };
@@ -944,8 +1067,20 @@ export const Canvas: React.FC = () => {
       const newPositionX = mouseX - originX * newScale;
       const newPositionY = mouseY - originY * newScale;
       
+      // Apply the new scale and position
       setScale(newScale);
       setPosition({ x: newPositionX, y: newPositionY });
+      
+      // Save the position data immediately after zooming
+      if (currentPage?.id) {
+        const positionData = {
+          position: { x: newPositionX, y: newPositionY },
+          scale: newScale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(positionData));
+        console.log('Canvas: Saved position data after wheel zoom');
+      }
     };
 
     canvasElement.addEventListener('wheel', handleWheelEvent, { passive: false });
@@ -953,7 +1088,25 @@ export const Canvas: React.FC = () => {
     return () => {
       canvasElement.removeEventListener('wheel', handleWheelEvent);
     };
-  }, [scale, position]);
+  }, [scale, position, currentPage?.id]);
+  
+  // Unified effect to save position and scale to localStorage when they change
+  useEffect(() => {
+    // Only save if we have a page and the component is fully mounted
+    if (currentPage?.id && designsInitialized) {
+      try {
+        const positionData = {
+          position,
+          scale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(positionData));
+        console.log('Canvas: Saved position and scale in unified effect:', positionData);
+      } catch (error) {
+        console.error('Canvas: Error saving position in unified effect:', error);
+      }
+    }
+  }, [position, scale, currentPage?.id, designsInitialized]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -1181,6 +1334,13 @@ export const Canvas: React.FC = () => {
               )}
             </CanvasContent>
           </InfiniteCanvas>
+        )}
+        
+        {/* Debug Controls - only in development mode */}
+        {process.env.NODE_ENV === 'development' && (
+          <DebugButton onClick={debugSavePosition}>
+            Save Position (Debug)
+          </DebugButton>
         )}
         
         {/* Analysis Panel */}
