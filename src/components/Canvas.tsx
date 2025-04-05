@@ -1171,7 +1171,7 @@ export const Canvas: React.FC = () => {
       if (clipboardText.includes('figma.com/design/')) {
         console.log('DIRECT DESIGN LINK DETECTION: Detected Figma design link');
         
-        // Extract the design key (file key)
+        // Extract the design key which is the fileKey for Figma API
         const designKeyRegex = /figma\.com\/design\/([^/]+)/;
         const designKeyMatch = clipboardText.match(designKeyRegex);
         
@@ -1179,12 +1179,10 @@ export const Canvas: React.FC = () => {
           const fileKey = designKeyMatch[1];
           console.log('DIRECT DESIGN LINK: Extracted file key:', fileKey);
           
-          // Use a default node ID for the first frame
-          const nodeId = '0:1';
+          // Show a message to the user
+          alert('Please select a specific component in Figma and copy its selection link instead of the entire design link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
           
-          event.preventDefault();
-          console.log('DIRECT DESIGN LINK: Fetching with file key and default node ID');
-          fetchFigmaNode(fileKey, nodeId);
+          // Don't prevent default to allow the text to paste normally if needed
           return;
         }
       }
@@ -1196,6 +1194,12 @@ export const Canvas: React.FC = () => {
         // Parse the Figma selection link to get file key and node ID
         const linkData = parseFigmaSelectionLink(clipboardText);
         console.log('Parsed Figma link data:', linkData);
+        
+        // If this is a file or design link that doesn't have a specific selection, show a message
+        if (!linkData.isValid && linkData.fileKey) {
+          alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
+          return;
+        }
         
         if (linkData.isValid) {
           // First make sure Figma is authenticated

@@ -17,7 +17,7 @@ export interface FigmaLinkData {
  * - Standard selection link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456
  * - Direct node link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456&t=abcdef
  * - Share link with node: https://www.figma.com/file/abcdef123456/FileName/nodes/123%3A456
- * - Design link: https://www.figma.com/design/abcdef123456/FileName
+ * - Design link: https://www.figma.com/design/abcdef123456/FileName (requires specific selection)
  * 
  * @param linkText The Figma selection link to parse
  * @returns An object containing the file key, node ID, and validity status
@@ -39,11 +39,27 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
       
       if (designKeyMatch && designKeyMatch[1]) {
         const fileKey = designKeyMatch[1];
-        // For design links, we use a default node ID of "0:1" which represents the first frame
+        
+        // For /design/ links, we need specific selection params
+        // Look for node= or node-id= in the URL
+        const nodeRegex = /[?&](node[-_]?id)=([^&]+)/i;
+        const nodeMatch = linkText.match(nodeRegex);
+        
+        if (nodeMatch && nodeMatch[2]) {
+          // We have a node ID parameter
+          return {
+            fileKey,
+            nodeId: decodeURIComponent(nodeMatch[2]),
+            isValid: true
+          };
+        }
+        
+        // If no node ID is found in a design link, return the file key
+        // but mark as invalid - UI will prompt user to get a selection link
         return {
           fileKey,
-          nodeId: '0:1', // Default node ID for the first frame
-          isValid: true
+          nodeId: '',
+          isValid: false
         };
       }
       return defaultResult;
@@ -80,8 +96,9 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
     } else if (pathNodeIdMatch && pathNodeIdMatch[1]) {
       nodeId = decodeURIComponent(pathNodeIdMatch[1]);
     } else {
-      // No node ID found - use default node ID
-      nodeId = '0:1'; // Default node ID for the first frame
+      // No node ID found - for file links, this isn't valid
+      // We need a specific node ID for selection links
+      return defaultResult;
     }
     
     return {
@@ -108,13 +125,13 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
 export function isFigmaSelectionLink(text: string): boolean {
   if (!text) return false;
   
-  // Check for all possible Figma link patterns
+  // Check for all possible Figma link patterns - require node-id for better specificity
   const patterns = [
     /figma\.com\/file\/[^/?]+.*node-id=/i,      // Standard query param format
     /figma\.com\/file\/[^/?]+\/nodes\//i,       // Path format
     /figma\.com\/file\/[^/?]+.*view\?node-id=/i, // View format
-    /figma\.com\/design\/[^/]+/i,               // Design format
-    /figma\.com\/file\/[^/?]+/i                 // Any file link (fallback)
+    /figma\.com\/design\/[^/]+.*node[-_]?id=/i,  // Design format with node ID
+    /figma\.com\/design\/[^/]+/i                // Any design link (we'll validate nodeId later)
   ];
   
   // Return true if any pattern matches

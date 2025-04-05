@@ -1245,6 +1245,12 @@ class SupabaseService {
     this.logInfo('importFigmaDesign', `Importing Figma design: fileKey=${fileKey}, nodeId=${nodeId}`);
     
     try {
+      // Validate that we have a proper node ID
+      if (!nodeId || nodeId === '0:1') {
+        this.logError('importFigmaDesign', 'Invalid or missing node ID. Cannot import entire document.');
+        throw new Error('Please select a specific component in Figma and use its selection link.');
+      }
+      
       // Check if authenticated with Figma
       const isAuth = await this.isAuthenticatedWithFigma();
       if (!isAuth) {
@@ -1269,12 +1275,11 @@ class SupabaseService {
       try {
         imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
       } catch (nodeError: any) {
-        // If the node ID was not found, try with the default node ID '0:1'
-        if (nodeError.message && (nodeError.message.includes('not found') || 
-            nodeError.status === 404 || nodeId === 'default' || nodeError.message.includes('404'))) {
-          this.logInfo('importFigmaDesign', `Node ${nodeId} not found, trying default node 0:1`);
-          finalNodeId = '0:1';
-          imageUrls = await this.getFigmaImageUrls(fileKey, [finalNodeId]);
+        // Only try another node ID if the error indicates this is a specific node not found error
+        if (nodeError.message && nodeError.message.includes(`Nodes not found: ${nodeId}`)) {
+          // This is a legitimate node not found error, don't try to fallback to document root
+          this.logError('importFigmaDesign', `Node ${nodeId} not found in file ${fileKey}`);
+          throw new Error(`The selected component (${nodeId}) could not be found in this Figma file. Please try a different selection.`);
         } else {
           // Re-throw other errors
           throw nodeError;
@@ -1283,7 +1288,7 @@ class SupabaseService {
       
       if (!imageUrls || !imageUrls[finalNodeId]) {
         this.logError('importFigmaDesign', `Failed to get image URL for node: ${finalNodeId}`);
-        throw new Error('Failed to get image URL for the selected node');
+        throw new Error('Failed to get image URL for the selected component');
       }
       
       const imageUrl = imageUrls[finalNodeId];
