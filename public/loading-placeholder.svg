@@ -1,0 +1,21 @@
+<svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#F8F8F8" />
+  
+  <!-- Loading indicator -->
+  <circle cx="200" cy="150" r="40" stroke="#E3E6EA" stroke-width="8" fill="none" />
+  <circle cx="200" cy="150" r="40" stroke="#007bff" stroke-width="8" fill="none" stroke-dasharray="60 180">
+    <animateTransform 
+      attributeName="transform" 
+      type="rotate" 
+      from="0 200 150" 
+      to="360 200 150" 
+      dur="1.5s" 
+      repeatCount="indefinite" />
+  </circle>
+  
+  <!-- Loading text -->
+  <text x="200" y="220" font-family="'Plus Jakarta Sans', sans-serif" font-size="16" text-anchor="middle" fill="#666">
+    Loading Figma Design...
+  </text>
+</svg> 

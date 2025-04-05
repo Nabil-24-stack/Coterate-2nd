@@ -6,6 +6,13 @@ export interface Design {
   iterations?: DesignIteration[];
   htmlContent?: string;
   cssContent?: string;
+  
+  // Figma-specific properties for native design import
+  figmaFileKey?: string;   // The Figma file key 
+  figmaNodeId?: string;    // The Figma node ID
+  figmaSelectionLink?: string; // The original Figma selection link
+  isFromFigma?: boolean;   // Whether this design was imported from Figma
+  needsFigmaAuth?: boolean; // Whether Figma authentication is needed to import this design
 }
 
 // Interface for Design Iteration

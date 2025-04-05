@@ -5,6 +5,7 @@ import { Design, DesignIteration } from '../types';
 import supabaseService from '../services/SupabaseService';
 import openAIService from '../services/OpenAIService';
 import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
+import { isFigmaSelectionLink, parseFigmaSelectionLink, FigmaLinkData } from '../utils/figmaLinkParser';
 
 // Global style to ensure no focus outlines or borders
 const GlobalStyle = createGlobalStyle`
@@ -366,36 +367,218 @@ const DebugButton = styled.button`
   }
 `;
 
-// Debounce helper function
-function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Parameters<T>): void => {
-    const later = () => {
-      timeout = null;
-      func(...args);
-    };
-    if (timeout !== null) {
-      clearTimeout(timeout);
-    }
-    timeout = setTimeout(later, wait);
-  };
-}
+// Add a styled component for the Figma badge
+const FigmaBadge = styled.div`
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  background-color: #1E1E1E;
+  color: white;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 5;
+`;
+
+// Add a styled component for Figma metadata tooltip
+const FigmaMetadata = styled.div`
+  position: absolute;
+  bottom: -40px;
+  left: 0;
+  background-color: white;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+  color: #666;
+  display: none;
+  
+  ${DesignCard}:hover & {
+    display: block;
+  }
+`;
+
+// Create a styled component for the Figma auth prompt
+const FigmaAuthPrompt = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+`;
+
+const FigmaAuthButton = styled.button`
+  background-color: #1E1E1E;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #000;
+  }
+`;
 
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
-  // Use simple defaults initially
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  
+  // Canvas state
+  const [scale, setScale] = useState(1); // Default to 1, we'll load the saved value when page ID is available
+  const [position, setPosition] = useState({ x: 0, y: 0 }); // Default position, we'll load saved value when ready
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // Track the last active page ID to prevent position sharing between pages
+  const lastActivePageIdRef = useRef<string | null>(null);
+
+  // Reference to track if we've initialized position for this page
+  const positionInitializedRef = useRef<{[pageId: string]: boolean}>({});
+
+  // Function to save canvas position - single source of truth for saving
+  const saveCanvasPosition = useCallback((pageId: string, pos: {x: number, y: number}, scl: number) => {
+    if (!pageId) return;
+    
+    try {
+      const key = `coterate_canvas_position_${pageId}`;
+      const data = { position: pos, scale: scl };
+      localStorage.setItem(key, JSON.stringify(data));
+      console.log(`Canvas: Saved position for page ${pageId}:`, data);
+    } catch (error) {
+      console.error('Canvas: Error saving position:', error);
+    }
+  }, []);
+
+  // Function to load canvas position from localStorage
+  const loadCanvasPosition = useCallback((pageId: string, force = false) => {
+    if (!pageId) return false;
+    
+    // Skip if we've already initialized this page's position and not forcing
+    if (positionInitializedRef.current[pageId] && !force) {
+      console.log(`Canvas: Position already initialized for page ${pageId}, skipping load`);
+      return false;
+    }
+    
+    try {
+      const key = `coterate_canvas_position_${pageId}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        const data = JSON.parse(savedData);
+        console.log(`Canvas: Loading position for page ${pageId}:`, data);
+        
+        // Directly update the state with saved values
+        if (data.position && typeof data.position.x === 'number') {
+          setPosition(data.position);
+        }
+        
+        if (typeof data.scale === 'number') {
+          setScale(data.scale);
+        }
+        
+        // Mark this page as initialized
+        positionInitializedRef.current[pageId] = true;
+        return true;
+      }
+    } catch (error) {
+      console.error(`Canvas: Error loading position for page ${pageId}:`, error);
+    }
+    
+    // Mark as initialized even if no data found to prevent repeated attempts
+    positionInitializedRef.current[pageId] = true;
+    return false;
+  }, []);
+
+  // Effect to handle page changes and load the appropriate position
+  useEffect(() => {
+    if (!currentPage?.id) return;
+    
+    const pageId = currentPage.id;
+    console.log(`Canvas: Current page changed to ${pageId}`);
+    
+    // Check if this is a new page (different from the last active page)
+    if (lastActivePageIdRef.current !== pageId) {
+      console.log(`Canvas: Page changed from ${lastActivePageIdRef.current} to ${pageId}`);
+      
+      // Save position for the previous page before switching
+      if (lastActivePageIdRef.current) {
+        saveCanvasPosition(lastActivePageIdRef.current, position, scale);
+      }
+      
+      // Load position for the new page
+      loadCanvasPosition(pageId, true);
+      
+      // Update the ref with the current page ID
+      lastActivePageIdRef.current = pageId;
+    }
+  }, [currentPage?.id, loadCanvasPosition, saveCanvasPosition, position, scale]);
+
+  // Save position when it changes, but only for the current page
+  useEffect(() => {
+    if (!currentPage?.id) return;
+    
+    // Only save if this page is the last active page to prevent position sharing
+    if (lastActivePageIdRef.current === currentPage.id) {
+      saveCanvasPosition(currentPage.id, position, scale);
+    }
+  }, [position, scale, currentPage?.id, saveCanvasPosition]);
+
+  // One-time effect to initialize position when component mounts
+  // This is crucial for restoring position after page refresh
+  useEffect(() => {
+    if (!currentPage?.id) return;
+    
+    console.log('Canvas: Component mounted, initializing position');
+    
+    // Set the last active page ID ref
+    lastActivePageIdRef.current = currentPage.id;
+    
+    // Try to load the saved position
+    const loaded = loadCanvasPosition(currentPage.id);
+    
+    if (!loaded) {
+      console.log('Canvas: No saved position found, using defaults');
+      // No need to set defaults as they're already set in useState
+    }
+  }, []); // Empty dependency array = only run once on mount
+
+  // State for multiple designs
   const [designs, setDesigns] = useState<ExtendedDesign[]>([]);
+
+  // Track design initialization
   const [designsInitialized, setDesignsInitialized] = useState(false);
+  
+  // Selected design state
   const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
+  
+  // Analysis panel state
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DesignIteration | null>(null);
   
@@ -403,102 +586,223 @@ export const Canvas: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
+
+  // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
-
-  // --- Position Persistence Logic --- 
-
-  // Function to get the storage key for a page
-  const getStorageKey = (pageId: string) => `coterate_canvas_position_${pageId}`;
-
-  // Effect to LOAD position when currentPage changes
+  
+  // Debugging: Check localStorage on component mount
   useEffect(() => {
+    console.log('Canvas: Component mounted');
+    // Log all coterate position keys in localStorage
+    const positionKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('coterate_canvas_position_')
+    );
+    
+    console.log('Canvas: Found position keys in localStorage:', positionKeys);
+    
+    // Check current page ID
+    console.log('Canvas: Current page ID:', currentPage?.id);
+    
+    // If we have a current page, check if its position data exists
     if (currentPage?.id) {
-      const pageId = currentPage.id;
-      console.log(`Canvas: Page changed to ${pageId}. Loading position.`);
-      const key = getStorageKey(pageId);
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        console.log(`Canvas: Found saved position data for current page:`, JSON.parse(savedData));
+      } else {
+        console.log(`Canvas: No saved position data found for current page (${key})`);
+      }
+    }
+  }, []);
+
+  // Function to manually save canvas position for debugging
+  const debugSavePosition = () => {
+    if (currentPage?.id) {
       try {
+        const data = {
+          position,
+          scale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(data));
+        console.log('DEBUG: Manually saved position to localStorage:', key, data);
+        
+        // Verify it was saved
         const savedData = localStorage.getItem(key);
         if (savedData) {
-          const { position: savedPosition, scale: savedScale } = JSON.parse(savedData);
-          console.log(`Canvas: Found saved position for ${pageId}:`, { savedPosition, savedScale });
-          setPosition(savedPosition);
-          setScale(savedScale);
-        } else {
-          console.log(`Canvas: No saved position for ${pageId}. Resetting to default.`);
-          // Reset to default if no saved state for this specific page
-          setPosition({ x: 0, y: 0 });
-          setScale(1);
+          console.log('DEBUG: Verification - data in localStorage:', JSON.parse(savedData));
         }
       } catch (error) {
-        console.error(`Canvas: Error loading position for ${pageId}:`, error);
-        // Reset to default on error
-        setPosition({ x: 0, y: 0 });
-        setScale(1);
+        console.error('DEBUG: Error saving position:', error);
       }
-    } else {
-      // No current page, reset to default
-      console.log('Canvas: No current page. Resetting position to default.');
-      setPosition({ x: 0, y: 0 });
-      setScale(1);
     }
-  // IMPORTANT: This effect should ONLY run when the page ID changes. 
-  // Do NOT add position or scale to dependencies.
-  }, [currentPage?.id]); 
+  };
 
-  // Debounced function to SAVE position
-  const debouncedSavePosition = useCallback(
-    debounce((pageId: string, pos: {x: number, y: number}, scl: number) => {
-      if (!pageId) return;
-      console.log(`Canvas: Debounced save for page ${pageId}`);
-      const key = getStorageKey(pageId);
-      try {
-        const data = { position: pos, scale: scl };
-        localStorage.setItem(key, JSON.stringify(data));
-        console.log(`Canvas: Saved position for ${pageId}:`, data);
-      } catch (error) {
-        console.error(`Canvas: Error saving position for ${pageId}:`, error);
-      }
-    }, 300), // Debounce saves by 300ms
-    [] // No dependencies, function is stable
-  );
-
-  // Effect to SAVE position when position or scale changes
+  // Modified effect to save canvas position and scale to localStorage when they change
   useEffect(() => {
     if (currentPage?.id) {
-      // Call the debounced save function
-      debouncedSavePosition(currentPage.id, position, scale);
+      try {
+        const positionData = {
+          position,
+          scale
+        };
+        const key = `coterate_canvas_position_${currentPage.id}`;
+        localStorage.setItem(key, JSON.stringify(positionData));
+        console.log('Canvas: Saved position to localStorage:', key, positionData);
+        
+        // Verify storage
+        const savedData = localStorage.getItem(key);
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          console.log('Canvas: Verification - position saved correctly:', 
+            position.x === parsedData.position.x && 
+            position.y === parsedData.position.y);
+        }
+      } catch (error) {
+        console.error('Canvas: Error saving position to localStorage:', error);
+      }
     }
-  // This effect runs whenever position or scale changes for the current page
-  }, [position, scale, currentPage?.id, debouncedSavePosition]);
+  }, [position, scale, currentPage?.id]);
 
-  // --- End Position Persistence Logic --- 
+  // Extra effect to log position changes for debugging
+  useEffect(() => {
+    console.log('Canvas: Position changed to:', position);
+  }, [position]);
 
-  // Effect to load designs (remains the same)
+  // Effect to load position and scale when page changes
+  useEffect(() => {
+    if (currentPage?.id) {
+      console.log('Canvas: Page changed to:', currentPage.id, currentPage.name);
+      
+      // First log the current position before loading
+      console.log('Canvas: Current position before loading:', position);
+      
+      // Check if we have saved position data
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        console.log('Canvas: Found saved position data for this page:', JSON.parse(savedData));
+        
+        try {
+          const parsedData = JSON.parse(savedData);
+          if (parsedData.position && typeof parsedData.position.x === 'number') {
+            console.log('Canvas: Setting position to saved value:', parsedData.position);
+            setPosition(parsedData.position);
+          }
+          
+          if (typeof parsedData.scale === 'number') {
+            console.log('Canvas: Setting scale to saved value:', parsedData.scale);
+            setScale(parsedData.scale);
+          }
+        } catch (error) {
+          console.error('Canvas: Error parsing saved position data:', error);
+        }
+      } else {
+        console.log('Canvas: No saved position data found for this page');
+      }
+    }
+  }, [currentPage?.id]);
+
+  // One-time effect to ensure position is initialized on component mount
+  // This ensures we load position data properly after the initial render
+  useEffect(() => {
+    if (currentPage?.id) {
+      console.log('Canvas: Initial mount - ensuring position data is loaded');
+      const key = `coterate_canvas_position_${currentPage.id}`;
+      const savedData = localStorage.getItem(key);
+      
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          // Check if current position matches stored position
+          const currentPositionX = position.x;
+          const currentPositionY = position.y;
+          const storedPositionX = parsedData.position.x;
+          const storedPositionY = parsedData.position.y;
+          
+          // Only set position if it doesn't match stored values
+          if (currentPositionX !== storedPositionX || currentPositionY !== storedPositionY) {
+            console.log('Canvas: Initial position differs from stored position, updating:', 
+              {current: {x: currentPositionX, y: currentPositionY}, 
+               stored: {x: storedPositionX, y: storedPositionY}});
+            
+            // Use a timeout to ensure this happens after other initializations
+            setTimeout(() => {
+              setPosition(parsedData.position);
+              console.log('Canvas: Forced position update to stored value');
+            }, 100);
+          } else {
+            console.log('Canvas: Initial position already matches stored position');
+          }
+        } catch (error) {
+          console.error('Canvas: Error in initial position check:', error);
+        }
+      }
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
+
+  // Effect to load designs from page data - only runs once per page change
   useEffect(() => {
     if (currentPage) {
+      console.log('Canvas: Current page changed:', currentPage.id, currentPage.name);
       console.log('Canvas: Current page designs:', currentPage.designs);
-      if (currentPage.designs && Array.isArray(currentPage.designs)) {
+      
+      if (currentPage.designs && Array.isArray(currentPage.designs) && currentPage.designs.length > 0) {
+        // If the page already has designs array, use it
+        console.log('Canvas: Loading designs from page:', currentPage.designs.length, 'designs');
         setDesigns(currentPage.designs);
+      } else if (currentPage.baseImage && !designsInitialized) {
+        // If the page has a baseImage (legacy format), convert it to our new designs array
+        console.log('Canvas: Converting legacy baseImage to design');
+        setDesigns([{
+          id: 'legacy-design',
+          imageUrl: currentPage.baseImage,
+          position: { x: 0, y: 0 }
+        }]);
       } else {
+        console.log('Canvas: No designs found in current page');
         setDesigns([]);
       }
+
       setDesignsInitialized(true);
     } else {
-      setDesignsInitialized(false);
-      setDesigns([]);
+      console.log('Canvas: No current page available');
     }
-  }, [currentPage]); // Only depends on currentPage
+  }, [currentPage]);
 
-  // Effect to save designs (remains the same)
+  // Save designs to page whenever they change
   useEffect(() => {
-    if (!currentPage || !designsInitialized) return;
-    if (debouncedUpdateRef.current) clearTimeout(debouncedUpdateRef.current);
+    // Skip during initial load or when no designs
+    if (!currentPage || !designsInitialized) {
+      return;
+    }
+
+    // Cancel any pending update
+    if (debouncedUpdateRef.current) {
+      clearTimeout(debouncedUpdateRef.current);
+    }
+
+    // Debounce updates to avoid too many database calls
     debouncedUpdateRef.current = setTimeout(() => {
+      console.log('Canvas: Saving designs to page:', designs.length, 'designs');
+      
+      // Deep clone the designs array to avoid reference issues
       const designsToSave = JSON.parse(JSON.stringify(designs));
-      updatePage(currentPage.id, { designs: designsToSave });
+      
+      updatePage(currentPage.id, { 
+        designs: designsToSave,
+        // Clear baseImage if we have designs (migration from old format)
+        baseImage: designs.length > 0 ? undefined : currentPage.baseImage
+      });
     }, 500);
+
+    // Cleanup timeout
     return () => {
-      if (debouncedUpdateRef.current) clearTimeout(debouncedUpdateRef.current);
+      if (debouncedUpdateRef.current) {
+        clearTimeout(debouncedUpdateRef.current);
+      }
     };
   }, [designs, currentPage?.id, designsInitialized, updatePage]);
 
@@ -507,66 +811,14 @@ export const Canvas: React.FC = () => {
     console.log('Canvas: Resetting canvas to default position and scale');
     const newPosition = { x: 0, y: 0 };
     const newScale = 1;
+    
+    setScale(newScale);
     setPosition(newPosition);
-    setScale(newScale);
-    // Save the reset position immediately (uses debouncedSavePosition)
+    
+    // Save the reset position
     if (currentPage?.id) {
-      debouncedSavePosition(currentPage.id, newPosition, newScale);
+      saveCanvasPosition(currentPage.id, newPosition, newScale);
     }
-  };
-  
-  // Handle zoom with mouse wheel
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomSensitivity = 0.1;
-    const minScale = 0.1;
-    const maxScale = 4;
-    let newScale = scale;
-    if (e.deltaY < 0) {
-      newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
-    } else {
-      newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
-    }
-    const canvasElement = canvasRef.current;
-    if (!canvasElement) return;
-    const rect = canvasElement.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const originX = mouseX / scale - position.x / scale;
-    const originY = mouseY / scale - position.y / scale;
-    const newPositionX = mouseX - originX * newScale;
-    const newPositionY = mouseY - originY * newScale;
-    setScale(newScale);
-    setPosition({ x: newPositionX, y: newPositionY });
-    // Position saving is handled by the useEffect hook
-  };
-
-  // Handle mouse move for panning and design dragging
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDesignDragging && selectedDesignId) {
-      const deltaX = e.clientX - designDragStart.x;
-      const deltaY = e.clientY - designDragStart.y;
-      const deltaCanvasX = deltaX / scale;
-      const deltaCanvasY = deltaY / scale;
-      setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === selectedDesignId ? { ...design, position: { x: designInitialPosition.x + deltaCanvasX, y: designInitialPosition.y + deltaCanvasY }} : design
-        )
-      );
-      return;
-    }
-    if (isDragging) {
-      const newPosition = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
-      setPosition(newPosition);
-      // Position saving is handled by the useEffect hook
-    }
-  };
-  
-  // Handle mouse up to stop dragging
-  const handleMouseUp = () => {
-    // No need to save explicitly here, the useEffect for position/scale change handles it
-    setIsDragging(false);
-    setIsDesignDragging(false);
   };
   
   // Find the selected design
@@ -575,6 +827,128 @@ export const Canvas: React.FC = () => {
   // Helper to get a specific design reference
   const getDesignRef = (id: string) => {
     return designRefs.current[id];
+  };
+  
+  // Handle wheel with mouse wheel
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    const zoomSensitivity = 0.1;
+    const minScale = 0.1;
+    const maxScale = 4;
+    
+    // Calculate new scale
+    let newScale = scale;
+    
+    if (e.deltaY < 0) {
+      // Zoom in
+      newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+    } else {
+      // Zoom out
+      newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+    }
+    
+    // Get canvas element and its rectangle
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+    
+    const rect = canvasElement.getBoundingClientRect();
+    
+    // Get cursor position relative to canvas
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calculate the point on the original content where the cursor is
+    const originX = mouseX / scale - position.x / scale;
+    const originY = mouseY / scale - position.y / scale;
+    
+    // Calculate the new position to keep cursor point fixed
+    const newPositionX = mouseX - originX * newScale;
+    const newPositionY = mouseY - originY * newScale;
+    
+    // Update state
+    setScale(newScale);
+    setPosition({ x: newPositionX, y: newPositionY });
+    
+    // Save position immediately after zooming
+    if (currentPage?.id) {
+      saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+    }
+  };
+  
+  // Add back the handleCanvasMouseDown function for canvas panning
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Check if clicking on any design
+    const clickedDesignId = designs.find(design => {
+      const designRef = getDesignRef(design.id);
+      if (!designRef) return false;
+      
+      // Check if clicking on the design or any of its children
+      return designRef.contains(e.target as Node);
+    })?.id;
+    
+    if (clickedDesignId) {
+      // Handled by the design's own mouse handler
+      return;
+    }
+    
+    // Deselect designs when clicking on empty canvas
+    setSelectedDesignId(null);
+    
+    // Handle canvas panning
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
+  };
+  
+  // Handle mouse move for panning and design dragging
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDesignDragging && selectedDesignId) {
+      // Calculate the delta in screen coordinates
+      const deltaX = e.clientX - designDragStart.x;
+      const deltaY = e.clientY - designDragStart.y;
+      
+      // Convert the delta to canvas coordinates by dividing by the scale
+      const deltaCanvasX = deltaX / scale;
+      const deltaCanvasY = deltaY / scale;
+      
+      // Update design position immediately for smooth dragging
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === selectedDesignId
+            ? {
+                ...design,
+                position: {
+                  x: designInitialPosition.x + deltaCanvasX,
+                  y: designInitialPosition.y + deltaCanvasY
+                }
+              }
+            : design
+        )
+      );
+      return;
+    }
+    
+    if (isDragging) {
+      const newPosition = {
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      };
+      setPosition(newPosition);
+    }
+  };
+  
+  // Handle mouse up to stop dragging
+  const handleMouseUp = () => {
+    // Check if we were dragging the canvas (panning)
+    if (isDragging && currentPage?.id) {
+      saveCanvasPosition(currentPage.id, position, scale);
+    }
+    
+    setIsDragging(false);
+    setIsDesignDragging(false);
   };
   
   // Handle click on a design
@@ -740,6 +1114,25 @@ export const Canvas: React.FC = () => {
     setAnalysisVisible(true);
   };
   
+  // Add a state for storing a pending Figma link that requires authentication
+  const [pendingFigmaLink, setPendingFigmaLink] = useState<FigmaLinkData | null>(null);
+
+  // Add a method to handle Figma authentication
+  const handleFigmaAuth = async () => {
+    if (!pendingFigmaLink) return;
+    
+    try {
+      // Start the Figma OAuth flow
+      await supabaseService.signInWithFigma();
+      // Note: This will redirect away from the page, so we won't be able to process
+      // the link immediately. The user will need to paste it again after auth.
+    } catch (error) {
+      console.error('Canvas: Error starting Figma authentication:', error);
+      alert('Failed to authenticate with Figma. Please try again.');
+      setPendingFigmaLink(null);
+    }
+  };
+
   // Handle image pasting
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
@@ -748,6 +1141,108 @@ export const Canvas: React.FC = () => {
         return;
       }
       
+      // First, check if there's text in the clipboard that might be a Figma selection link
+      const clipboardText = e.clipboardData?.getData('text');
+      if (clipboardText && isFigmaSelectionLink(clipboardText)) {
+        console.log('Canvas: Detected Figma selection link in clipboard:', clipboardText);
+        
+        try {
+          // Parse the Figma selection link
+          const figmaLinkData = parseFigmaSelectionLink(clipboardText);
+          
+          if (figmaLinkData.isValid) {
+            // Show loading indicator
+            // Create a temporary design to indicate loading
+            const timestamp = new Date().getTime();
+            const tempDesignId = `design-${timestamp}`;
+            
+            // Check if authenticated with Figma first
+            const isAuth = await supabaseService.isAuthenticatedWithFigma();
+            
+            if (!isAuth) {
+              console.log('Canvas: Not authenticated with Figma, showing auth prompt');
+              // Store the link data for later processing after auth
+              setPendingFigmaLink(figmaLinkData);
+              
+              // Create a temporary design to show auth prompt
+              const authPromptDesign: Design = {
+                id: tempDesignId,
+                imageUrl: '/loading-placeholder.svg', // Using our SVG placeholder
+                position: { x: 0, y: 0 },
+                isFromFigma: true,
+                figmaFileKey: figmaLinkData.fileKey,
+                figmaNodeId: figmaLinkData.nodeId,
+                figmaSelectionLink: clipboardText,
+                needsFigmaAuth: true
+              };
+              
+              // Add to designs to show auth prompt
+              setDesigns(prev => [...prev, authPromptDesign]);
+              return;
+            }
+            
+            // Continue with Figma import if authenticated
+            // Create a temporary design with loading indicator
+            const tempDesign: Design = {
+              id: tempDesignId,
+              imageUrl: '/loading-placeholder.svg',
+              position: { x: 0, y: 0 },
+              isFromFigma: true,
+              figmaFileKey: figmaLinkData.fileKey,
+              figmaNodeId: figmaLinkData.nodeId,
+              figmaSelectionLink: clipboardText
+            };
+            
+            // Add to designs to show something is happening
+            setDesigns(prev => [...prev, tempDesign]);
+            
+            // Process the Figma selection link using our SupabaseService
+            console.log('Canvas: Processing Figma selection link with file key:', 
+              figmaLinkData.fileKey, 'and node ID:', figmaLinkData.nodeId);
+          
+            try {
+              // Import the Figma frame using the service
+              const importResult = await supabaseService.importFigmaDesign(
+                figmaLinkData.fileKey,
+                figmaLinkData.nodeId
+              );
+              
+              if (importResult?.imageUrl) {
+                // Update the temporary design with the actual image and data
+                setDesigns(prev => prev.map(design => 
+                  design.id === tempDesignId
+                    ? {
+                        ...design,
+                        imageUrl: importResult.imageUrl,
+                        // Keep the Figma-specific properties
+                      }
+                    : design
+                ));
+                
+                console.log('Canvas: Successfully imported Figma design:', importResult);
+              } else {
+                // If import failed, show error and remove temporary design
+                console.error('Canvas: Failed to import Figma design');
+                // Remove the temporary design
+                setDesigns(prev => prev.filter(design => design.id !== tempDesignId));
+                alert('Failed to import Figma design. Please check your access permissions and try again.');
+              }
+            } catch (error) {
+              console.error('Canvas: Error importing Figma design:', error);
+              // Remove the temporary design on error
+              setDesigns(prev => prev.filter(design => design.id !== tempDesignId));
+              alert(`Error importing Figma design: ${error}`);
+            }
+            
+            // Skip the image paste processing
+            return;
+          }
+        } catch (error) {
+          console.error('Canvas: Error processing Figma selection link:', error);
+        }
+      }
+      
+      // If not a Figma link or processing failed, continue with the original image paste logic
       const items = e.clipboardData?.items;
       if (!items) {
         console.log('Canvas: No clipboard data items available');
@@ -845,7 +1340,7 @@ export const Canvas: React.FC = () => {
       
       // Save position immediately after wheel zoom
       if (currentPage?.id) {
-        debouncedSavePosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+        saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
       }
     };
 
@@ -854,7 +1349,7 @@ export const Canvas: React.FC = () => {
     return () => {
       canvasElement.removeEventListener('wheel', handleWheelEvent);
     };
-  }, [scale, position, currentPage?.id, debouncedSavePosition]);
+  }, [scale, position, currentPage?.id, saveCanvasPosition]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -939,31 +1434,6 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Check if clicking directly on the canvas background, not on a design card
-    let targetElement = e.target as HTMLElement;
-    let clickedOnDesign = false;
-    // Check if the clicked element or any parent up to the canvas itself is a DesignCard
-    if (targetElement.closest('[data-design-card="true"]')) {
-        clickedOnDesign = true;
-    }
-
-    if (clickedOnDesign) {
-      // Let handleDesignMouseDown handle clicks on designs
-      console.log('Canvas: Click detected on a design element, ignoring for panning.');
-      return;
-    }
-
-    // Clicked on the canvas background
-    console.log('Canvas: Click detected on background. Initiating pan.');
-    setSelectedDesignId(null); // Deselect any design
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
-  };
-  
   return (
     <>
       <GlobalStyle />
@@ -997,11 +1467,47 @@ export const Canvas: React.FC = () => {
                       y={design.position.y}
                     >
                       <DesignCard 
-                        data-design-card="true"
                         ref={el => designRefs.current[design.id] = el}
                         isSelected={selectedDesignId === design.id}
                         onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
                       >
+                        {/* Show Figma auth prompt if needed */}
+                        {design.isFromFigma && (design as any).needsFigmaAuth && (
+                          <FigmaAuthPrompt>
+                            <p>Figma authentication required to import this design</p>
+                            <FigmaAuthButton onClick={handleFigmaAuth}>
+                              <svg width="16" height="16" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
+                                <path d="M0 47.5C0 44.9804 1.00089 42.5641 2.78249 40.7825C4.56408 39.0009 6.98044 38 9.5 38H19V47.5C19 50.0196 17.9991 52.4359 16.2175 54.2175C14.4359 55.9991 12.0196 57 9.5 57C6.98044 57 4.56408 55.9991 2.78249 54.2175C1.00089 52.4359 0 50.0196 0 47.5Z" fill="white"/>
+                                <path d="M19 0V19H28.5C31.0196 19 33.4359 17.9991 35.2175 16.2175C36.9991 14.4359 38 12.0196 38 9.5C38 6.98044 36.9991 4.56408 35.2175 2.78249C33.4359 1.00089 31.0196 0 28.5 0H19Z" fill="white"/>
+                                <path d="M0 9.5C0 12.0196 1.00089 14.4359 2.78249 16.2175C4.56408 17.9991 6.98044 19 9.5 19H19V0H9.5C6.98044 0 4.56408 1.00089 2.78249 2.78249C1.00089 4.56408 0 6.98044 0 9.5Z" fill="white"/>
+                                <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
+                              </svg>
+                              Sign in with Figma
+                            </FigmaAuthButton>
+                          </FigmaAuthPrompt>
+                        )}
+
+                        {design.isFromFigma && !(design as any).needsFigmaAuth && (
+                          <FigmaBadge>
+                            <svg width="14" height="14" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
+                              <path d="M0 47.5C0 44.9804 1.00089 42.5641 2.78249 40.7825C4.56408 39.0009 6.98044 38 9.5 38H19V47.5C19 50.0196 17.9991 52.4359 16.2175 54.2175C14.4359 55.9991 12.0196 57 9.5 57C6.98044 57 4.56408 55.9991 2.78249 54.2175C1.00089 52.4359 0 50.0196 0 47.5Z" fill="white"/>
+                              <path d="M19 0V19H28.5C31.0196 19 33.4359 17.9991 35.2175 16.2175C36.9991 14.4359 38 12.0196 38 9.5C38 6.98044 36.9991 4.56408 35.2175 2.78249C33.4359 1.00089 31.0196 0 28.5 0H19Z" fill="white"/>
+                              <path d="M0 9.5C0 12.0196 1.00089 14.4359 2.78249 16.2175C4.56408 17.9991 6.98044 19 9.5 19H19V0H9.5C6.98044 0 4.56408 1.00089 2.78249 2.78249C1.00089 4.56408 0 6.98044 0 9.5Z" fill="white"/>
+                              <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
+                            </svg>
+                            Figma
+                          </FigmaBadge>
+                        )}
+
+                        {design.isFromFigma && design.figmaFileKey && !(design as any).needsFigmaAuth && (
+                          <FigmaMetadata>
+                            File: {design.figmaFileKey.substring(0, 8)}...{design.figmaFileKey.substring(design.figmaFileKey.length - 4)}
+                            {design.figmaNodeId && ` | Node: ${design.figmaNodeId}`}
+                          </FigmaMetadata>
+                        )}
+
                         <DesignImage 
                           key={`img-${design.id}`}
                           src={design.imageUrl} 
@@ -1065,7 +1571,6 @@ export const Canvas: React.FC = () => {
                         y={iteration.position.y}
                       >
                         <DesignCard 
-                          data-design-card="true"
                           ref={el => designRefs.current[iteration.id] = el}
                           isSelected={selectedDesignId === iteration.id}
                           onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
@@ -1113,23 +1618,7 @@ export const Canvas: React.FC = () => {
         
         {/* Debug Controls - only in development mode */}
         {process.env.NODE_ENV === 'development' && (
-          <DebugButton onClick={() => {
-            if (currentPage?.id) {
-              const data = {
-                position,
-                scale
-              };
-              const key = getStorageKey(currentPage.id);
-              localStorage.setItem(key, JSON.stringify(data));
-              console.log('DEBUG: Manually saved position to localStorage:', key, data);
-              
-              // Verify it was saved
-              const savedData = localStorage.getItem(key);
-              if (savedData) {
-                console.log('DEBUG: Verification - data in localStorage:', JSON.parse(savedData));
-              }
-            }
-          }}>
+          <DebugButton onClick={debugSavePosition}>
             Save Position (Debug)
           </DebugButton>
         )}

@@ -1158,6 +1158,76 @@ class SupabaseService {
       return false;
     }
   }
+
+  /**
+   * Import a design from Figma using a file key and node ID
+   * @param fileKey The Figma file key
+   * @param nodeId The Figma node ID
+   * @returns Promise with the imported design data including imageUrl
+   */
+  async importFigmaDesign(fileKey: string, nodeId: string): Promise<{ imageUrl: string; name?: string } | null> {
+    this.logInfo('importFigmaDesign', `Importing Figma design: fileKey=${fileKey}, nodeId=${nodeId}`);
+    
+    try {
+      // Check if authenticated with Figma
+      const isAuth = await this.isAuthenticatedWithFigma();
+      if (!isAuth) {
+        this.logError('importFigmaDesign', 'Not authenticated with Figma');
+        throw new Error('Not authenticated with Figma. Please sign in first.');
+      }
+      
+      // Get the Figma file data to find the node
+      this.logInfo('importFigmaDesign', `Getting Figma file: ${fileKey}`);
+      const fileData = await this.getFigmaFile(fileKey);
+      
+      if (!fileData) {
+        this.logError('importFigmaDesign', `Failed to get Figma file: ${fileKey}`);
+        throw new Error('Failed to get Figma file data');
+      }
+      
+      // Get image URLs for the node
+      this.logInfo('importFigmaDesign', `Getting image URL for node: ${nodeId}`);
+      const imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
+      
+      if (!imageUrls || !imageUrls[nodeId]) {
+        this.logError('importFigmaDesign', `Failed to get image URL for node: ${nodeId}`);
+        throw new Error('Failed to get image URL for the selected node');
+      }
+      
+      const imageUrl = imageUrls[nodeId];
+      
+      // Get node name if possible
+      let nodeName = '';
+      try {
+        const findNodeById = (node: any, id: string): any => {
+          if (node.id === id) return node;
+          if (node.children) {
+            for (const child of node.children) {
+              const found = findNodeById(child, id);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        
+        const node = findNodeById(fileData.document, nodeId);
+        if (node) {
+          nodeName = node.name;
+        }
+      } catch (err) {
+        this.logWarning('importFigmaDesign', `Couldn't find node name: ${err}`);
+      }
+      
+      // Return the image URL and name
+      return {
+        imageUrl,
+        name: nodeName
+      };
+    } catch (error) {
+      this.logError('importFigmaDesign', `Error importing Figma design: ${error}`);
+      throw error;
+    }
+  }
 }
 
 // Create and export a single instance
