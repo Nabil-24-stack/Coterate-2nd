@@ -1,0 +1,12 @@
+<svg width="400" height="300" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="300" fill="#F3F4F6"/>
+  <g transform="translate(170, 100)">
+    <!-- Simplified Figma logo -->
+    <path d="M30 60C41.0457 60 50 51.0457 50 40C50 28.9543 41.0457 20 30 20V60Z" fill="#1ABCFE"/>
+    <path d="M0 80C0 68.9543 8.95431 60 20 60H30V80C30 91.0457 21.0457 100 10 100C-1.04569 100 -10 91.0457 -10 80H0Z" fill="#0ACF83"/>
+    <path d="M30 0V20H50C50 8.95431 41.0457 0 30 0Z" fill="#FF7262"/>
+    <path d="M0 20C0 8.95431 8.95431 0 20 0H30V40H20C8.95431 40 0 31.0457 0 20Z" fill="#F24E1E"/>
+    <path d="M0 60C0 48.9543 8.95431 40 20 40H30V60H20H0Z" fill="#A259FF"/>
+  </g>
+  <text x="200" y="200" font-family="Arial" font-size="16" text-anchor="middle" fill="#6B7280">Figma Design (Authentication Required)</text>
+</svg>

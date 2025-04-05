@@ -701,12 +701,32 @@ class SupabaseService {
   // Get image URLs for nodes
   async getFigmaImageUrls(fileKey: string, nodeIds: string[]) {
     try {
+      this.logInfo('getFigmaImageUrls', `Getting image URLs for file ${fileKey}, nodes: ${nodeIds.join(',')}`);
       const nodeIdsParam = nodeIds.join(',');
-      const data = await this.callFigmaApi(`images/${fileKey}?ids=${nodeIdsParam}&format=png`);
-      return data.images || {};
+      const data = await this.callFigmaApi(`images/${fileKey}?ids=${nodeIdsParam}&format=png&scale=2`);
+      
+      // Check if we have valid response with images
+      if (!data || !data.images) {
+        this.logError('getFigmaImageUrls', `Invalid response from Figma API: ${JSON.stringify(data)}`);
+        throw new Error('Invalid response from Figma API');
+      }
+      
+      // Check if any of the requested nodes are missing in the response
+      const missingNodes = nodeIds.filter(id => !data.images[id]);
+      if (missingNodes.length > 0) {
+        this.logWarning('getFigmaImageUrls', `Some nodes not found: ${missingNodes.join(', ')}`);
+        
+        // If all nodes are missing, throw an error
+        if (missingNodes.length === nodeIds.length) {
+          throw new Error(`Nodes not found: ${missingNodes.join(', ')}`);
+        }
+      }
+      
+      this.logInfo('getFigmaImageUrls', `Successfully got images for ${Object.keys(data.images).length} nodes`);
+      return data.images;
     } catch (error) {
-      console.error('Error fetching image URLs:', error);
-      return {};
+      this.logError('getFigmaImageUrls', `Error fetching image URLs: ${error}`);
+      throw error; // Propagate error for better error handling upstream
     }
   }
 
@@ -1241,16 +1261,32 @@ class SupabaseService {
         throw new Error('Failed to get Figma file data');
       }
       
-      // Get image URLs for the node
+      // Try to get image URLs for the node
       this.logInfo('importFigmaDesign', `Getting image URL for node: ${nodeId}`);
-      const imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
+      let imageUrls;
+      let finalNodeId = nodeId;
       
-      if (!imageUrls || !imageUrls[nodeId]) {
-        this.logError('importFigmaDesign', `Failed to get image URL for node: ${nodeId}`);
+      try {
+        imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
+      } catch (nodeError: any) {
+        // If the node ID was not found, try with the default node ID '0:1'
+        if (nodeError.message && (nodeError.message.includes('not found') || 
+            nodeError.status === 404 || nodeId === 'default' || nodeError.message.includes('404'))) {
+          this.logInfo('importFigmaDesign', `Node ${nodeId} not found, trying default node 0:1`);
+          finalNodeId = '0:1';
+          imageUrls = await this.getFigmaImageUrls(fileKey, [finalNodeId]);
+        } else {
+          // Re-throw other errors
+          throw nodeError;
+        }
+      }
+      
+      if (!imageUrls || !imageUrls[finalNodeId]) {
+        this.logError('importFigmaDesign', `Failed to get image URL for node: ${finalNodeId}`);
         throw new Error('Failed to get image URL for the selected node');
       }
       
-      const imageUrl = imageUrls[nodeId];
+      const imageUrl = imageUrls[finalNodeId];
       
       // Get node name if possible
       let nodeName = '';
@@ -1266,12 +1302,15 @@ class SupabaseService {
           return null;
         };
         
-        const node = findNodeById(fileData.document, nodeId);
+        const node = findNodeById(fileData.document, finalNodeId);
         if (node) {
           nodeName = node.name;
+        } else {
+          nodeName = fileData.name || 'Figma Design';
         }
       } catch (err) {
         this.logWarning('importFigmaDesign', `Couldn't find node name: ${err}`);
+        nodeName = fileData.name || 'Figma Design';
       }
       
       // Return the image URL and name

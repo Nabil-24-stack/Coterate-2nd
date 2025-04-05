@@ -444,6 +444,11 @@ const FigmaAuthButton = styled.button`
   }
 `;
 
+// Debug for image loading
+const debugImageLoad = (src: string, success: boolean, error?: string) => {
+  console.log(`Image ${success ? 'loaded' : 'failed'}: ${src}${error ? ` (${error})` : ''}`);
+};
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -1158,10 +1163,33 @@ export const Canvas: React.FC = () => {
         textLength: clipboardText.length,
         text: clipboardText.substring(0, 50) + (clipboardText.length > 50 ? '...' : ''),
         containsFigma: clipboardText.includes('figma.com'),
-        isFigmaLink: isFigmaSelectionLink(clipboardText)
+        isFigmaLink: isFigmaSelectionLink(clipboardText),
+        isDesignLink: clipboardText.includes('figma.com/design/')
       });
       
-      // Check if the clipboard content is a Figma selection link
+      // Special debug handling for design links
+      if (clipboardText.includes('figma.com/design/')) {
+        console.log('DIRECT DESIGN LINK DETECTION: Detected Figma design link');
+        
+        // Extract the design key (file key)
+        const designKeyRegex = /figma\.com\/design\/([^/]+)/;
+        const designKeyMatch = clipboardText.match(designKeyRegex);
+        
+        if (designKeyMatch && designKeyMatch[1]) {
+          const fileKey = designKeyMatch[1];
+          console.log('DIRECT DESIGN LINK: Extracted file key:', fileKey);
+          
+          // Use a default node ID for the first frame
+          const nodeId = '0:1';
+          
+          event.preventDefault();
+          console.log('DIRECT DESIGN LINK: Fetching with file key and default node ID');
+          fetchFigmaNode(fileKey, nodeId);
+          return;
+        }
+      }
+      
+      // Regular flow for other Figma links
       if (isFigmaSelectionLink(clipboardText)) {
         console.log('Figma selection link detected!', clipboardText);
         
@@ -1201,6 +1229,30 @@ export const Canvas: React.FC = () => {
       console.log(`Fetching Figma node - File: ${fileKey}, Node: ${nodeId}`);
       setFigmaAuthError(null);
       
+      // Check authentication status
+      const isAuth = await supabaseService.isAuthenticatedWithFigma();
+      console.log('Figma authentication status:', isAuth);
+      
+      if (!isAuth) {
+        console.log('Not authenticated with Figma, showing auth prompt');
+        
+        // Create a design with auth prompt
+        const authDesign: Design & { needsFigmaAuth: boolean } = {
+          id: `figma-auth-${Date.now()}`,
+          imageUrl: '/figma-placeholder.svg', // Use a Figma placeholder 
+          position: { x: 100, y: 100 },
+          isFromFigma: true,
+          figmaFileKey: fileKey,
+          figmaNodeId: nodeId,
+          needsFigmaAuth: true // This will trigger the auth prompt
+        };
+        
+        // Add the auth design to the canvas and save the pending link
+        setDesigns(prev => [...prev, authDesign]);
+        setPendingFigmaLink({ fileKey, nodeId, isValid: true });
+        return;
+      }
+
       // Generate a unique ID for this design
       const designId = `figma-${Date.now()}`;
       
@@ -1216,8 +1268,12 @@ export const Canvas: React.FC = () => {
       
       setDesigns(prev => [...prev, placeholderDesign]);
       
+      console.log('Added placeholder design, calling importFigmaDesign with:', {fileKey, nodeId});
+      
       // Use the importFigmaDesign method to get the image
       const importResult = await supabaseService.importFigmaDesign(fileKey, nodeId);
+      
+      console.log('Import result:', importResult);
       
       if (!importResult || !importResult.imageUrl) {
         console.error('Failed to import Figma design');
@@ -1253,12 +1309,9 @@ export const Canvas: React.FC = () => {
         console.log('Unauthorized Figma API access, clearing token and showing auth prompt');
         supabaseService.clearInvalidFigmaToken();
         
-        // Find the design we were trying to update
-        const designId = `figma-${Date.now()}`;
-        
         // Create a design with auth prompt
         const authDesign: Design & { needsFigmaAuth: boolean } = {
-          id: designId,
+          id: `figma-auth-${Date.now()}`,
           imageUrl: '/figma-placeholder.svg', // Use a Figma placeholder 
           position: { x: 100, y: 100 },
           isFromFigma: true,
@@ -1269,6 +1322,7 @@ export const Canvas: React.FC = () => {
         
         // Add the auth design to the canvas
         setDesigns(prev => [...prev, authDesign]);
+        setPendingFigmaLink({ fileKey, nodeId, isValid: true });
       }
     }
   }
@@ -1493,6 +1547,8 @@ export const Canvas: React.FC = () => {
                           src={design.imageUrl} 
                           alt={`Design ${design.id}`}
                           draggable={false}
+                          onLoad={() => debugImageLoad(design.imageUrl, true)}
+                          onError={() => debugImageLoad(design.imageUrl, false, 'Failed to load image')}
                         />
                         {selectedDesignId === design.id && !design.isProcessing && (
                           <IterationButton
