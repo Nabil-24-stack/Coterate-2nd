@@ -555,24 +555,64 @@ class SupabaseService {
 
       console.log(`Calling Figma API: ${endpoint} with token (length: ${token.length})`);
       
-      const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      try {
+        const response = await fetch(`https://api.figma.com/v1/${endpoint}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+  
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Figma API error (${response.status}):`, errorText);
+          
+          // If we get a 401 Unauthorized, the token is invalid - clear it
+          if (response.status === 401) {
+            console.warn('Received 401 Unauthorized from Figma API - clearing invalid token');
+            this.clearInvalidFigmaToken();
+          }
+          
+          throw new Error(`Failed to call Figma API: ${response.statusText}`);
         }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Figma API error (${response.status}):`, errorText);
-        throw new Error(`Failed to call Figma API: ${response.statusText}`);
+  
+        const data = await response.json();
+        console.log(`Figma API response for ${endpoint}:`, data);
+        return data;
+      } catch (fetchError: any) {
+        // If the fetch fails with a network error, the token might be invalid
+        console.error('Fetch error in Figma API call:', fetchError);
+        
+        // Clear invalid token if it seems to be an auth issue
+        if (fetchError.message && (
+            fetchError.message.includes('Unauthorized') || 
+            fetchError.message.includes('Invalid API key'))) {
+          this.clearInvalidFigmaToken();
+        }
+        
+        throw fetchError;
       }
-
-      const data = await response.json();
-      console.log(`Figma API response for ${endpoint}:`, data);
-      return data;
     } catch (error) {
       console.error(`Error calling Figma API (${endpoint}):`, error);
       throw error;
+    }
+  }
+  
+  // Clear invalid Figma tokens
+  clearInvalidFigmaToken() {
+    console.log('Clearing invalid Figma tokens from storage');
+    
+    // Remove from localStorage
+    localStorage.removeItem('figma_provider_token');
+    localStorage.removeItem('figma_access_token');
+    localStorage.removeItem('figma_user');
+    
+    // Also clear any Figma-related session data in Supabase
+    try {
+      this.supabaseClient.auth.signOut()
+        .then(() => console.log('Signed out of Supabase to clear session'))
+        .catch(err => console.error('Error signing out:', err));
+    } catch (e) {
+      console.error('Error clearing Supabase session:', e);
     }
   }
 
@@ -727,14 +767,30 @@ class SupabaseService {
     try {
       // Check for session first
       const session = await this.getSession();
-      if (session) {
-        return true;
-      }
+      const hasSessionToken = session && 
+                             typeof session === 'object' && 
+                             'provider_token' in session && 
+                             !!session.provider_token;
       
       // Fallback to localStorage
-      const token = localStorage.getItem('figma_provider_token') || 
-                   localStorage.getItem('figma_access_token');
-      return !!token;
+      const hasLocalToken = !!localStorage.getItem('figma_provider_token') || 
+                           !!localStorage.getItem('figma_access_token');
+                           
+      console.log('Figma auth check:', { hasSessionToken, hasLocalToken });
+      
+      if (!hasSessionToken && !hasLocalToken) {
+        return false;
+      }
+      
+      // Actually test the token by making a simple API call
+      try {
+        // A lightweight call to test authentication
+        await this.callFigmaApi('me');
+        return true;
+      } catch (apiError) {
+        console.error('Failed to validate Figma token with API call:', apiError);
+        return false;
+      }
     } catch (error) {
       console.error('Error checking Figma authentication:', error);
       return false;

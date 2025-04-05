@@ -444,6 +444,13 @@ const FigmaAuthButton = styled.button`
   }
 `;
 
+const FigmaErrorMessage = styled.p`
+  color: #e53935;
+  margin-top: 12px;
+  font-size: 14px;
+  max-width: 300px;
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -1117,19 +1124,27 @@ export const Canvas: React.FC = () => {
   // Add a state for storing a pending Figma link that requires authentication
   const [pendingFigmaLink, setPendingFigmaLink] = useState<FigmaLinkData | null>(null);
 
-  // Add a method to handle Figma authentication
+  // Add a state for error message
+  const [figmaAuthError, setFigmaAuthError] = useState<string | null>(null);
+
+  // Update the handleFigmaAuth method
   const handleFigmaAuth = async () => {
     if (!pendingFigmaLink) return;
     
+    setFigmaAuthError(null); // Clear any previous errors
+    
     try {
+      // First, clear any invalid tokens
+      await supabaseService.clearInvalidFigmaToken();
+      
       // Start the Figma OAuth flow
+      console.log('Starting Figma authentication flow');
       await supabaseService.signInWithFigma();
-      // Note: This will redirect away from the page, so we won't be able to process
-      // the link immediately. The user will need to paste it again after auth.
+      // Note: This will redirect away from the page
     } catch (error) {
       console.error('Canvas: Error starting Figma authentication:', error);
-      alert('Failed to authenticate with Figma. Please try again.');
-      setPendingFigmaLink(null);
+      setFigmaAuthError('Failed to start Figma authentication. Please try again.');
+      // Keep pendingFigmaLink so the user can retry
     }
   };
 
@@ -1475,6 +1490,7 @@ export const Canvas: React.FC = () => {
                         {design.isFromFigma && (design as any).needsFigmaAuth && (
                           <FigmaAuthPrompt>
                             <p>Figma authentication required to import this design</p>
+                            {figmaAuthError && <FigmaErrorMessage>{figmaAuthError}</FigmaErrorMessage>}
                             <FigmaAuthButton onClick={handleFigmaAuth}>
                               <svg width="16" height="16" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
@@ -1485,6 +1501,9 @@ export const Canvas: React.FC = () => {
                               </svg>
                               Sign in with Figma
                             </FigmaAuthButton>
+                            <p style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
+                              After signing in, you'll need to paste the Figma link again.
+                            </p>
                           </FigmaAuthPrompt>
                         )}
 
