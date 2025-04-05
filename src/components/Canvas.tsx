@@ -409,46 +409,39 @@ const FigmaMetadata = styled.div`
 
 // Create a styled component for the Figma auth prompt
 const FigmaAuthPrompt = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.9);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.03);
+  border: 1px dashed #ccc;
   border-radius: 8px;
-  padding: 20px;
+  padding: 16px;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+`;
+
+const FigmaErrorMessage = styled.div`
+  color: #e53935;
+  margin-bottom: 12px;
+  font-size: 14px;
   text-align: center;
 `;
 
 const FigmaAuthButton = styled.button`
-  background-color: #1E1E1E;
+  background-color: #1e88e5;
   color: white;
   border: none;
   border-radius: 4px;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  padding: 8px 16px;
   cursor: pointer;
-  
-  &:hover {
-    background-color: #000;
-  }
-`;
+  font-weight: 500;
+  transition: background-color 0.2s;
 
-const FigmaErrorMessage = styled.p`
-  color: #e53935;
-  margin-top: 12px;
-  font-size: 14px;
-  max-width: 300px;
+  &:hover {
+    background-color: #1976d2;
+  }
 `;
 
 export const Canvas: React.FC = () => {
@@ -1127,190 +1120,158 @@ export const Canvas: React.FC = () => {
   // Add a state for error message
   const [figmaAuthError, setFigmaAuthError] = useState<string | null>(null);
 
-  // Update the handleFigmaAuth method
+  // Handle Figma authentication
   const handleFigmaAuth = async () => {
-    if (!pendingFigmaLink) return;
-    
-    setFigmaAuthError(null); // Clear any previous errors
-    
     try {
-      // First, clear any invalid tokens
-      await supabaseService.clearInvalidFigmaToken();
+      console.log('Initiating Figma authentication');
+      setFigmaAuthError(null);
+      
+      // Clear any existing invalid tokens first
+      supabaseService.clearInvalidFigmaToken();
       
       // Start the Figma OAuth flow
-      console.log('Starting Figma authentication flow');
       await supabaseService.signInWithFigma();
-      // Note: This will redirect away from the page
-    } catch (error) {
-      console.error('Canvas: Error starting Figma authentication:', error);
-      setFigmaAuthError('Failed to start Figma authentication. Please try again.');
-      // Keep pendingFigmaLink so the user can retry
+      
+      console.log('Figma authentication initiated successfully');
+      
+      // After authentication, check if we have a pending Figma link to process
+      if (pendingFigmaLink) {
+        console.log('Processing pending Figma link after authentication', pendingFigmaLink);
+        const { fileKey, nodeId } = pendingFigmaLink;
+        
+        // Fetch the Figma node with the newly obtained auth
+        fetchFigmaNode(fileKey, nodeId);
+      }
+    } catch (error: any) {
+      console.error('Error authenticating with Figma:', error);
+      setFigmaAuthError(error.message || 'Failed to authenticate with Figma');
     }
   };
 
   // Handle image pasting
   useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      if (!currentPage) {
-        console.log('Canvas: No current page available for paste');
-        return;
-      }
+    function handlePaste(event: ClipboardEvent) {
+      // Get clipboard text content
+      const clipboardText = event.clipboardData?.getData('text') || '';
       
-      // First, check if there's text in the clipboard that might be a Figma selection link
-      const clipboardText = e.clipboardData?.getData('text');
-      if (clipboardText && isFigmaSelectionLink(clipboardText)) {
-        console.log('Canvas: Detected Figma selection link in clipboard:', clipboardText);
+      console.log('Paste event detected!', {
+        textLength: clipboardText.length,
+        text: clipboardText.substring(0, 50) + (clipboardText.length > 50 ? '...' : ''),
+        containsFigma: clipboardText.includes('figma.com'),
+        isFigmaLink: isFigmaSelectionLink(clipboardText)
+      });
+      
+      // Check if the clipboard content is a Figma selection link
+      if (isFigmaSelectionLink(clipboardText)) {
+        console.log('Figma selection link detected!', clipboardText);
         
-        try {
-          // Parse the Figma selection link
-          const figmaLinkData = parseFigmaSelectionLink(clipboardText);
-          
-          if (figmaLinkData.isValid) {
-            // Show loading indicator
-            // Create a temporary design to indicate loading
-            const timestamp = new Date().getTime();
-            const tempDesignId = `design-${timestamp}`;
-            
-            // Check if authenticated with Figma first
-            const isAuth = await supabaseService.isAuthenticatedWithFigma();
-            
-            if (!isAuth) {
-              console.log('Canvas: Not authenticated with Figma, showing auth prompt');
-              // Store the link data for later processing after auth
-              setPendingFigmaLink(figmaLinkData);
-              
-              // Create a temporary design to show auth prompt
-              const authPromptDesign: Design = {
-                id: tempDesignId,
-                imageUrl: '/loading-placeholder.svg', // Using our SVG placeholder
-                position: { x: 0, y: 0 },
-                isFromFigma: true,
-                figmaFileKey: figmaLinkData.fileKey,
-                figmaNodeId: figmaLinkData.nodeId,
-                figmaSelectionLink: clipboardText,
-                needsFigmaAuth: true
-              };
-              
-              // Add to designs to show auth prompt
-              setDesigns(prev => [...prev, authPromptDesign]);
-              return;
-            }
-            
-            // Continue with Figma import if authenticated
-            // Create a temporary design with loading indicator
-            const tempDesign: Design = {
-              id: tempDesignId,
-              imageUrl: '/loading-placeholder.svg',
-              position: { x: 0, y: 0 },
-              isFromFigma: true,
-              figmaFileKey: figmaLinkData.fileKey,
-              figmaNodeId: figmaLinkData.nodeId,
-              figmaSelectionLink: clipboardText
-            };
-            
-            // Add to designs to show something is happening
-            setDesigns(prev => [...prev, tempDesign]);
-            
-            // Process the Figma selection link using our SupabaseService
-            console.log('Canvas: Processing Figma selection link with file key:', 
-              figmaLinkData.fileKey, 'and node ID:', figmaLinkData.nodeId);
-          
-            try {
-              // Import the Figma frame using the service
-              const importResult = await supabaseService.importFigmaDesign(
-                figmaLinkData.fileKey,
-                figmaLinkData.nodeId
-              );
-              
-              if (importResult?.imageUrl) {
-                // Update the temporary design with the actual image and data
-                setDesigns(prev => prev.map(design => 
-                  design.id === tempDesignId
-                    ? {
-                        ...design,
-                        imageUrl: importResult.imageUrl,
-                        // Keep the Figma-specific properties
-                      }
-                    : design
-                ));
-                
-                console.log('Canvas: Successfully imported Figma design:', importResult);
-              } else {
-                // If import failed, show error and remove temporary design
-                console.error('Canvas: Failed to import Figma design');
-                // Remove the temporary design
-                setDesigns(prev => prev.filter(design => design.id !== tempDesignId));
-                alert('Failed to import Figma design. Please check your access permissions and try again.');
-              }
-            } catch (error) {
-              console.error('Canvas: Error importing Figma design:', error);
-              // Remove the temporary design on error
-              setDesigns(prev => prev.filter(design => design.id !== tempDesignId));
-              alert(`Error importing Figma design: ${error}`);
-            }
-            
-            // Skip the image paste processing
+        // Parse the Figma selection link to get file key and node ID
+        const linkData = parseFigmaSelectionLink(clipboardText);
+        console.log('Parsed Figma link data:', linkData);
+        
+        if (linkData.isValid) {
+          // First make sure Figma is authenticated
+          if (!supabaseService.isAuthenticatedWithFigma()) {
+            console.log('Not authenticated with Figma, showing auth prompt');
+            setPendingFigmaLink(linkData);
             return;
           }
-        } catch (error) {
-          console.error('Canvas: Error processing Figma selection link:', error);
-        }
-      }
-      
-      // If not a Figma link or processing failed, continue with the original image paste logic
-      const items = e.clipboardData?.items;
-      if (!items) {
-        console.log('Canvas: No clipboard data items available');
-        return;
-      }
-      
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        
-        if (item.type.indexOf('image') !== -1) {
-          console.log('Canvas: Found image in clipboard');
-          const blob = item.getAsFile();
-          if (!blob) {
-            console.log('Canvas: Could not get file from clipboard item');
-            continue;
-          }
           
-          try {
-            // Generate a unique filename for the pasted image
-            const timestamp = new Date().getTime();
-            const filename = `pasted-image-${timestamp}.${blob.type.split('/')[1] || 'png'}`;
-            
-            // Upload the image to Supabase Storage or convert to data URL
-            console.log('Canvas: Uploading pasted image to storage');
-            const imageUrl = await supabaseService.uploadImageToStorage(blob, filename);
-            
-            if (!imageUrl) {
-              console.error('Canvas: Failed to upload image to storage');
-              continue;
-            }
-            
-            // Add the image to designs
-            const newDesign = {
-              id: `design-${timestamp}`,
-              imageUrl,
-              position: { x: 0, y: 0 }
-            };
-            
-            console.log('Canvas: Adding new design with image URL:', imageUrl);
-            setDesigns(prev => [...prev, newDesign]);
-            setDesignsInitialized(true);
-          } catch (error) {
-            console.error('Canvas: Error handling pasted image:', error);
-          }
+          // Prevent the default paste behavior
+          event.preventDefault();
+          
+          // If already authenticated, try to fetch the Figma node
+          console.log('Fetching Figma node:', linkData);
+          setPendingFigmaLink(linkData);
+          fetchFigmaNode(linkData.fileKey, linkData.nodeId);
+        } else {
+          console.error('Failed to parse Figma selection link:', clipboardText);
         }
       }
-    };
+    }
     
     document.addEventListener('paste', handlePaste);
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage]);
+  }, []);
+  
+  async function fetchFigmaNode(fileKey: string, nodeId: string) {
+    try {
+      console.log(`Fetching Figma node - File: ${fileKey}, Node: ${nodeId}`);
+      setFigmaAuthError(null);
+      
+      // Generate a unique ID for this design
+      const designId = `figma-${Date.now()}`;
+      
+      // Add a placeholder design while loading
+      const placeholderDesign: Design = {
+        id: designId,
+        imageUrl: '/loading-placeholder.svg', // Use a loading placeholder
+        position: { x: 100, y: 100 },
+        isFromFigma: true,
+        figmaFileKey: fileKey,
+        figmaNodeId: nodeId
+      };
+      
+      setDesigns(prev => [...prev, placeholderDesign]);
+      
+      // Use the importFigmaDesign method to get the image
+      const importResult = await supabaseService.importFigmaDesign(fileKey, nodeId);
+      
+      if (!importResult || !importResult.imageUrl) {
+        console.error('Failed to import Figma design');
+        setFigmaAuthError('Failed to import Figma design. Please try again.');
+        
+        // Remove the placeholder design
+        setDesigns(prev => prev.filter(d => d.id !== designId));
+        return;
+      }
+      
+      console.log('Successfully imported Figma design:', importResult);
+      
+      // Update the placeholder design with the actual image
+      setDesigns(prev => prev.map(design => 
+        design.id === designId
+          ? {
+              ...design,
+              imageUrl: importResult.imageUrl,
+              name: importResult.name
+            }
+          : design
+      ));
+      
+      // Clear pending link since we've processed it
+      setPendingFigmaLink(null);
+      
+    } catch (error: any) {
+      console.error('Error fetching Figma node:', error);
+      setFigmaAuthError(error.message || 'Failed to fetch Figma design.');
+      
+      // Check if the error is related to authentication
+      if (error.status === 401 || (error.message && error.message.includes('unauthorized'))) {
+        console.log('Unauthorized Figma API access, clearing token and showing auth prompt');
+        supabaseService.clearInvalidFigmaToken();
+        
+        // Find the design we were trying to update
+        const designId = `figma-${Date.now()}`;
+        
+        // Create a design with auth prompt
+        const authDesign: Design & { needsFigmaAuth: boolean } = {
+          id: designId,
+          imageUrl: '/figma-placeholder.svg', // Use a Figma placeholder 
+          position: { x: 100, y: 100 },
+          isFromFigma: true,
+          figmaFileKey: fileKey,
+          figmaNodeId: nodeId,
+          needsFigmaAuth: true // This will trigger the auth prompt
+        };
+        
+        // Add the auth design to the canvas
+        setDesigns(prev => [...prev, authDesign]);
+      }
+    }
+  }
   
   // Handle wheel event for zooming via useEffect (as a backup)
   useEffect(() => {

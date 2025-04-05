@@ -13,7 +13,10 @@ export interface FigmaLinkData {
 
 /**
  * Parse a Figma selection link and extract file key and node ID
- * Example link format: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456
+ * Handles multiple Figma link formats:
+ * - Standard selection link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456
+ * - Direct node link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456&t=abcdef
+ * - Share link with node: https://www.figma.com/file/abcdef123456/FileName/nodes/123%3A456
  * 
  * @param linkText The Figma selection link to parse
  * @returns An object containing the file key, node ID, and validity status
@@ -39,18 +42,31 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
       return defaultResult;
     }
 
-    // Extract the node ID from the URL
-    const nodeIdRegex = /node-id=([^&]+)/;
-    const nodeIdMatch = linkText.match(nodeIdRegex);
-    if (!nodeIdMatch || !nodeIdMatch[1]) {
+    const fileKey = fileKeyMatch[1];
+    let nodeId = '';
+    
+    // Try multiple node ID extraction patterns
+    
+    // 1. Standard query parameter format: node-id=123%3A456
+    const queryNodeIdRegex = /node-id=([^&]+)/;
+    const queryNodeIdMatch = linkText.match(queryNodeIdRegex);
+    
+    // 2. Path format: /nodes/123%3A456
+    const pathNodeIdRegex = /\/nodes\/([^/]+)/;
+    const pathNodeIdMatch = linkText.match(pathNodeIdRegex);
+    
+    // Use whichever pattern matched
+    if (queryNodeIdMatch && queryNodeIdMatch[1]) {
+      nodeId = decodeURIComponent(queryNodeIdMatch[1]);
+    } else if (pathNodeIdMatch && pathNodeIdMatch[1]) {
+      nodeId = decodeURIComponent(pathNodeIdMatch[1]);
+    } else {
+      // No node ID found
       return defaultResult;
     }
-
-    // Decode the node ID (it might be URL encoded)
-    const nodeId = decodeURIComponent(nodeIdMatch[1]);
     
     return {
-      fileKey: fileKeyMatch[1],
+      fileKey,
       nodeId,
       isValid: true
     };
@@ -73,7 +89,13 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
 export function isFigmaSelectionLink(text: string): boolean {
   if (!text) return false;
   
-  // Check if it has the basic pattern of a Figma file URL with node-id
-  const pattern = /figma\.com\/file\/[^/?]+.*node-id=/i;
-  return pattern.test(text);
+  // Check for all possible Figma link patterns
+  const patterns = [
+    /figma\.com\/file\/[^/?]+.*node-id=/i,      // Standard query param format
+    /figma\.com\/file\/[^/?]+\/nodes\//i,       // Path format
+    /figma\.com\/file\/[^/?]+.*view\?node-id=/i // View format
+  ];
+  
+  // Return true if any pattern matches
+  return patterns.some(pattern => pattern.test(text));
 } 
