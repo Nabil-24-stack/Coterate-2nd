@@ -967,13 +967,13 @@ export const Canvas: React.FC = () => {
       // Ctrl+Plus: Zoom in
       if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
         e.preventDefault();
-        setScale(prev => Math.min(prev * 1.1, 4));
+        setScale((prev: number) => Math.min(prev * 1.1, 4));
       }
       
       // Ctrl+Minus: Zoom out
       if (e.ctrlKey && e.key === '-') {
         e.preventDefault();
-        setScale(prev => Math.max(prev * 0.9, 0.1));
+        setScale((prev: number) => Math.max(prev * 0.9, 0.1));
       }
       
       // Delete/Backspace: Remove selected design
