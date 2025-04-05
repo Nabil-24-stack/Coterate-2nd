@@ -1167,44 +1167,28 @@ export const Canvas: React.FC = () => {
         isDesignLink: clipboardText.includes('figma.com/design/')
       });
       
-      // Special debug handling for design links
-      if (clipboardText.includes('figma.com/design/')) {
-        console.log('DIRECT DESIGN LINK DETECTION: Detected Figma design link');
-        
-        // Extract the design key which is the fileKey for Figma API
-        const designKeyRegex = /figma\.com\/design\/([^/]+)/;
-        const designKeyMatch = clipboardText.match(designKeyRegex);
-        
-        if (designKeyMatch && designKeyMatch[1]) {
-          const fileKey = designKeyMatch[1];
-          console.log('DIRECT DESIGN LINK: Extracted file key:', fileKey);
-          
-          // Show a message to the user
-          alert('Please select a specific component in Figma and copy its selection link instead of the entire design link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
-          
-          // Don't prevent default to allow the text to paste normally if needed
-          return;
-        }
-      }
-      
-      // Regular flow for other Figma links
+      // Check if it's a Figma selection link (use our utility function)
       if (isFigmaSelectionLink(clipboardText)) {
         console.log('Figma selection link detected!', clipboardText);
         
         // Parse the Figma selection link to get file key and node ID
         const linkData = parseFigmaSelectionLink(clipboardText);
         console.log('Parsed Figma link data:', linkData);
-        
-        // For design links, ensure they have a valid node ID - we can't import entire designs
-        if (clipboardText.includes('figma.com/design/')) {
-          // Check specifically if we got a valid node ID
-          if (!linkData.nodeId) {
-            alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
-            return;
-          }
+
+        // First, check if we have a valid file key
+        if (!linkData.fileKey) {
+          console.error('No file key found in the Figma link');
+          return; // Don't do anything if we can't get a file key
         }
         
-        if (linkData.isValid) {
+        // For all links, whether design or file format, we need a valid node ID
+        if (!linkData.nodeId || linkData.nodeId === '0:1') {
+          alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
+          return;
+        }
+        
+        // If we have a valid file key and node ID, try to import
+        if (linkData.fileKey && linkData.nodeId) {
           // First make sure Figma is authenticated
           if (!supabaseService.isAuthenticatedWithFigma()) {
             console.log('Not authenticated with Figma, showing auth prompt');
@@ -1220,12 +1204,7 @@ export const Canvas: React.FC = () => {
           setPendingFigmaLink(linkData);
           fetchFigmaNode(linkData.fileKey, linkData.nodeId);
         } else {
-          // Changed the condition for better error messaging
-          if (linkData.fileKey && !linkData.nodeId) {
-            alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
-          } else {
-            console.error('Failed to parse Figma selection link:', clipboardText);
-          }
+          console.error('Failed to parse Figma selection link:', clipboardText);
         }
       }
     }

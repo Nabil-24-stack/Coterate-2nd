@@ -44,31 +44,32 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
       if (designKeyMatch && designKeyMatch[1]) {
         const fileKey = designKeyMatch[1];
         
-        // For /design/ links, we need specific selection params
-        // Look for node= or node-id= in the URL with better regex that handles hyphens
-        const nodeRegex = /[?&](node[-_]?id)=([^&]+)/i;
-        const nodeMatch = linkText.match(nodeRegex);
+        // For /design/ links, we need to look for node IDs with multiple patterns
+        // Try all known formats for node ID parameters
+        const nodeIdPatterns = [
+          /[?&]node[-_]?id=([^&]+)/i,     // Standard node-id or node_id
+          /[?&]node=([^&]+)/i,            // Shortened 'node' param
+          /[?&]id=([^&]+)/i,              // Just 'id' param
+          /[?&]selection=([^&]+)/i        // Selection param
+        ];
         
-        console.log('Node match:', nodeMatch ? `found: ${nodeMatch[2]}` : 'none');
-        
-        if (nodeMatch && nodeMatch[2]) {
-          // We have a node ID parameter
-          const nodeId = decodeURIComponent(nodeMatch[2]);
-          console.log('Decoded node ID:', nodeId);
-          
-          return {
-            fileKey,
-            nodeId,
-            isValid: true
-          };
+        // Try each pattern until we find a match
+        let nodeId = '';
+        for (const pattern of nodeIdPatterns) {
+          const nodeMatch = linkText.match(pattern);
+          if (nodeMatch && nodeMatch[1]) {
+            nodeId = decodeURIComponent(nodeMatch[1]);
+            console.log(`Found node ID using pattern ${pattern}: ${nodeId}`);
+            break;
+          }
         }
         
-        // If no node ID is found in a design link, return the file key
-        // but mark as invalid - UI will prompt user to get a selection link
+        // Even if we don't find a specific node ID, let's assume it's the first node
+        // The important part is that we have a valid fileKey for design links
         return {
           fileKey,
-          nodeId: '',
-          isValid: false
+          nodeId: nodeId || '0:1', // Default to root node if none specified
+          isValid: !!nodeId  // Only mark as fully valid if we have both fileKey and nodeId
         };
       }
       return defaultResult;
@@ -142,9 +143,7 @@ export function isFigmaSelectionLink(text: string): boolean {
     /figma\.com\/file\/[^/?]+.*node-id=/i,      // Standard query param format
     /figma\.com\/file\/[^/?]+\/nodes\//i,       // Path format
     /figma\.com\/file\/[^/?]+.*view\?node-id=/i, // View format
-    /figma\.com\/design\/[^/]+.*node-id=/i,     // Design format with node ID - explicit match
-    /figma\.com\/design\/[^/]+.*\?.*=/i,        // Any design link with query params
-    /figma\.com\/design\/[^/]+/i                // Any design link (we'll validate nodeId later)
+    /figma\.com\/design\/[^/?]+/i,              // Match ANY design link - we'll parse the details later
   ];
   
   const isMatch = patterns.some(pattern => pattern.test(text));
