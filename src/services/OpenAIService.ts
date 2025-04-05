@@ -44,7 +44,7 @@ class OpenAIService {
     return !!this.apiKey;
   }
   
-  // Main method to analyze design image and generate HTML
+  // Main method to analyze design image and generate improved version
   async analyzeDesignAndGenerateHTML(imageUrl: string): Promise<DesignAnalysisResponse> {
     if (!this.apiKey) {
       throw new Error('OpenAI API key not configured');
@@ -72,82 +72,70 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a UI/UX expert who analyzes designs and creates improved versions.
-            First, carefully analyze the design image to identify all UI elements, layout structure, colors, typography, and spacing.
-            Identify specific strengths and weaknesses of the design, focusing on visual hierarchy, contrast, component selection, spacing, alignment, and overall usability.
-            
-            Then, create an improved HTML and CSS version addressing the identified issues while maintaining the original purpose and branding.
-            The HTML/CSS should be complete and ready to render directly in a browser.
+            content: `You are an expert UI/UX designer who analyzes designs and creates improved versions.
 
-            IMPORTANT: The generated HTML/CSS must match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height.
-            Make sure all elements are properly positioned and sized to exactly match the original layout's scale and proportions.
-            The entire design must be visible at these dimensions without scrolling.
+            You will analyze the design image to identify issues in:
+            1. Visual hierarchy
+            2. Color contrast and accessibility
+            3. Component selection and placement
+            4. Text legibility
+            5. Overall usability
+            6. Spacing and alignment
+            7. Consistency
+
+            After analysis, create an improved HTML/CSS version addressing all identified issues while maintaining the original purpose and branding. The HTML/CSS should be complete and ready to render directly in a browser.
+
+            IMPORTANT: The generated HTML/CSS must match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
+            
+            DESIGN ANALYSIS REQUIREMENTS:
+            1. Identify specific strengths in the design's visual hierarchy, color palette, typography, and component choices
+            2. Identify specific weaknesses in terms of usability, accessibility, and visual design
+            3. Provide concrete improvement suggestions that address the weaknesses
+            4. Identify the color palette used (primary, secondary, background, text colors)
+            5. Identify the fonts used and their roles (headings, body text, etc.)
+            6. Identify key UI components present in the design
             
             ICON REQUIREMENTS:
             For any icons identified in the UI:
             1. Use the Font Awesome icon library (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
             2. Find the most appropriate Font Awesome icon that matches each icon in the original design
-            3. Implement the icon using the proper Font Awesome classes (e.g., <i class="fas fa-home"></i>)
-            4. If a close match isn't available in Font Awesome, use a semantically appropriate alternative
+            3. Implement the icon using the proper Font Awesome classes
             
             IMAGE REQUIREMENTS:
             For any images or photos identified in the UI:
-            1. Identify the purpose and content of each image (e.g., product photo, hero image, profile picture, etc.)
-            2. Use Unsplash for royalty-free stock photos that match the theme and purpose
-            3. IMPORTANT: Use this EXACT format for image implementation (copy this exactly):
-               <div style="width: [width]px; height: [height]px; position: relative; overflow: hidden;">
-                 <img src="https://source.unsplash.com/random/[width]x[height]/?[keywords]" alt="[descriptive text]" 
-                     width="[width]" height="[height]" style="object-fit: cover; width: 100%; height: 100%;">
-               </div>
-            4. Replace [width] and [height] with the exact dimensions of the image in the original design
-            5. Replace [keywords] with specific, descriptive keywords that match the original image content (e.g., "cabin,woods,forest,nature" for a cabin image)
-            6. Replace [descriptive text] with accessible alt text
-            7. Always use the EXACT URL format: https://source.unsplash.com/random/[width]x[height]/?[keywords]
-            8. CRITICAL: Make sure there are NO SPACES in the URL, especially in the keywords
-            9. Use comma-separated keywords without spaces (e.g., "cabin,woods,nature")
-            10. Do not use lazy loading attributes or srcset
-            
-            Image implementation example (THIS IS THE EXACT FORMAT TO USE):
-            <div style="width: 600px; height: 400px; position: relative; overflow: hidden;">
-              <img src="https://source.unsplash.com/random/600x400/?cabin,woods,forest" alt="Cabin in the woods" 
-                   width="600" height="400" style="object-fit: cover; width: 100%; height: 100%;">
-            </div>
-            
-            Include the Font Awesome CDN link in the <head> section of your HTML.
-            Examples of common Font Awesome icons:
-            - Navigation: fa-home, fa-bars, fa-search, fa-user, fa-cog
-            - Actions: fa-plus, fa-minus, fa-check, fa-times, fa-trash
-            - Media: fa-play, fa-pause, fa-volume-up, fa-image
-            - Social: fa-facebook, fa-twitter, fa-instagram, fa-linkedin
-            - E-commerce: fa-shopping-cart, fa-tag, fa-credit-card
-            
-            Always select the most semantically appropriate icon for each element.`
+            1. Use Unsplash for royalty-free stock photos that match the theme and purpose
+            2. Use specific format for image implementation with div wrapper and exact dimensions
+            3. IMPORTANT: Use "https://source.unsplash.com/random/[width]x[height]/?[keywords]" format
+
+            Your response MUST include:
+            1. HTML code block (marked with \`\`\`html)
+            2. CSS code block (marked with \`\`\`css)
+            3. Analysis section with:
+               - List of strengths
+               - List of weaknesses
+               - List of improvement areas
+               - Color palette identified (with hex codes)
+               - Fonts identified
+               - Components identified`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Analyze this UI design and create an improved HTML/CSS version addressing any issues you find with visual hierarchy, contrast, spacing, or usability while maintaining the original purpose and style. 
+                text: `Analyze this UI design and create an improved HTML/CSS version addressing any issues with visual hierarchy, contrast, component selection, text legibility, and overall usability while maintaining the original purpose.
                 
-                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your HTML/CSS version maintains these EXACT dimensions and scales all elements appropriately.
+                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your improved version maintains these exact dimensions.
                 
-                For icons in the UI:
-                1. Identify what type of icon it is (e.g., hamburger menu, search, profile, etc.)
-                2. Find a matching icon in Font Awesome
-                3. Implement it properly in the HTML using Font Awesome classes
+                Provide a thorough analysis of:
+                1. Design strengths
+                2. Design weaknesses
+                3. Areas for improvement
+                4. Color palette (with hex codes)
+                5. Typography choices
+                6. UI components used
                 
-                For images in the UI:
-                1. Identify what each image represents (e.g., product, profile, landscape, etc.)
-                2. Use EXACTLY this format for Unsplash images: 
-                   <img src="https://source.unsplash.com/random/[width]x[height]/?[keywords]">
-                3. Always include the dimensions in the URL as shown above
-                4. Do not put spaces in the URL, especially in the keyword section
-                5. Use comma-separated keywords without spaces (e.g., "cabin,woods,nature")
-                6. Always wrap images in a div with position: relative; overflow: hidden; and the exact dimensions
-                7. Always include width and height attributes matching the original dimensions
-                
-                Include the Font Awesome CDN in your HTML head.`
+                Then create the improved HTML/CSS version that addresses the identified issues.`
               },
               {
                 type: 'image_url',
@@ -209,7 +197,7 @@ class OpenAIService {
     });
   }
   
-  // Add a helper function to get image dimensions
+  // Helper function to get image dimensions
   private async getImageDimensions(src: string): Promise<{width: number, height: number}> {
     return new Promise((resolve, reject) => {
       const img = new Image();

@@ -192,145 +192,181 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-// Replace the AIProcessingOverlay styled component with a more targeted version
-const ProcessingOverlay = styled.div<{ visible: boolean }>`
+// Replace the ProcessingOverlay styled component with a more detailed version
+const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 'recreating' | 'rendering' | null }>`
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(255, 255, 255, 0.9);
   display: ${props => props.visible ? 'flex' : 'none'};
   flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 100;
   border-radius: 8px;
-`;
-
-const ProcessingContainer = styled.div`
-  background-color: white;
-  border-radius: 12px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-width: 300px;
-`;
-
-const ProcessingTitle = styled.div`
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  color: #333;
-`;
-
-const StepIndicator = styled.div`
-  display: flex;
-  align-items: center;
-  margin: 8px 0;
-  color: #666;
-  font-size: 14px;
-  gap: 8px;
-`;
-
-const CheckIcon = styled.span`
-  color: #10b981;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const LoadingIcon = styled.span`
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #e0e0e0;
-  border-top: 2px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-
-const LoadingSpinnerCircle = styled.div`
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e0e0e0;
-  border-top: 3px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 24px;
-`;
-
-// Iteration container to group parent design and its iterations
-const IterationContainer = styled.div`
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 40px;
-`;
-
-// Analysis panel to show strengths and weaknesses
-const AnalysisPanel = styled.div<{ visible: boolean }>`
-  position: fixed;
-  top: 70px;
-  right: ${props => props.visible ? '0' : '-350px'};
-  width: 350px;
-  height: calc(100vh - 70px);
-  background-color: white;
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  overflow-y: auto;
-  transition: right 0.3s ease;
   padding: 20px;
+  text-align: center;
+  color: #333;
+  font-size: 16px;
+  line-height: 1.5;
   
   h3 {
-    margin-top: 0;
-    margin-bottom: 12px;
-    font-size: 18px;
+    margin-top: 15px;
+    margin-bottom: 5px;
     font-weight: 600;
   }
   
-  h4 {
-    margin-top: 16px;
-    margin-bottom: 8px;
-    font-size: 14px;
+  p {
+    margin: 5px 0 15px;
+    max-width: 300px;
+    opacity: 0.8;
+  }
+  
+  svg {
+    animation: rotate 1.5s ease-in-out infinite;
+    width: 40px;
+    height: 40px;
+    
+    @keyframes rotate {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  }
+  
+  .progress-bar {
+    width: 80%;
+    height: 4px;
+    background-color: #eee;
+    border-radius: 4px;
+    margin: 10px 0;
+    overflow: hidden;
+    
+    .progress {
+      height: 100%;
+      background-color: #007bff;
+      border-radius: 4px;
+      transition: width 0.5s ease-in-out;
+      width: ${props => {
+        switch (props.step) {
+          case 'analyzing': return '33%';
+          case 'recreating': return '66%';
+          case 'rendering': return '90%';
+          default: return '0%';
+        }
+      }};
+    }
+  }
+`;
+
+// Add a custom spinner component
+const Spinner = () => (
+  <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+    <circle 
+      cx="25" 
+      cy="25" 
+      r="20" 
+      fill="none" 
+      stroke="#007bff" 
+      strokeWidth="5"
+      strokeDasharray="80 50" 
+    />
+  </svg>
+);
+
+// Add a detailed analysis panel component for showing the AI-generated insights
+const AnalysisPanel = styled.div<{ visible: boolean }>`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 350px;
+  max-height: calc(100% - 40px);
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  display: ${props => props.visible ? 'flex' : 'none'};
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  transform: ${props => props.visible ? 'translateX(0)' : 'translateX(400px)'};
+  opacity: ${props => props.visible ? '1' : '0'};
+`;
+
+const AnalysisPanelHeader = styled.div`
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  
+  h3 {
+    margin: 0;
+    font-size: 16px;
     font-weight: 600;
+    color: #333;
+  }
+  
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
     color: #666;
+    padding: 5px;
+    
+    &:hover {
+      color: #333;
+    }
+  }
+`;
+
+const AnalysisPanelContent = styled.div`
+  padding: 15px 20px;
+  overflow-y: auto;
+  flex: 1;
+  
+  h4 {
+    margin: 15px 0 8px;
+    font-size: 14px;
+    color: #333;
+    font-weight: 600;
   }
   
   ul {
-    margin: 0 0 16px 0;
-    padding-left: 20px;
+    margin: 0 0 15px;
+    padding: 0 0 0 20px;
+    
+    li {
+      margin-bottom: 5px;
+      font-size: 13px;
+      color: #555;
+    }
   }
   
-  li {
-    margin-bottom: 8px;
-    font-size: 14px;
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 15px;
   }
-`;
-
-const AnalysisToggleButton = styled.button`
-  position: fixed;
-  top: 75px;
-  right: ${props => props.theme.analysisVisible ? '360px' : '10px'};
-  background-color: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 8px 12px;
-  cursor: pointer;
-  z-index: 101;
-  transition: right 0.3s ease;
   
-  &:hover {
-    background-color: #f5f5f5;
+  .color-swatch {
+    height: 30px;
+    border-radius: 4px;
+    position: relative;
+    
+    span {
+      position: absolute;
+      bottom: -20px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+    }
   }
 `;
 
@@ -962,7 +998,7 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(designId);
   };
   
-  // Update the handleIterationClick method to preserve the original design when adding an iteration
+  // Update the handleIterationClick method to better implement PRD sections 2.4.2 and 2.4.4
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     console.log(`Iteration requested for design: ${designId}`);
@@ -994,10 +1030,19 @@ export const Canvas: React.FC = () => {
       const originalDimensions = await getImageDimensions(designToIterate.imageUrl);
       console.log('Original image dimensions:', originalDimensions);
       
-      // Call OpenAI service to analyze the image and generate HTML
+      // Update the processing step to show "AI Analyzing Design"
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => 
+          design.id === designId
+            ? { ...design, processingStep: 'analyzing' }
+            : design
+        )
+      );
+      
+      // Step 1: AI Analysis - Call OpenAI service to analyze the design according to PRD 2.4.2
       const result = await openAIService.analyzeDesignAndGenerateHTML(designToIterate.imageUrl);
       
-      // Update the processing step
+      // Update the processing step to "Generating Improved Design"
       setDesigns(prevDesigns => 
         prevDesigns.map(design => 
           design.id === designId
@@ -1009,7 +1054,7 @@ export const Canvas: React.FC = () => {
       // Generate a unique ID for the iteration
       const iterationId = `iteration-${Date.now()}`;
       
-      // Create the new iteration
+      // Create the new iteration with enhanced analysis data according to PRD 2.4.4
       const newIteration: DesignIteration = {
         id: iterationId,
         parentId: designId,
@@ -1455,6 +1500,81 @@ export const Canvas: React.FC = () => {
     }
   };
   
+  // Update the render part to include the processing overlay with steps
+  const renderDesign = (design: ExtendedDesign) => {
+    return (
+      <DesignCard 
+        key={design.id} 
+        isSelected={selectedDesignId === design.id}
+        onClick={(e) => handleDesignClick(e, design.id)}
+        onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
+        style={{ position: 'relative' }}
+      >
+        {design.imageUrl && (
+          <>
+            <DesignImage 
+              src={design.imageUrl}
+              alt="Design"
+              onLoad={() => debugImageLoad(design.imageUrl, true)}
+              onError={(e) => debugImageLoad(design.imageUrl, false, e.toString())}
+            />
+            {selectedDesignId === design.id && (
+              <IterationButton onClick={(e) => handleIterationClick(e, design.id)}>
+                <PlusIcon />
+              </IterationButton>
+            )}
+            <ProcessingOverlay 
+              visible={!!design.isProcessing} 
+              step={design.processingStep || null}
+            >
+              <Spinner />
+              <h3>
+                {design.processingStep === 'analyzing' && 'Analyzing Design'}
+                {design.processingStep === 'recreating' && 'Generating Improved Design'}
+                {design.processingStep === 'rendering' && 'Finalizing Design'}
+              </h3>
+              <p>
+                {design.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
+                {design.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
+                {design.processingStep === 'rendering' && 'Preparing to display your improved design...'}
+              </p>
+              <div className="progress-bar">
+                <div className="progress"></div>
+              </div>
+            </ProcessingOverlay>
+          </>
+        )}
+
+        {/* Render iterations if any */}
+        {design.iterations && design.iterations.map(iteration => (
+          <div key={iteration.id} style={{ 
+            position: 'absolute', 
+            left: iteration.position.x - design.position.x, 
+            top: iteration.position.y - design.position.y,
+            zIndex: 10
+          }}>
+            <div onClick={() => selectIterationForAnalysis(iteration)}>
+              <HtmlDesignRenderer
+                ref={(el: HtmlDesignRendererHandle | null) => {
+                  if (el) {
+                    designRefs.current[iteration.id] = el as any;
+                  }
+                }}
+                htmlContent={iteration.htmlContent} 
+                cssContent={iteration.cssContent}
+                width={iteration.dimensions?.width} 
+                height={iteration.dimensions?.height}
+                onRender={(success) => {
+                  console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </DesignCard>
+    );
+  };
+
   return (
     <>
       <GlobalStyle />
@@ -1487,151 +1607,8 @@ export const Canvas: React.FC = () => {
                       x={design.position.x}
                       y={design.position.y}
                     >
-                      <DesignCard 
-                        ref={el => designRefs.current[design.id] = el}
-                        isSelected={selectedDesignId === design.id}
-                        onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
-                      >
-                        {/* Show Figma auth prompt if needed */}
-                        {design.isFromFigma && (design as any).needsFigmaAuth && (
-                          <FigmaAuthPrompt>
-                            <p>Figma authentication required to import this design</p>
-                            {figmaAuthError && <FigmaErrorMessage>{figmaAuthError}</FigmaErrorMessage>}
-                            <FigmaAuthButton onClick={handleFigmaAuth}>
-                              <svg width="16" height="16" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
-                                <path d="M0 47.5C0 44.9804 1.00089 42.5641 2.78249 40.7825C4.56408 39.0009 6.98044 38 9.5 38H19V47.5C19 50.0196 17.9991 52.4359 16.2175 54.2175C14.4359 55.9991 12.0196 57 9.5 57C6.98044 57 4.56408 55.9991 2.78249 54.2175C1.00089 52.4359 0 50.0196 0 47.5Z" fill="white"/>
-                                <path d="M19 0V19H28.5C31.0196 19 33.4359 17.9991 35.2175 16.2175C36.9991 14.4359 38 12.0196 38 9.5C38 6.98044 36.9991 4.56408 35.2175 2.78249C33.4359 1.00089 31.0196 0 28.5 0H19Z" fill="white"/>
-                                <path d="M0 9.5C0 12.0196 1.00089 14.4359 2.78249 16.2175C4.56408 17.9991 6.98044 19 9.5 19H19V0H9.5C6.98044 0 4.56408 1.00089 2.78249 2.78249C1.00089 4.56408 0 6.98044 0 9.5Z" fill="white"/>
-                                <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
-                              </svg>
-                              Sign in with Figma
-                            </FigmaAuthButton>
-                            <p style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
-                              After signing in, you'll need to paste the Figma link again.
-                            </p>
-                          </FigmaAuthPrompt>
-                        )}
-
-                        {design.isFromFigma && !(design as any).needsFigmaAuth && (
-                          <FigmaBadge>
-                            <svg width="14" height="14" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M19 28.5C19 25.9804 20.0009 23.5641 21.7825 21.7825C23.5641 20.0009 25.9804 19 28.5 19C31.0196 19 33.4359 20.0009 35.2175 21.7825C36.9991 23.5641 38 25.9804 38 28.5C38 31.0196 36.9991 33.4359 35.2175 35.2175C33.4359 36.9991 31.0196 38 28.5 38C25.9804 38 23.5641 36.9991 21.7825 35.2175C20.0009 33.4359 19 31.0196 19 28.5Z" fill="white"/>
-                              <path d="M0 47.5C0 44.9804 1.00089 42.5641 2.78249 40.7825C4.56408 39.0009 6.98044 38 9.5 38H19V47.5C19 50.0196 17.9991 52.4359 16.2175 54.2175C14.4359 55.9991 12.0196 57 9.5 57C6.98044 57 4.56408 55.9991 2.78249 54.2175C1.00089 52.4359 0 50.0196 0 47.5Z" fill="white"/>
-                              <path d="M19 0V19H28.5C31.0196 19 33.4359 17.9991 35.2175 16.2175C36.9991 14.4359 38 12.0196 38 9.5C38 6.98044 36.9991 4.56408 35.2175 2.78249C33.4359 1.00089 31.0196 0 28.5 0H19Z" fill="white"/>
-                              <path d="M0 9.5C0 12.0196 1.00089 14.4359 2.78249 16.2175C4.56408 17.9991 6.98044 19 9.5 19H19V0H9.5C6.98044 0 4.56408 1.00089 2.78249 2.78249C1.00089 4.56408 0 6.98044 0 9.5Z" fill="white"/>
-                              <path d="M0 28.5C0 31.0196 1.00089 33.4359 2.78249 35.2175C4.56408 36.9991 6.98044 38 9.5 38H19V19H9.5C6.98044 19 4.56408 20.0009 2.78249 21.7825C1.00089 23.5641 0 25.9804 0 28.5Z" fill="white"/>
-                            </svg>
-                            Figma
-                          </FigmaBadge>
-                        )}
-
-                        {design.isFromFigma && design.figmaFileKey && !(design as any).needsFigmaAuth && (
-                          <FigmaMetadata>
-                            File: {design.figmaFileKey.substring(0, 8)}...{design.figmaFileKey.substring(design.figmaFileKey.length - 4)}
-                            {design.figmaNodeId && ` | Node: ${design.figmaNodeId}`}
-                          </FigmaMetadata>
-                        )}
-
-                        <DesignImage 
-                          key={`img-${design.id}`}
-                          src={design.imageUrl} 
-                          alt={`Design ${design.id}`}
-                          draggable={false}
-                          onLoad={() => debugImageLoad(design.imageUrl, true)}
-                          onError={() => debugImageLoad(design.imageUrl, false, 'Failed to load image')}
-                        />
-                        {selectedDesignId === design.id && !design.isProcessing && (
-                          <IterationButton
-                            onClick={(e) => handleIterationClick(e, design.id)}
-                            title="Create Iteration"
-                          >
-                            <PlusIcon />
-                          </IterationButton>
-                        )}
-                        
-                        {/* Processing overlay for this specific design */}
-                        {design.isProcessing && (
-                          <ProcessingOverlay visible={true}>
-                            <ProcessingContainer>
-                              <LoadingSpinnerCircle />
-                              <ProcessingTitle>Iterating your design...</ProcessingTitle>
-                              <StepIndicator>
-                                {design.processingStep === 'analyzing' || design.processingStep === 'recreating' || design.processingStep === 'rendering' ? (
-                                  <CheckIcon>✓</CheckIcon>
-                                ) : (
-                                  <LoadingIcon />
-                                )}
-                                <span>Analysing the UI</span>
-                              </StepIndicator>
-                              <StepIndicator>
-                                {design.processingStep === 'recreating' || design.processingStep === 'rendering' ? (
-                                  <CheckIcon>✓</CheckIcon>
-                                ) : design.processingStep === 'analyzing' ? (
-                                  <LoadingIcon />
-                                ) : (
-                                  <LoadingIcon style={{ opacity: 0.3 }} />
-                                )}
-                                <span>Recreating components</span>
-                              </StepIndicator>
-                              <StepIndicator>
-                                {design.processingStep === 'rendering' ? (
-                                  <CheckIcon>✓</CheckIcon>
-                                ) : design.processingStep === 'recreating' ? (
-                                  <LoadingIcon />
-                                ) : (
-                                  <LoadingIcon style={{ opacity: 0.3 }} />
-                                )}
-                                <span>Rendering onto canvas</span>
-                              </StepIndicator>
-                            </ProcessingContainer>
-                          </ProcessingOverlay>
-                        )}
-                      </DesignCard>
+                      {renderDesign(design)}
                     </DesignContainer>
-                    
-                    {/* Render iterations for this design */}
-                    {design.iterations?.map((iteration) => (
-                      <DesignContainer 
-                        key={`iteration-container-${iteration.id}`}
-                        x={iteration.position.x}
-                        y={iteration.position.y}
-                      >
-                        <DesignCard 
-                          ref={el => designRefs.current[iteration.id] = el}
-                          isSelected={selectedDesignId === iteration.id}
-                          onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-                        >
-                          <HtmlDesignRenderer
-                            key={`renderer-${iteration.id}`}
-                            ref={htmlRendererRef}
-                            htmlContent={iteration.htmlContent}
-                            cssContent={iteration.cssContent}
-                            width={iteration.dimensions?.width || (design.imageUrl ? designRefs.current[design.id]?.clientWidth || 800 : 800)}
-                            height={iteration.dimensions?.height || (design.imageUrl ? designRefs.current[design.id]?.clientHeight || 600 : 600)}
-                          />
-                          
-                          {/* Add a small badge indicating this is an iteration */}
-                          <div style={{
-                            position: 'absolute',
-                            top: '-10px',
-                            left: '-10px',
-                            background: '#007bff',
-                            color: 'white',
-                            borderRadius: '50%',
-                            width: '24px',
-                            height: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '12px',
-                            fontWeight: 'bold'
-                          }}>
-                            AI
-                          </div>
-                        </DesignCard>
-                      </DesignContainer>
-                    ))}
                   </React.Fragment>
                 ))
               ) : (
@@ -1651,93 +1628,67 @@ export const Canvas: React.FC = () => {
         )}
         
         {/* Analysis Panel */}
-        <AnalysisToggleButton 
-          onClick={toggleAnalysisPanel}
-          theme={{ analysisVisible }}
-        >
-          {analysisVisible ? 'Hide Analysis' : 'Show Analysis'}
-        </AnalysisToggleButton>
-        
         <AnalysisPanel visible={analysisVisible}>
-          <h3>Design Analysis</h3>
-          
-          {currentAnalysis ? (
-            <>
-              <h4>Strengths</h4>
-              <ul>
-                {currentAnalysis.analysis?.strengths.map((strength, index) => (
-                  <li key={`strength-${index}`}>{strength}</li>
-                ))}
-              </ul>
-              
-              <h4>Weaknesses</h4>
-              <ul>
-                {currentAnalysis.analysis?.weaknesses.map((weakness, index) => (
-                  <li key={`weakness-${index}`}>{weakness}</li>
-                ))}
-              </ul>
-              
-              <h4>Improvements Made</h4>
-              <ul>
-                {currentAnalysis.analysis?.improvementAreas.map((improvement, index) => (
-                  <li key={`improvement-${index}`}>{improvement}</li>
-                ))}
-              </ul>
-              
-              <h4>Icons</h4>
-              <p style={{ fontSize: '14px', marginBottom: '12px' }}>
-                Icons from Font Awesome 6 are used to match the original design where possible.
-              </p>
-              
-              <h4>Images</h4>
-              <p style={{ fontSize: '14px', marginBottom: '12px' }}>
-                Royalty-free stock photos from Unsplash are used to replace placeholder images in the design.
-                Images are dynamically loaded using the Unsplash Random Photo API with relevant keyword tags.
-              </p>
-              <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
-                Note: If an image doesn't appear immediately, it may still be loading from Unsplash.
-                Each refresh generates new random images that match the keywords.
-              </p>
-              
-              {currentAnalysis.analysis?.metadata?.colors && (
-                <>
-                  <h4>Color Palette</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-                    {Object.entries(currentAnalysis.analysis.metadata.colors).map(([category, colors]) => 
-                      colors?.map((color, index) => (
-                        <div 
-                          key={`color-${category}-${index}`} 
-                          style={{ 
-                            width: '24px',
-                            height: '24px',
-                            background: color,
-                            borderRadius: '4px',
-                            border: '1px solid #ddd',
-                            position: 'relative',
-                            cursor: 'pointer'
-                          }} 
-                          data-color-info={`${category}: ${color}`}
-                        />
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
-              
-              {currentAnalysis.analysis?.metadata?.fonts && currentAnalysis.analysis.metadata.fonts.length > 0 && (
-                <>
-                  <h4>Fonts</h4>
-                  <ul>
-                    {currentAnalysis.analysis.metadata.fonts.map((font, index) => (
-                      <li key={`font-${index}`}>{font}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          ) : (
-            <p>Select an iteration to see its analysis</p>
-          )}
+          <AnalysisPanelHeader>
+            <h3>Design Analysis</h3>
+            <button onClick={toggleAnalysisPanel}>×</button>
+          </AnalysisPanelHeader>
+          <AnalysisPanelContent>
+            {currentAnalysis ? (
+              <>
+                <h4>Strengths</h4>
+                <ul>
+                  {currentAnalysis.analysis?.strengths.map((strength, i) => (
+                    <li key={i}>{strength}</li>
+                  ))}
+                </ul>
+                
+                <h4>Weaknesses</h4>
+                <ul>
+                  {currentAnalysis.analysis?.weaknesses.map((weakness, i) => (
+                    <li key={i}>{weakness}</li>
+                  ))}
+                </ul>
+                
+                <h4>Improvement Areas</h4>
+                <ul>
+                  {currentAnalysis.analysis?.improvementAreas.map((area, i) => (
+                    <li key={i}>{area}</li>
+                  ))}
+                </ul>
+                
+                <h4>Color Palette</h4>
+                <div className="color-grid">
+                  {currentAnalysis.analysis?.metadata?.colors?.primary?.map((color, i) => (
+                    <div key={`p-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
+                      <span>{color}</span>
+                    </div>
+                  ))}
+                  {currentAnalysis.analysis?.metadata?.colors?.secondary?.map((color, i) => (
+                    <div key={`s-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
+                      <span>{color}</span>
+                    </div>
+                  ))}
+                </div>
+                
+                <h4>Typography</h4>
+                <ul>
+                  {currentAnalysis.analysis?.metadata?.fonts?.map((font, i) => (
+                    <li key={i}>{font}</li>
+                  ))}
+                </ul>
+                
+                <h4>Components</h4>
+                <ul>
+                  {currentAnalysis.analysis?.metadata?.components?.map((component, i) => (
+                    <li key={i}>{component}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Select a design iteration to view analysis</p>
+            )}
+          </AnalysisPanelContent>
         </AnalysisPanel>
       </CanvasContainer>
     </>
