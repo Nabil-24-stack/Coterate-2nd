@@ -1245,8 +1245,13 @@ class SupabaseService {
     this.logInfo('importFigmaDesign', `Importing Figma design: fileKey=${fileKey}, nodeId=${nodeId}`);
     
     try {
+      // Normalize the node ID format if needed
+      // Figma node IDs can be in formats like "2181-1361" or "2181:1361"
+      const normalizedNodeId = nodeId.includes('-') ? nodeId.replace('-', ':') : nodeId;
+      this.logInfo('importFigmaDesign', `Using normalized node ID: ${normalizedNodeId}`);
+      
       // Validate that we have a proper node ID
-      if (!nodeId || nodeId === '0:1') {
+      if (!normalizedNodeId || normalizedNodeId === '0:1') {
         this.logError('importFigmaDesign', 'Invalid or missing node ID. Cannot import entire document.');
         throw new Error('Please select a specific component in Figma and use its selection link.');
       }
@@ -1268,46 +1273,57 @@ class SupabaseService {
       }
       
       // Try to get image URLs for the node
-      this.logInfo('importFigmaDesign', `Getting image URL for node: ${nodeId}`);
+      this.logInfo('importFigmaDesign', `Getting image URL for node: ${normalizedNodeId}`);
       let imageUrls;
-      let finalNodeId = nodeId;
       
       try {
-        imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
+        // Use normalized node ID for API call
+        imageUrls = await this.getFigmaImageUrls(fileKey, [normalizedNodeId]);
       } catch (nodeError: any) {
-        // Only try another node ID if the error indicates this is a specific node not found error
-        if (nodeError.message && nodeError.message.includes(`Nodes not found: ${nodeId}`)) {
-          // This is a legitimate node not found error, don't try to fallback to document root
-          this.logError('importFigmaDesign', `Node ${nodeId} not found in file ${fileKey}`);
-          throw new Error(`The selected component (${nodeId}) could not be found in this Figma file. Please try a different selection.`);
+        // Only try original node ID if normalized one failed
+        if (normalizedNodeId !== nodeId) {
+          this.logInfo('importFigmaDesign', `Normalized node ID failed, trying original: ${nodeId}`);
+          try {
+            imageUrls = await this.getFigmaImageUrls(fileKey, [nodeId]);
+          } catch (originalError) {
+            this.logError('importFigmaDesign', `Both node IDs failed. Original error: ${nodeError.message}`);
+            throw nodeError; // Throw the original error
+          }
         } else {
-          // Re-throw other errors
-          throw nodeError;
+          // This is a legitimate node not found error, don't try to fallback to document root
+          this.logError('importFigmaDesign', `Node ${normalizedNodeId} not found in file ${fileKey}`);
+          throw new Error(`The selected component could not be found in this Figma file. Please try a different selection.`);
         }
       }
       
-      if (!imageUrls || !imageUrls[finalNodeId]) {
-        this.logError('importFigmaDesign', `Failed to get image URL for node: ${finalNodeId}`);
+      // Determine which node ID worked
+      const effectiveNodeId = imageUrls && imageUrls[normalizedNodeId] ? normalizedNodeId : 
+                              imageUrls && imageUrls[nodeId] ? nodeId : null;
+      
+      if (!effectiveNodeId || !imageUrls || !imageUrls[effectiveNodeId]) {
+        this.logError('importFigmaDesign', `Failed to get image URL for node`);
         throw new Error('Failed to get image URL for the selected component');
       }
       
-      const imageUrl = imageUrls[finalNodeId];
+      const imageUrl = imageUrls[effectiveNodeId];
       
       // Get node name if possible
       let nodeName = '';
       try {
-        const findNodeById = (node: any, id: string): any => {
-          if (node.id === id) return node;
+        // Create a function that can find nodes with either format
+        const findNodeById = (node: any, id: string, normalizedId: string): any => {
+          if (node.id === id || node.id === normalizedId) return node;
           if (node.children) {
             for (const child of node.children) {
-              const found = findNodeById(child, id);
+              const found = findNodeById(child, id, normalizedId);
               if (found) return found;
             }
           }
           return null;
         };
         
-        const node = findNodeById(fileData.document, finalNodeId);
+        // Try to find with either the original or normalized ID
+        const node = findNodeById(fileData.document, nodeId, normalizedNodeId);
         if (node) {
           nodeName = node.name;
         } else {

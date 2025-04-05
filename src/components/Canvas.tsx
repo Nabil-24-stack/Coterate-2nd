@@ -1195,10 +1195,13 @@ export const Canvas: React.FC = () => {
         const linkData = parseFigmaSelectionLink(clipboardText);
         console.log('Parsed Figma link data:', linkData);
         
-        // If this is a file or design link that doesn't have a specific selection, show a message
-        if (!linkData.isValid && linkData.fileKey) {
-          alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
-          return;
+        // For design links, ensure they have a valid node ID - we can't import entire designs
+        if (clipboardText.includes('figma.com/design/')) {
+          // Check specifically if we got a valid node ID
+          if (!linkData.nodeId) {
+            alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
+            return;
+          }
         }
         
         if (linkData.isValid) {
@@ -1217,7 +1220,12 @@ export const Canvas: React.FC = () => {
           setPendingFigmaLink(linkData);
           fetchFigmaNode(linkData.fileKey, linkData.nodeId);
         } else {
-          console.error('Failed to parse Figma selection link:', clipboardText);
+          // Changed the condition for better error messaging
+          if (linkData.fileKey && !linkData.nodeId) {
+            alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
+          } else {
+            console.error('Failed to parse Figma selection link:', clipboardText);
+          }
         }
       }
     }
