@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Design, DesignIteration } from '../types';
@@ -380,6 +380,43 @@ export const Canvas: React.FC = () => {
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Add a function to load canvas position and scale from localStorage
+  const loadCanvasPosition = useCallback((pageId: string) => {
+    try {
+      const savedPositionData = localStorage.getItem(`coterate_canvas_position_${pageId}`);
+      if (savedPositionData) {
+        const { position: savedPosition, scale: savedScale } = JSON.parse(savedPositionData);
+        setPosition(savedPosition);
+        setScale(savedScale);
+        console.log('Canvas: Loaded position and scale from localStorage for page:', pageId);
+      }
+    } catch (error) {
+      console.error('Canvas: Error loading position from localStorage:', error);
+    }
+  }, []);
+
+  // Add effect to save canvas position and scale to localStorage when they change
+  useEffect(() => {
+    if (currentPage?.id) {
+      try {
+        const positionData = {
+          position,
+          scale
+        };
+        localStorage.setItem(`coterate_canvas_position_${currentPage.id}`, JSON.stringify(positionData));
+      } catch (error) {
+        console.error('Canvas: Error saving position to localStorage:', error);
+      }
+    }
+  }, [position, scale, currentPage?.id]);
+
+  // Effect to load position and scale when page changes
+  useEffect(() => {
+    if (currentPage?.id) {
+      loadCanvasPosition(currentPage.id);
+    }
+  }, [currentPage?.id, loadCanvasPosition]);
+  
   // Effect to load designs from page data - only runs once per page change
   useEffect(() => {
     if (currentPage) {
@@ -447,6 +484,11 @@ export const Canvas: React.FC = () => {
   const resetCanvas = () => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
+    
+    // Also clear the saved position in localStorage
+    if (currentPage?.id) {
+      localStorage.removeItem(`coterate_canvas_position_${currentPage.id}`);
+    }
   };
   
   // Find the selected design
