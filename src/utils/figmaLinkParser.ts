@@ -17,6 +17,7 @@ export interface FigmaLinkData {
  * - Standard selection link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456
  * - Direct node link: https://www.figma.com/file/abcdef123456/FileName?node-id=123%3A456&t=abcdef
  * - Share link with node: https://www.figma.com/file/abcdef123456/FileName/nodes/123%3A456
+ * - Design link: https://www.figma.com/design/abcdef123456/FileName
  * 
  * @param linkText The Figma selection link to parse
  * @returns An object containing the file key, node ID, and validity status
@@ -30,7 +31,25 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
       isValid: false
     };
 
-    // Check if the text might be a Figma link
+    // Handle design link format first (/design/ route)
+    if (linkText && linkText.includes('figma.com/design/')) {
+      // Extract the design key which is the fileKey for Figma API
+      const designKeyRegex = /figma\.com\/design\/([^/]+)/;
+      const designKeyMatch = linkText.match(designKeyRegex);
+      
+      if (designKeyMatch && designKeyMatch[1]) {
+        const fileKey = designKeyMatch[1];
+        // For design links, we use a default node ID of "0:1" which represents the first frame
+        return {
+          fileKey,
+          nodeId: '0:1', // Default node ID for the first frame
+          isValid: true
+        };
+      }
+      return defaultResult;
+    }
+
+    // Check if the text might be a Figma file link
     if (!linkText || !linkText.includes('figma.com/file/')) {
       return defaultResult;
     }
@@ -61,8 +80,8 @@ export function parseFigmaSelectionLink(linkText: string): FigmaLinkData {
     } else if (pathNodeIdMatch && pathNodeIdMatch[1]) {
       nodeId = decodeURIComponent(pathNodeIdMatch[1]);
     } else {
-      // No node ID found
-      return defaultResult;
+      // No node ID found - use default node ID
+      nodeId = '0:1'; // Default node ID for the first frame
     }
     
     return {
@@ -93,7 +112,9 @@ export function isFigmaSelectionLink(text: string): boolean {
   const patterns = [
     /figma\.com\/file\/[^/?]+.*node-id=/i,      // Standard query param format
     /figma\.com\/file\/[^/?]+\/nodes\//i,       // Path format
-    /figma\.com\/file\/[^/?]+.*view\?node-id=/i // View format
+    /figma\.com\/file\/[^/?]+.*view\?node-id=/i, // View format
+    /figma\.com\/design\/[^/]+/i,               // Design format
+    /figma\.com\/file\/[^/?]+/i                 // Any file link (fallback)
   ];
   
   // Return true if any pattern matches
