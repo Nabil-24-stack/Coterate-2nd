@@ -32,6 +32,7 @@ export interface DesignAnalysis {
   strengths: string[];
   weaknesses: string[];
   improvementAreas: string[];
+  specificChanges?: string[];
   metadata?: {
     colors?: {
       primary?: string[];

@@ -5,6 +5,7 @@ interface DesignAnalysisResponse {
     strengths: string[];
     weaknesses: string[];
     improvementAreas: string[];
+    specificChanges?: string[];
   };
   htmlCode: string;
   cssCode: string;
@@ -84,73 +85,86 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are an expert UI/UX designer who analyzes designs and creates improved versions.
+            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills. Your task is to analyze a design image and create a visually identical HTML/CSS version with subtle improvements to usability while maintaining the exact visual style.
 
-            You will analyze the design image to identify issues in:
-            1. Visual hierarchy
-            2. Color contrast and accessibility
-            3. Component selection and placement
-            4. Text legibility
-            5. Overall usability
-            6. Spacing and alignment
-            7. Consistency
-
-            After analysis, create an improved HTML/CSS version addressing all identified issues while maintaining the original purpose and branding. The HTML/CSS should be complete and ready to render directly in a browser.
-
-            IMPORTANT: The generated HTML/CSS must match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
+            VISUAL FIDELITY REQUIREMENTS (HIGHEST PRIORITY):
+            1. Create HTML/CSS that PERFECTLY matches the visual appearance of the original design
+            2. Maintain exact spacing, alignment, and proportions from the original
+            3. Match colors with precise hex/rgba values that look identical to the original
+            4. Replicate typography with exact font sizes, weights, line heights, and letter spacing
+            5. Preserve all visual elements including shadows, gradients, borders, and rounded corners
+            6. Ensure the rendered result is indistinguishable from the original at a glance
+            7. Position elements using absolute positioning when necessary to achieve pixel-perfect layout
             
-            DESIGN ANALYSIS REQUIREMENTS:
-            1. Identify specific strengths in the design's visual hierarchy, color palette, typography, and component choices
-            2. Identify specific weaknesses in terms of usability, accessibility, and visual design
-            3. Provide concrete improvement suggestions that address the weaknesses
-            4. Identify the color palette used (primary, secondary, background, text colors)
-            5. Identify the fonts used and their roles (headings, body text, etc.)
-            6. Identify key UI components present in the design
-            ${linkedInsights.length > 0 ? '7. Explain how your improvements address the provided user insights' : ''}
+            IMPROVEMENT REQUIREMENTS (SECONDARY PRIORITY):
+            While maintaining visual fidelity, make subtle enhancements to:
+            1. Visual hierarchy - ensure important elements stand out appropriately
+            2. Color contrast - improve accessibility without changing the color palette feel
+            3. Text legibility - ensure all text is readable while preserving the original look
+            4. Component spacing - maintain the original spacing while ensuring consistent rhythm
+            5. Element alignment - ensure pixel-perfect alignment throughout the design
+
+            DIMENSIONS REQUIREMENT:
+            The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
+            
+            CSS REQUIREMENTS:
+            1. Use CSS Grid and Flexbox for layouts that need to be responsive
+            2. Use absolute positioning for pixel-perfect placement when needed
+            3. Include CSS variables for colors, spacing, and typography
+            4. Ensure clean, well-organized CSS with descriptive class names
+            5. Include detailed comments in CSS explaining design decisions
+            6. Avoid arbitrary magic numbers - document any precise pixel measurements
             
             ICON REQUIREMENTS:
             For any icons identified in the UI:
-            1. Use the Font Awesome icon library (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
-            2. Find the most appropriate Font Awesome icon that matches each icon in the original design
-            3. Implement the icon using the proper Font Awesome classes
+            1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
+            2. If no perfect Font Awesome match exists, create the icon using CSS
+            3. Ensure icon sizing and positioning exactly matches the original
             
             IMAGE REQUIREMENTS:
-            For any images or photos identified in the UI:
-            1. Use Unsplash for royalty-free stock photos that match the theme and purpose
-            2. Use specific format for image implementation with div wrapper and exact dimensions
-            3. IMPORTANT: Use "https://source.unsplash.com/random/[width]x[height]/?[keywords]" format
+            For any images identified:
+            1. Use similar placeholder images from Unsplash that match the tone/theme
+            2. Use the format "https://source.unsplash.com/random/[width]x[height]/?[keywords]"
+            3. Ensure images are sized and positioned exactly as in the original
+            
+            DESIGN ANALYSIS REQUIREMENTS:
+            1. Identify the specific visual strengths of the design
+            2. Identify specific weaknesses in terms of usability and accessibility
+            3. List SPECIFIC improvements made in your implementation versus the original
+            4. Extract the exact color palette with accurate hex codes
+            5. Identify the fonts used with specific weights and styles
+            6. List all UI components present in the design
+            7. Include a "Specific Changes" section that precisely details every enhancement made
 
             Your response MUST include:
             1. HTML code block (marked with \`\`\`html)
             2. CSS code block (marked with \`\`\`css)
-            3. Analysis section with:
-               - List of strengths
-               - List of weaknesses
-               - List of improvement areas
-               - Color palette identified (with hex codes)
-               - Fonts identified
-               - Components identified
-               ${linkedInsights.length > 0 ? '- User insights applied' : ''}`
+            3. Detailed analysis section with all requirements above`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Analyze this UI design and create an improved HTML/CSS version addressing any issues with visual hierarchy, contrast, component selection, text legibility, and overall usability while maintaining the original purpose.
+                text: `Analyze this UI design and create a visually identical HTML/CSS version with subtle improvements to usability, accessibility, and visual hierarchy. 
+
+                The design must be recreated with PIXEL-PERFECT accuracy at ${dimensions.width}px × ${dimensions.height}px.
                 
-                The original design dimensions are ${dimensions.width}px width by ${dimensions.height}px height. Ensure your improved version maintains these exact dimensions.
+                Your response must include:
                 
-                Provide a thorough analysis of:
-                1. Design strengths
-                2. Design weaknesses
-                3. Areas for improvement
-                4. Color palette (with hex codes)
-                5. Typography choices
-                6. UI components used
-                ${linkedInsights.length > 0 ? '7. How you incorporated the following user insights:' + insightsPrompt : ''}
+                1. A complete HTML/CSS implementation that matches the original design with perfect visual fidelity
+                2. Thorough analysis including:
+                   - Design strengths
+                   - Design weaknesses
+                   - Specific improvements made (list EACH change with clear before/after description)
+                   - Complete color palette with exact hex codes
+                   - Typography specifications
+                   - UI components identified
                 
-                Then create the improved HTML/CSS version that addresses the identified issues.`
+                Focus on recreating the design with PERFECT visual fidelity first, then make subtle improvements to usability.
+                
+                Every visual detail matters - spacing, alignment, typography, colors, and component layout must be exact.
+                ${linkedInsights.length > 0 ? insightsPrompt : ''}`
               },
               {
                 type: 'image_url',
@@ -162,7 +176,7 @@ class OpenAIService {
           }
         ],
         max_tokens: 4000,
-        temperature: 0.7
+        temperature: 0.5
       };
       
       console.log('Sending request to OpenAI API for design analysis...');
@@ -242,7 +256,8 @@ class OpenAIService {
       analysis: {
         strengths: [],
         weaknesses: [],
-        improvementAreas: []
+        improvementAreas: [],
+        specificChanges: []
       },
       htmlCode: '',
       cssCode: '',
@@ -279,6 +294,10 @@ class OpenAIService {
     // Extract improvement areas
     result.analysis.improvementAreas = this.extractListItems(response, 
       'Improvements|Improvement Areas|Areas for Improvement');
+    
+    // Extract specific changes
+    result.analysis.specificChanges = this.extractListItems(response, 
+      'Specific Changes|Changes Made|Implemented Changes');
     
     // Extract colors
     result.metadata.colors.primary = this.extractColors(response, 'Primary');

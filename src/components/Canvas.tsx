@@ -292,12 +292,12 @@ const Spinner = () => (
   </svg>
 );
 
-// Add a detailed analysis panel component for showing the AI-generated insights
+// Enhance the AnalysisPanel to better display changes
 const AnalysisPanel = styled.div<{ visible: boolean }>`
   position: absolute;
   top: 20px;
   right: 20px;
-  width: 350px;
+  width: 380px;
   max-height: calc(100% - 40px);
   background-color: white;
   border-radius: 8px;
@@ -311,6 +311,7 @@ const AnalysisPanel = styled.div<{ visible: boolean }>`
   opacity: ${props => props.visible ? '1' : '0'};
 `;
 
+// Improved panel header with tabs
 const AnalysisPanelHeader = styled.div`
   padding: 15px 20px;
   background-color: #f8f9fa;
@@ -339,6 +340,31 @@ const AnalysisPanelHeader = styled.div`
   }
 `;
 
+// Add tabs for different analysis sections
+const TabContainer = styled.div`
+  display: flex;
+  padding: 0 15px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eee;
+`;
+
+const Tab = styled.button<{ active: boolean }>`
+  padding: 10px 15px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: ${props => props.active ? '600' : '400'};
+  color: ${props => props.active ? '#333' : '#666'};
+  border-bottom: 2px solid ${props => props.active ? '#4f46e5' : 'transparent'};
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  
+  &:hover {
+    color: ${props => props.active ? '#333' : '#444'};
+  }
+`;
+
+// Enhanced content area
 const AnalysisPanelContent = styled.div`
   padding: 15px 20px;
   overflow-y: auto;
@@ -349,6 +375,12 @@ const AnalysisPanelContent = styled.div`
     font-size: 14px;
     color: #333;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    
+    svg {
+      margin-right: 6px;
+    }
   }
   
   ul {
@@ -356,9 +388,10 @@ const AnalysisPanelContent = styled.div`
     padding: 0 0 0 20px;
     
     li {
-      margin-bottom: 5px;
+      margin-bottom: 8px;
       font-size: 13px;
       color: #555;
+      line-height: 1.4;
     }
   }
   
@@ -373,6 +406,7 @@ const AnalysisPanelContent = styled.div`
     height: 30px;
     border-radius: 4px;
     position: relative;
+    border: 1px solid rgba(0, 0, 0, 0.1);
     
     span {
       position: absolute;
@@ -384,6 +418,130 @@ const AnalysisPanelContent = styled.div`
       color: #666;
     }
   }
+  
+  // Style for the changes list
+  .changes-list {
+    li {
+      background-color: #f8f9ff;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border-left: 3px solid #4f46e5;
+      margin-bottom: 10px;
+      list-style: none;
+    }
+  }
+  
+  // Style for the comparison view
+  .comparison-container {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+  }
+  
+  .comparison-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #444;
+  }
+  
+  .comparison-view {
+    display: flex;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    overflow: hidden;
+    
+    .comparison-half {
+      flex: 1;
+      position: relative;
+      
+      .comparison-label {
+        position: absolute;
+        top: 0;
+        left: 0;
+        padding: 3px 6px;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: white;
+        font-size: 11px;
+        border-bottom-right-radius: 4px;
+      }
+      
+      &:first-child {
+        border-right: 1px dashed #ccc;
+      }
+    }
+  }
+`;
+
+// Updated iteration display component
+const IterationDisplayContainer = styled.div`
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 30px;
+  z-index: 5;
+`;
+
+// Connection line between original and iterated designs
+const ConnectionLine = styled.div`
+  position: absolute;
+  height: 2px;
+  background-color: #4f46e5;
+  top: 50%;
+  z-index: 3;
+  transform: translateY(-50%);
+  
+  &:before, &:after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #4f46e5;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  
+  &:before {
+    left: 0;
+  }
+  
+  &:after {
+    right: 0;
+  }
+`;
+
+// Label for iteration number
+const IterationLabel = styled.div`
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background-color: #4f46e5;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 10;
+`;
+
+// Badge for new/improved design
+const NewDesignBadge = styled.div`
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background-color: #4f46e5;
+  color: white;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
 // Update the Design type in the component to include processing fields
@@ -1516,6 +1674,9 @@ export const Canvas: React.FC = () => {
     }
   };
   
+  // Add state for active tab
+  const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'colors'>('changes');
+  
   // Update the render part to include the processing overlay with steps
   const renderDesign = (design: ExtendedDesign) => {
     return (
@@ -1561,32 +1722,56 @@ export const Canvas: React.FC = () => {
           </>
         )}
 
-        {/* Render iterations if any */}
-        {design.iterations && design.iterations.map(iteration => (
-          <div key={iteration.id} style={{ 
-            position: 'absolute', 
-            left: iteration.position.x - design.position.x, 
-            top: iteration.position.y - design.position.y,
-            zIndex: 10
-          }}>
-            <div onClick={() => selectIterationForAnalysis(iteration)}>
-              <HtmlDesignRenderer
-                ref={(el: HtmlDesignRendererHandle | null) => {
-                  if (el) {
-                    designRefs.current[iteration.id] = el as any;
-                  }
-                }}
-                htmlContent={iteration.htmlContent} 
-                cssContent={iteration.cssContent}
-                width={iteration.dimensions?.width} 
-                height={iteration.dimensions?.height}
-                onRender={(success) => {
-                  console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
-                }}
-              />
-            </div>
-          </div>
-        ))}
+        {/* Improved Iterations Display */}
+        {design.iterations && design.iterations.map((iteration, index) => {
+          // Calculate position for the iteration
+          const xOffset = 400; // Horizontal distance between original and iteration
+          
+          return (
+            <IterationDisplayContainer 
+              key={iteration.id} 
+              style={{
+                left: xOffset + 'px',
+                top: '0px',
+              }}
+            >
+              {/* Connection line between original and iteration */}
+              <ConnectionLine style={{
+                left: -xOffset/2 + 'px',
+                width: xOffset + 'px',
+              }} />
+              
+              {/* The iteration badge */}
+              <IterationLabel>Iteration {index + 1}</IterationLabel>
+              
+              {/* The improved design badge */}
+              <NewDesignBadge>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
+                </svg>
+                Improved
+              </NewDesignBadge>
+              
+              {/* The iteration design */}
+              <div onClick={() => selectIterationForAnalysis(iteration)}>
+                <HtmlDesignRenderer
+                  ref={(el: HtmlDesignRendererHandle | null) => {
+                    if (el) {
+                      designRefs.current[iteration.id] = el as any;
+                    }
+                  }}
+                  htmlContent={iteration.htmlContent} 
+                  cssContent={iteration.cssContent}
+                  width={iteration.dimensions?.width} 
+                  height={iteration.dimensions?.height}
+                  onRender={(success) => {
+                    console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+                  }}
+                />
+              </div>
+            </IterationDisplayContainer>
+          );
+        })}
       </DesignCard>
     );
   };
@@ -1644,63 +1829,164 @@ export const Canvas: React.FC = () => {
           </DebugButton>
         )}
         
-        {/* Analysis Panel */}
+        {/* Enhanced Analysis Panel */}
         <AnalysisPanel visible={analysisVisible}>
           <AnalysisPanelHeader>
             <h3>Design Analysis</h3>
             <button onClick={toggleAnalysisPanel}>×</button>
           </AnalysisPanelHeader>
+          
+          {/* Add tabs for different analysis views */}
+          <TabContainer>
+            <Tab 
+              active={activeTab === 'changes'} 
+              onClick={() => setActiveTab('changes')}
+            >
+              Changes Made
+            </Tab>
+            <Tab 
+              active={activeTab === 'analysis'} 
+              onClick={() => setActiveTab('analysis')}
+            >
+              Analysis
+            </Tab>
+            <Tab 
+              active={activeTab === 'colors'} 
+              onClick={() => setActiveTab('colors')}
+            >
+              Design System
+            </Tab>
+          </TabContainer>
+          
           <AnalysisPanelContent>
             {currentAnalysis ? (
               <>
-                <h4>Strengths</h4>
-                <ul>
-                  {currentAnalysis.analysis?.strengths.map((strength, i) => (
-                    <li key={i}>{strength}</li>
-                  ))}
-                </ul>
-                
-                <h4>Weaknesses</h4>
-                <ul>
-                  {currentAnalysis.analysis?.weaknesses.map((weakness, i) => (
-                    <li key={i}>{weakness}</li>
-                  ))}
-                </ul>
-                
-                <h4>Improvement Areas</h4>
-                <ul>
-                  {currentAnalysis.analysis?.improvementAreas.map((area, i) => (
-                    <li key={i}>{area}</li>
-                  ))}
-                </ul>
-                
-                <h4>Color Palette</h4>
-                <div className="color-grid">
-                  {currentAnalysis.analysis?.metadata?.colors?.primary?.map((color, i) => (
-                    <div key={`p-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
-                      <span>{color}</span>
+                {/* Changes Tab */}
+                {activeTab === 'changes' && (
+                  <>
+                    {/* Before/After Comparison */}
+                    <div className="comparison-container">
+                      <div className="comparison-title">Before & After Comparison</div>
+                      <div className="comparison-view">
+                        <div className="comparison-half">
+                          <div className="comparison-label">Original</div>
+                          {/* This would be a thumbnail of the original design */}
+                          <img 
+                            src={designs.find(d => d.id === currentAnalysis.parentId)?.imageUrl} 
+                            alt="Original design" 
+                            style={{ width: '100%', height: 'auto', maxHeight: '150px', objectFit: 'contain' }}
+                          />
+                        </div>
+                        <div className="comparison-half">
+                          <div className="comparison-label">Improved</div>
+                          {/* This would be a thumbnail of the iteration */}
+                          <HtmlDesignRenderer
+                            htmlContent={currentAnalysis.htmlContent}
+                            cssContent={currentAnalysis.cssContent}
+                            width={150}
+                            height={150}
+                            showBorder={false}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                  {currentAnalysis.analysis?.metadata?.colors?.secondary?.map((color, i) => (
-                    <div key={`s-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
-                      <span>{color}</span>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14.06 9L15 9.94L5.92 19H5v-0.92L14.06 9M17.66 3c-0.25 0-0.51 0.1-0.7 0.29l-1.83 1.83 3.75 3.75 1.83-1.83c0.39-0.39 0.39-1.02 0-1.41l-2.34-2.34c-0.2-0.2-0.45-0.29-0.71-0.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z" fill="#4f46e5"/>
+                      </svg>
+                      Specific Changes Made
+                    </h4>
+                    <ul className="changes-list">
+                      {currentAnalysis.analysis?.specificChanges?.map((change, i) => (
+                        <li key={i}>{change}</li>
+                      )) || (
+                        currentAnalysis.analysis?.improvementAreas?.map((area, i) => (
+                          <li key={i}>{area}</li>
+                        ))
+                      )}
+                    </ul>
+                  </>
+                )}
+                
+                {/* Analysis Tab */}
+                {activeTab === 'analysis' && (
+                  <>
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="#4CAF50"/>
+                      </svg>
+                      Strengths
+                    </h4>
+                    <ul>
+                      {currentAnalysis.analysis?.strengths.map((strength, i) => (
+                        <li key={i}>{strength}</li>
+                      ))}
+                    </ul>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="#F44336"/>
+                      </svg>
+                      Weaknesses
+                    </h4>
+                    <ul>
+                      {currentAnalysis.analysis?.weaknesses.map((weakness, i) => (
+                        <li key={i}>{weakness}</li>
+                      ))}
+                    </ul>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#FF9800"/>
+                      </svg>
+                      Improvement Areas
+                    </h4>
+                    <ul>
+                      {currentAnalysis.analysis?.improvementAreas.map((area, i) => (
+                        <li key={i}>{area}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                
+                {/* Colors & Typography Tab */}
+                {activeTab === 'colors' && (
+                  <>
+                    <h4>Color Palette</h4>
+                    <div className="color-grid">
+                      {currentAnalysis.analysis?.metadata?.colors?.primary?.map((color, i) => (
+                        <div key={`p-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
+                          <span>{color}</span>
+                        </div>
+                      ))}
+                      {currentAnalysis.analysis?.metadata?.colors?.secondary?.map((color, i) => (
+                        <div key={`s-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
+                          <span>{color}</span>
+                        </div>
+                      ))}
+                      {currentAnalysis.analysis?.metadata?.colors?.background?.map((color, i) => (
+                        <div key={`b-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
+                          <span>{color}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                
-                <h4>Typography</h4>
-                <ul>
-                  {currentAnalysis.analysis?.metadata?.fonts?.map((font, i) => (
-                    <li key={i}>{font}</li>
-                  ))}
-                </ul>
-                
-                <h4>Components</h4>
-                <ul>
-                  {currentAnalysis.analysis?.metadata?.components?.map((component, i) => (
-                    <li key={i}>{component}</li>
-                  ))}
-                </ul>
+                    
+                    <h4>Typography</h4>
+                    <ul>
+                      {currentAnalysis.analysis?.metadata?.fonts?.map((font, i) => (
+                        <li key={i}>{font}</li>
+                      ))}
+                    </ul>
+                    
+                    <h4>Components</h4>
+                    <ul>
+                      {currentAnalysis.analysis?.metadata?.components?.map((component, i) => (
+                        <li key={i}>{component}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </>
             ) : (
               <p>Select a design iteration to view analysis</p>
