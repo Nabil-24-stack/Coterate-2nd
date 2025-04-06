@@ -18,6 +18,7 @@ interface DesignAnalysisResponse {
     fonts: string[];
     components: string[];
   };
+  userInsightsApplied?: string[];
 }
 
 class OpenAIService {
@@ -45,7 +46,7 @@ class OpenAIService {
   }
   
   // Main method to analyze design image and generate improved version
-  async analyzeDesignAndGenerateHTML(imageUrl: string): Promise<DesignAnalysisResponse> {
+  async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
     if (!this.apiKey) {
       throw new Error('OpenAI API key not configured');
     }
@@ -66,6 +67,17 @@ class OpenAIService {
       
       // Get image dimensions
       const dimensions = await this.getImageDimensions(imageUrl);
+      
+      // Process linked insights if available
+      let insightsPrompt = '';
+      if (linkedInsights && linkedInsights.length > 0) {
+        insightsPrompt = '\n\nImportant user insights to consider:\n';
+        linkedInsights.forEach((insight, index) => {
+          const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
+          insightsPrompt += `${index + 1}. ${summary}\n`;
+        });
+        insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
+      }
       
       const requestBody = {
         model: 'gpt-4o',
@@ -94,6 +106,7 @@ class OpenAIService {
             4. Identify the color palette used (primary, secondary, background, text colors)
             5. Identify the fonts used and their roles (headings, body text, etc.)
             6. Identify key UI components present in the design
+            ${linkedInsights.length > 0 ? '7. Explain how your improvements address the provided user insights' : ''}
             
             ICON REQUIREMENTS:
             For any icons identified in the UI:
@@ -116,7 +129,8 @@ class OpenAIService {
                - List of improvement areas
                - Color palette identified (with hex codes)
                - Fonts identified
-               - Components identified`
+               - Components identified
+               ${linkedInsights.length > 0 ? '- User insights applied' : ''}`
           },
           {
             role: 'user',
@@ -134,6 +148,7 @@ class OpenAIService {
                 4. Color palette (with hex codes)
                 5. Typography choices
                 6. UI components used
+                ${linkedInsights.length > 0 ? '7. How you incorporated the following user insights:' + insightsPrompt : ''}
                 
                 Then create the improved HTML/CSS version that addresses the identified issues.`
               },
@@ -173,7 +188,7 @@ class OpenAIService {
       const responseContent = data.choices[0].message.content;
       
       // Parse the response to extract HTML, CSS, and analysis
-      return this.parseOpenAIResponse(responseContent);
+      return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
     } catch (error) {
       console.error('Error analyzing design:', error);
       throw error;
@@ -219,7 +234,7 @@ class OpenAIService {
   }
   
   // Parse the OpenAI response to extract HTML, CSS, and analysis
-  private parseOpenAIResponse(response: string): DesignAnalysisResponse {
+  private parseOpenAIResponse(response: string, hasUserInsights: boolean = false): DesignAnalysisResponse {
     console.log('Parsing OpenAI response...');
     
     // Initialize result structure
@@ -255,93 +270,61 @@ class OpenAIService {
       result.cssCode = cssMatch[1].trim();
     }
     
-    // If we don't have separate HTML and CSS, look for combined code
-    if (!result.htmlCode) {
-      const codeMatch = response.match(/```(?:html|)\n([\s\S]*?)```/);
-      if (codeMatch && codeMatch[1]) {
-        result.htmlCode = codeMatch[1].trim();
-      }
-    }
+    // Extract strengths
+    result.analysis.strengths = this.extractListItems(response, 'Strengths');
     
-    // Extract analysis sections - this is more flexible as it depends on how GPT formats the response
-    const strengthsMatch = response.match(/(?:Strengths|STRENGTHS)[:]\s*([\s\S]*?)(?:\n\n|\n(?:Weaknesses|WEAKNESSES))/i);
-    if (strengthsMatch && strengthsMatch[1]) {
-      // Split bullet points and clean them
-      result.analysis.strengths = strengthsMatch[1]
-        .split(/\n-|\n\*|\n\d+\./)
-        .map(item => item.trim())
-        .filter(Boolean);
-    }
+    // Extract weaknesses
+    result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses');
     
-    const weaknessesMatch = response.match(/(?:Weaknesses|WEAKNESSES)[:]\s*([\s\S]*?)(?:\n\n|\n(?:Improvement|IMPROVEMENT|Areas|AREAS))/i);
-    if (weaknessesMatch && weaknessesMatch[1]) {
-      result.analysis.weaknesses = weaknessesMatch[1]
-        .split(/\n-|\n\*|\n\d+\./)
-        .map(item => item.trim())
-        .filter(Boolean);
-    }
+    // Extract improvement areas
+    result.analysis.improvementAreas = this.extractListItems(response, 
+      'Improvements|Improvement Areas|Areas for Improvement');
     
-    const improvementsMatch = response.match(/(?:Improvements|IMPROVEMENTS|Improvement Areas|IMPROVEMENT AREAS)[:]\s*([\s\S]*?)(?:\n\n|\n```|$)/i);
-    if (improvementsMatch && improvementsMatch[1]) {
-      result.analysis.improvementAreas = improvementsMatch[1]
-        .split(/\n-|\n\*|\n\d+\./)
-        .map(item => item.trim())
-        .filter(Boolean);
-    }
+    // Extract colors
+    result.metadata.colors.primary = this.extractColors(response, 'Primary');
+    result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
+    result.metadata.colors.background = this.extractColors(response, 'Background');
+    result.metadata.colors.text = this.extractColors(response, 'Text');
     
-    // Extract color information if available
-    const colorsMatch = response.match(/(?:Colors|COLORS|Color Palette|COLOR PALETTE)[:]\s*([\s\S]*?)(?:\n\n|\n(?:Fonts|FONTS)|$)/i);
-    if (colorsMatch && colorsMatch[1]) {
-      // Try to extract hex colors
-      const hexColors = colorsMatch[1].match(/#[0-9A-Fa-f]{3,6}/g) || [];
-      
-      // Distribute colors to categories based on context
-      if (hexColors.length > 0) {
-        const colorText = colorsMatch[1].toLowerCase();
-        
-        hexColors.forEach(color => {
-          if (colorText.indexOf(color.toLowerCase()) > -1) {
-            const context = colorText.substring(
-              Math.max(0, colorText.indexOf(color.toLowerCase()) - 30),
-              colorText.indexOf(color.toLowerCase())
-            ).toLowerCase();
-            
-            if (context.includes('primary')) {
-              result.metadata.colors.primary.push(color);
-            } else if (context.includes('secondary')) {
-              result.metadata.colors.secondary.push(color);
-            } else if (context.includes('background')) {
-              result.metadata.colors.background.push(color);
-            } else if (context.includes('text')) {
-              result.metadata.colors.text.push(color);
-            } else {
-              // Default to primary if we can't categorize
-              result.metadata.colors.primary.push(color);
-            }
-          }
-        });
-      }
-    }
+    // Extract fonts
+    result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
     
-    // Extract fonts if available
-    const fontsMatch = response.match(/(?:Fonts|FONTS|Typography|TYPOGRAPHY)[:]\s*([\s\S]*?)(?:\n\n|\n(?:Components|COMPONENTS)|$)/i);
-    if (fontsMatch && fontsMatch[1]) {
-      result.metadata.fonts = fontsMatch[1]
-        .split(/\n-|\n\*|\n\d+\./)
-        .map(item => item.trim())
-        .filter(Boolean);
-    }
+    // Extract components
+    result.metadata.components = this.extractListItems(response, 'Components|UI Components');
     
-    // Extract components if available
-    const componentsMatch = response.match(/(?:Components|COMPONENTS)[:]\s*([\s\S]*?)(?:\n\n|\n```|$)/i);
-    if (componentsMatch && componentsMatch[1]) {
-      result.metadata.components = componentsMatch[1]
-        .split(/\n-|\n\*|\n\d+\./)
-        .map(item => item.trim())
-        .filter(Boolean);
+    // Extract user insights applied if relevant
+    if (hasUserInsights) {
+      result.userInsightsApplied = this.extractListItems(response, 
+        'User Insights Applied|User Insights|User Research Applied');
     }
     
     return result;
+  }
+  
+  // Helper to extract list items from a section
+  private extractListItems(text: string, sectionPattern: string): string[] {
+    const regex = new RegExp(`(?:${sectionPattern})(?:[:\\s]*)((?:[\\s\\S](?!\\n\\s*\\n))*?)(?:\\n\\s*\\n|$)`, 'i');
+    const match = text.match(regex);
+    
+    if (!match) return [];
+    
+    // Split by common list item markers
+    return match[1]
+      .split(/\n-|\n\*|\n\d+\./)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  
+  // Helper to extract colors from color sections
+  private extractColors(text: string, colorType: string): string[] {
+    const regex = new RegExp(`${colorType}[\\s\\S]*?(?:colors?|palette)?[:\\s]*((?:[\\s\\S](?!\\n\\s*\\n))*?)(?:\\n\\s*\\n|$)`, 'i');
+    const match = text.match(regex);
+    
+    if (!match) return [];
+    
+    // Extract any hex color codes
+    const hexCodes = match[1].match(/#[0-9A-Fa-f]{3,6}/g);
+    return hexCodes || [];
   }
 }
 
