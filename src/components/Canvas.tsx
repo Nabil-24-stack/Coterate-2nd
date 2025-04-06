@@ -807,6 +807,9 @@ export const Canvas: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
+  
+  // Ref to track which iterations have been logged to avoid repeated console logs
+  const renderedIterationsRef = useRef<Set<string>>(new Set());
 
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
@@ -1834,7 +1837,11 @@ export const Canvas: React.FC = () => {
               width={iteration.dimensions?.width} 
               height={iteration.dimensions?.height}
               onRender={(success) => {
-                console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+                // Only log the first successful render to avoid console clutter
+                if (success && !renderedIterationsRef.current.has(iteration.id)) {
+                  console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+                  renderedIterationsRef.current.add(iteration.id);
+                }
               }}
             />
           </IterationDesignCard>
