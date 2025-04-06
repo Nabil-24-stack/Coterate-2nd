@@ -544,6 +544,12 @@ const NewDesignBadge = styled.div`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
+// Container for an iteration design
+const IterationDesignCard = styled(DesignCard)`
+  position: relative;
+  background: white;
+`;
+
 // Update the Design type in the component to include processing fields
 type ExtendedDesign = Design & {
   isProcessing?: boolean;
@@ -1721,58 +1727,64 @@ export const Canvas: React.FC = () => {
             </ProcessingOverlay>
           </>
         )}
-
-        {/* Improved Iterations Display */}
-        {design.iterations && design.iterations.map((iteration, index) => {
-          // Calculate position for the iteration
-          const xOffset = 400; // Horizontal distance between original and iteration
-          
-          return (
-            <IterationDisplayContainer 
-              key={iteration.id} 
-              style={{
-                left: xOffset + 'px',
-                top: '0px',
-              }}
-            >
-              {/* Connection line between original and iteration */}
-              <ConnectionLine style={{
-                left: -xOffset/2 + 'px',
-                width: xOffset + 'px',
-              }} />
-              
-              {/* The iteration badge */}
-              <IterationLabel>Iteration {index + 1}</IterationLabel>
-              
-              {/* The improved design badge */}
-              <NewDesignBadge>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
-                </svg>
-                Improved
-              </NewDesignBadge>
-              
-              {/* The iteration design */}
-              <div onClick={() => selectIterationForAnalysis(iteration)}>
-                <HtmlDesignRenderer
-                  ref={(el: HtmlDesignRendererHandle | null) => {
-                    if (el) {
-                      designRefs.current[iteration.id] = el as any;
-                    }
-                  }}
-                  htmlContent={iteration.htmlContent} 
-                  cssContent={iteration.cssContent}
-                  width={iteration.dimensions?.width} 
-                  height={iteration.dimensions?.height}
-                  onRender={(success) => {
-                    console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
-                  }}
-                />
-              </div>
-            </IterationDisplayContainer>
-          );
-        })}
       </DesignCard>
+    );
+  };
+
+  // Render an iteration separate from the original design
+  const renderIteration = (iteration: DesignIteration, index: number, parentDesign: Design) => {
+    // Calculate position for the iteration relative to the parent design
+    const xOffset = iteration.dimensions?.width || 400; // Use iteration dimensions or default
+    const marginBetween = 50; // Space between designs
+    
+    return (
+      <DesignContainer 
+        key={`iteration-container-${iteration.id}`}
+        x={parentDesign.position.x + xOffset + marginBetween}
+        y={parentDesign.position.y}
+      >
+        <div style={{ position: 'relative' }}>
+          {/* Connection line between original and iteration */}
+          <ConnectionLine style={{
+            position: 'absolute',
+            left: -(marginBetween + 5) + 'px',
+            width: marginBetween + 'px',
+          }} />
+          
+          {/* The iteration badge */}
+          <IterationLabel>Iteration {index + 1}</IterationLabel>
+          
+          {/* The improved design badge */}
+          <NewDesignBadge>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
+            </svg>
+            Improved
+          </NewDesignBadge>
+          
+          {/* The iteration design */}
+          <IterationDesignCard 
+            isSelected={selectedDesignId === iteration.id}
+            onClick={() => selectIterationForAnalysis(iteration)}
+            onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+          >
+            <HtmlDesignRenderer
+              ref={(el: HtmlDesignRendererHandle | null) => {
+                if (el) {
+                  designRefs.current[iteration.id] = el as any;
+                }
+              }}
+              htmlContent={iteration.htmlContent} 
+              cssContent={iteration.cssContent}
+              width={iteration.dimensions?.width} 
+              height={iteration.dimensions?.height}
+              onRender={(success) => {
+                console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+              }}
+            />
+          </IterationDesignCard>
+        </div>
+      </DesignContainer>
     );
   };
 
@@ -1801,8 +1813,9 @@ export const Canvas: React.FC = () => {
               scale={scale}
             >
               {designs.length > 0 ? (
-                designs.map((design) => (
-                  <React.Fragment key={design.id}>
+                <>
+                  {/* Render all original designs */}
+                  {designs.map((design) => (
                     <DesignContainer 
                       key={`container-${design.id}`}
                       x={design.position.x}
@@ -1810,8 +1823,15 @@ export const Canvas: React.FC = () => {
                     >
                       {renderDesign(design)}
                     </DesignContainer>
-                  </React.Fragment>
-                ))
+                  ))}
+                  
+                  {/* Render all iterations separately */}
+                  {designs.flatMap((design) => 
+                    (design.iterations || []).map((iteration, index) => 
+                      renderIteration(iteration, index, design)
+                    )
+                  )}
+                </>
               ) : (
                 <EmptyCanvasMessage>
                   <h2>Copy a Figma frame</h2>
