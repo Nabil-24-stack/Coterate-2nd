@@ -50,6 +50,39 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Preprocess HTML to replace all img tags with div placeholders
+  const preprocessHtml = (html: string): string => {
+    // Replace all img tags with div placeholders
+    const imgRegex = /<img[^>]*>/gi;
+    const processedHtml = html.replace(imgRegex, (match) => {
+      // Extract width and height attributes if they exist
+      const widthMatch = match.match(/width=["']([^"']*)/i);
+      const heightMatch = match.match(/height=["']([^"']*)/i);
+      
+      const width = widthMatch ? widthMatch[1] : '100';
+      const height = heightMatch ? heightMatch[1] : '100';
+      
+      // Create a placeholder div instead
+      return `<div class="image-placeholder" style="width:${width}px;height:${height}px;background-color:#e0e0e0;border:1px solid #ccc;"></div>`;
+    });
+    
+    // Also replace background-image styles in inline styles
+    const bgImgRegex = /background-image:url\(['"]?([^'"\)]+)['"]?\)/gi;
+    return processedHtml.replace(bgImgRegex, 'background-color:#e0e0e0;border:1px solid #ccc;');
+  };
+  
+  // Process the HTML content
+  const processedHtmlContent = preprocessHtml(htmlContent || '');
+
+  // Process CSS to remove background-image properties
+  const preprocessCss = (css: string): string => {
+    // Replace background-image properties
+    return css.replace(/background-image\s*:\s*url\(['"]?([^'"\)]+)['"]?\)/gi, 'background-color:#e0e0e0;border:1px solid #ccc;');
+  };
+  
+  // Process the CSS content
+  const processedCssContent = preprocessCss(cssContent || '');
+
   // Combine HTML and CSS content with viewport settings to ensure proper sizing
   const combinedContent = `
     <!DOCTYPE html>
@@ -91,30 +124,6 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           -moz-osx-font-smoothing: grayscale;
         }
         
-        /* Better image handling */
-        img {
-          object-fit: cover;
-          display: block;
-          max-width: 100%;
-          max-height: 100%;
-        }
-        
-        /* Improved Unsplash images loading */
-        img[src*="unsplash.com"] {
-          object-fit: cover;
-          background-color: #f0f0f0; /* Light gray placeholder */
-          display: block !important;
-          visibility: visible !important;
-          width: 100%;
-          height: 100%;
-        }
-        
-        .img-container {
-          position: relative;
-          overflow: hidden;
-          background-color: #f0f0f0; /* Placeholder background */
-        }
-        
         /* Image placeholder styling */
         .image-placeholder {
           background-color: #e0e0e0;
@@ -141,70 +150,34 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         }
         
         /* Custom CSS */
-        ${cssContent || ''}
+        ${processedCssContent}
       </style>
       
       <script>
         document.addEventListener('DOMContentLoaded', function() {
-          // Process all images for better loading
+          // Fix any remaining images that might have been dynamically added
           const processImages = () => {
-            // Find all images
-            const images = document.querySelectorAll('img');
-            
-            // Process each image
-            images.forEach(function(img) {
-              const src = img.getAttribute('src');
-              if (!src) return;
+            // Immediately remove any img elements and replace with placeholders
+            document.querySelectorAll('img').forEach(img => {
+              const width = img.width || 100;
+              const height = img.height || 100;
               
-              // Set dimensions if missing
-              if (!img.getAttribute('width')) {
-                img.setAttribute('width', '100%');
+              const placeholder = document.createElement('div');
+              placeholder.className = 'image-placeholder';
+              placeholder.style.width = width + 'px';
+              placeholder.style.height = height + 'px';
+              placeholder.style.backgroundColor = '#e0e0e0';
+              placeholder.style.border = '1px solid #ccc';
+              
+              if (img.parentNode) {
+                img.parentNode.replaceChild(placeholder, img);
               }
-              if (!img.getAttribute('height')) {
-                img.setAttribute('height', '100%');
-              }
-              
-              // Get dimensions for placeholder
-              const width = img.offsetWidth || parseInt(img.style.width) || 100;
-              const height = img.offsetHeight || parseInt(img.style.height) || 100;
-              
-              // Create placeholder function to replace failed images
-              const createPlaceholder = () => {
-                // Create placeholder div
-                const placeholder = document.createElement('div');
-                placeholder.className = 'image-placeholder';
-                placeholder.style.width = width + 'px';
-                placeholder.style.height = height + 'px';
-                
-                // Determine background color - use a gradient for visual interest
-                const colors = ['#e0e0e0', '#d0d0d0', '#f0f0f0', '#e8e8e8'];
-                const randomColor = colors[Math.floor(Math.random() * colors.length)];
-                placeholder.style.background = randomColor;
-                
-                // Replace image with placeholder
-                if (img.parentNode) {
-                  img.parentNode.replaceChild(placeholder, img);
-                }
-              };
-              
-              // Handle errors - replace with placeholder
-              img.onerror = createPlaceholder;
-              
-              // Also handle timeout - sometimes images hang
-              setTimeout(() => {
-                if (!img.complete) {
-                  createPlaceholder();
-                }
-              }, 2000);
             });
             
-            // Also handle any divs with background images
-            document.querySelectorAll('[style*="background-image"]').forEach(el => {
+            // Remove any background images
+            document.querySelectorAll('*').forEach(el => {
               const style = getComputedStyle(el);
-              const bgImage = style.backgroundImage;
-              
-              // If background image contains unsplash or placeholder domain
-              if (bgImage.includes('unsplash.com') || bgImage.includes('placeholder.com')) {
+              if (style.backgroundImage && style.backgroundImage !== 'none') {
                 el.style.backgroundImage = 'none';
                 el.style.backgroundColor = '#e0e0e0';
                 el.style.border = '1px solid #ccc';
@@ -253,7 +226,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
       </script>
     </head>
     <body>
-      ${htmlContent || '<div>No content to display</div>'}
+      ${processedHtmlContent || '<div>No content to display</div>'}
     </body>
     </html>
   `;
