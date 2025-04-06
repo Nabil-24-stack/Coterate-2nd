@@ -1527,9 +1527,12 @@ export const Canvas: React.FC = () => {
       console.log(`Fetching Figma node - File: ${fileKey}, Node: ${nodeId}`);
       setFigmaAuthError(null);
       
-      // Check authentication status
+      // Check authentication status for both Figma and Supabase
       const isAuth = await supabaseService.isAuthenticatedWithFigma();
+      const session = await supabaseService.getSession();
+      
       console.log('Figma authentication status:', isAuth);
+      console.log('Supabase session:', session ? 'Available' : 'Not available');
       
       if (!isAuth) {
         console.log('Not authenticated with Figma, showing auth prompt');
@@ -1549,6 +1552,13 @@ export const Canvas: React.FC = () => {
         setDesigns(prev => [...prev, authDesign]);
         setPendingFigmaLink({ fileKey, nodeId, isValid: true });
         return;
+      }
+
+      // Skip DB creation if no Supabase session
+      const useLocalStorage = !session;
+      
+      if (useLocalStorage) {
+        console.log('No Supabase session, will use local storage only');
       }
 
       // Generate a unique ID for this design using crypto.randomUUID() 
@@ -1599,6 +1609,28 @@ export const Canvas: React.FC = () => {
       // Clear pending link since we've processed it
       setPendingFigmaLink(null);
       
+      // If we have a current page and user is authenticated, create in Supabase as well
+      if (currentPage?.id && !useLocalStorage) {
+        try {
+          console.log('Creating design in Supabase database');
+          await supabaseService.createDesign(currentPage.id, {
+            imageUrl: importResult.imageUrl,
+            position: { x: 100, y: 100 },
+            dimensions: { 
+              width: 500, // Default width if not available
+              height: 400 // Default height if not available
+            },
+            figmaFileKey: fileKey,
+            figmaNodeId: nodeId,
+            figmaSelectionLink: `https://www.figma.com/file/${fileKey}?node-id=${nodeId}`,
+            isFromFigma: true
+          });
+          console.log('Successfully created design in database');
+        } catch (dbError) {
+          console.error('Error saving design to database:', dbError);
+          // Continue with local storage even if database save fails
+        }
+      }
     } catch (error: any) {
       console.error('Error fetching Figma node:', error);
       setFigmaAuthError(error.message || 'Failed to fetch Figma design.');
