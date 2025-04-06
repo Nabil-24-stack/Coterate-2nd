@@ -1517,18 +1517,24 @@ class SupabaseService {
 
       // For each design, fetch its iterations
       const designsWithIterations = await Promise.all(designs.map(async (design) => {
-        const iterations = await this.getIterationsForDesign(design.id);
+        const iterations = await this.getIterationsForDesign(design.id as string);
         
         // Convert from normalized format to the format expected by the frontend
         return {
-          id: design.id,
-          imageUrl: design.image_url,
-          position: { x: design.position_x, y: design.position_y },
-          dimensions: { width: design.width, height: design.height },
-          figmaFileKey: design.figma_file_key,
-          figmaNodeId: design.figma_node_id,
-          figmaSelectionLink: design.figma_selection_link,
-          isFromFigma: design.is_from_figma,
+          id: design.id as string,
+          imageUrl: design.image_url as string,
+          position: { 
+            x: design.position_x as number, 
+            y: design.position_y as number 
+          },
+          dimensions: { 
+            width: design.width as number, 
+            height: design.height as number 
+          },
+          figmaFileKey: design.figma_file_key as string | undefined,
+          figmaNodeId: design.figma_node_id as string | undefined,
+          figmaSelectionLink: design.figma_selection_link as string | undefined,
+          isFromFigma: design.is_from_figma as boolean,
           iterations: iterations || []
         };
       }));
@@ -1678,14 +1684,20 @@ class SupabaseService {
 
       // Convert to the format expected by the frontend
       return iterations.map(iteration => ({
-        id: iteration.id,
-        parentId: iteration.design_id,
-        htmlContent: iteration.html_content,
-        cssContent: iteration.css_content,
-        position: { x: iteration.position_x, y: iteration.position_y },
-        dimensions: { width: iteration.width, height: iteration.height },
-        analysis: iteration.analysis,
-        created_at: iteration.created_at
+        id: iteration.id as string,
+        parentId: iteration.design_id as string,
+        htmlContent: iteration.html_content as string,
+        cssContent: iteration.css_content as string,
+        position: { 
+          x: iteration.position_x as number, 
+          y: iteration.position_y as number 
+        },
+        dimensions: { 
+          width: iteration.width as number, 
+          height: iteration.height as number 
+        },
+        analysis: iteration.analysis as any as import('../types').DesignAnalysis | undefined,
+        created_at: iteration.created_at as string
       }));
     } catch (error) {
       this.logError('get-iterations-exception', 'Exception fetching iterations:', error);
