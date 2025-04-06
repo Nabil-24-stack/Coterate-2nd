@@ -8,6 +8,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import FigmaAuthCallback from './components/FigmaAuthCallback';
 import AuthCallback from './components/AuthCallback';
 import TestAuthPage from './components/TestAuthPage';
+import MigratePage from './app/migrate/page';
 
 // Main app container - only used for global styles and positioning
 const AppContainer = styled.div`
@@ -26,6 +27,7 @@ function App() {
           <Route path="/auth/figma/callback" element={<FigmaAuthCallback />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/test-auth" element={<TestAuthPage />} />
+          <Route path="/migrate" element={<MigratePage />} />
           <Route path="/" element={
             <AppContainer>
               <Header />
