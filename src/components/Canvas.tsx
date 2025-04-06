@@ -1141,7 +1141,7 @@ export const Canvas: React.FC = () => {
       );
       
       if (isIteration) {
-        // Update iteration position
+        // Update iteration position with immutable state update
         setDesigns(prevDesigns => 
           prevDesigns.map(design => {
             if (!design.iterations) return design;
@@ -1158,10 +1158,15 @@ export const Canvas: React.FC = () => {
                 : iteration
             );
             
-            return {
-              ...design,
-              iterations: updatedIterations
-            };
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return {
+                ...design,
+                iterations: updatedIterations
+              };
+            }
+            
+            return design;
           })
         );
       } else {
@@ -1206,7 +1211,75 @@ export const Canvas: React.FC = () => {
   // Handle click on a design
   const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
+    
+    // Check if this is an iteration
+    const isIteration = designs.some(design => 
+      design.iterations?.some(iteration => iteration.id === designId)
+    );
+    
+    // Set the selected design ID
     setSelectedDesignId(designId);
+    
+    // If it's an iteration, also show its analysis data
+    if (isIteration) {
+      const iteration = designs.flatMap(d => d.iterations || [])
+        .find(it => it.id === designId);
+      
+      if (iteration) {
+        setCurrentAnalysis(iteration);
+        setAnalysisVisible(true);
+      }
+    }
+  };
+  
+  // Add the handleDesignMouseDown function back
+  const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
+    e.stopPropagation();
+    
+    // Check if this is an iteration
+    const isIteration = designs.some(design => 
+      design.iterations?.some(iteration => iteration.id === designId)
+    );
+    
+    // If this design is already selected, start dragging
+    if (selectedDesignId === designId) {
+      setIsDesignDragging(true);
+      
+      // Find the position based on whether it's a design or iteration
+      let position;
+      if (isIteration) {
+        // Find the iteration position
+        for (const design of designs) {
+          if (!design.iterations) continue;
+          
+          const foundIteration = design.iterations.find(it => it.id === designId);
+          if (foundIteration) {
+            position = foundIteration.position;
+            break;
+          }
+        }
+      } else {
+        // Find the design position
+        const design = designs.find(d => d.id === designId);
+        if (design) {
+          position = design.position;
+        }
+      }
+      
+      if (position) {
+        setDesignDragStart({
+          x: e.clientX,
+          y: e.clientY
+        });
+        setDesignInitialPosition({
+          x: position.x,
+          y: position.y
+        });
+      }
+    } else {
+      // Otherwise just select it (this will also trigger the analysis panel if needed)
+      handleDesignClick(e, designId);
+    }
   };
   
   // Update the handleIterationClick method to better implement PRD sections 2.4.2 and 2.4.4
@@ -1375,6 +1448,7 @@ export const Canvas: React.FC = () => {
   
   // Select an iteration for viewing in the analysis panel
   const selectIterationForAnalysis = (iteration: DesignIteration) => {
+    // Just show the analysis panel without changing selection
     setCurrentAnalysis(iteration);
     setAnalysisVisible(true);
   };
@@ -1671,68 +1745,6 @@ export const Canvas: React.FC = () => {
     };
   }, [selectedDesignId]);
   
-  // Add the handleDesignMouseDown function back
-  const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
-    e.stopPropagation();
-    
-    // Check if this is an iteration to show in analysis panel
-    const isIteration = designs.some(design => 
-      design.iterations?.some(iteration => iteration.id === designId)
-    );
-    
-    if (isIteration) {
-      // Find the iteration to get its analysis data
-      const iteration = designs.flatMap(d => d.iterations || [])
-        .find(it => it.id === designId);
-      
-      if (iteration) {
-        // Set for analysis panel
-        setCurrentAnalysis(iteration);
-        setAnalysisVisible(true);
-      }
-    }
-    
-    // If this design is already selected, start dragging
-    if (selectedDesignId === designId) {
-      setIsDesignDragging(true);
-      
-      // Find the position based on whether it's a design or iteration
-      let position;
-      if (isIteration) {
-        // Find the iteration position
-        for (const design of designs) {
-          if (!design.iterations) continue;
-          
-          const foundIteration = design.iterations.find(it => it.id === designId);
-          if (foundIteration) {
-            position = foundIteration.position;
-            break;
-          }
-        }
-      } else {
-        // Find the design position
-        const design = designs.find(d => d.id === designId);
-        if (design) {
-          position = design.position;
-        }
-      }
-      
-      if (position) {
-        setDesignDragStart({
-          x: e.clientX,
-          y: e.clientY
-        });
-        setDesignInitialPosition({
-          x: position.x,
-          y: position.y
-        });
-      }
-    } else {
-      // Otherwise just select it
-      setSelectedDesignId(designId);
-    }
-  };
-  
   // Add state for active tab
   const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'colors'>('changes');
   
@@ -1804,11 +1816,12 @@ export const Canvas: React.FC = () => {
             Improved
           </NewDesignBadge>
           
-          {/* The iteration design */}
+          {/* The iteration design itself */}
           <IterationDesignCard 
             isSelected={selectedDesignId === iteration.id}
-            onClick={() => selectIterationForAnalysis(iteration)}
+            onClick={(e) => handleDesignClick(e, iteration.id)}
             onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+            style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
           >
             <HtmlDesignRenderer
               ref={(el: HtmlDesignRendererHandle | null) => {
