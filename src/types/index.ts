@@ -3,6 +3,7 @@ export interface Design {
   id: string;
   imageUrl: string;
   position: { x: number; y: number };
+  dimensions?: { width: number; height: number };
   iterations?: DesignIteration[];
   htmlContent?: string;
   cssContent?: string;
