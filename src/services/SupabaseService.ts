@@ -994,9 +994,12 @@ class SupabaseService {
       this.logInfo('create-success', `New page created successfully: ${data?.id}`);
       // Convert to Page type, ensuring it has the required properties
       return {
-        id: data.id,
-        name: data.name,
-        ...data
+        id: data.id as string,
+        name: data.name as string,
+        user_id: data.user_id as string,
+        created_at: data.created_at as string,
+        updated_at: data.updated_at as string,
+        designs: data.designs as Design[]
       } as Page;
     } catch (error) {
       this.logError('create-exception', 'Error in createPage:', error);
@@ -1064,9 +1067,12 @@ class SupabaseService {
       console.log('SupabaseService: Page updated successfully:', data?.id);
       // Convert to Page type, ensuring it has the required properties
       return {
-        id: data.id,
-        name: data.name,
-        ...data
+        id: data.id as string,
+        name: data.name as string,
+        user_id: data.user_id as string,
+        created_at: data.created_at as string,
+        updated_at: data.updated_at as string,
+        designs: data.designs as Design[]
       } as Page;
     }, null);
   }
@@ -1445,11 +1451,15 @@ class SupabaseService {
         throw error;
       }
 
-      // Return the new page with empty designs array
+      // Ensure all required Page properties are present
       return {
-        ...newPage,
+        id: newPage.id as string,
+        name: newPage.name as string,
+        user_id: newPage.user_id as string,
+        created_at: newPage.created_at as string,
+        updated_at: newPage.updated_at as string,
         designs: []
-      } as Page;
+      };
     } catch (error) {
       this.logError('create-page-exception', 'Exception creating page:', error);
       throw error;
