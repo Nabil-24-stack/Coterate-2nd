@@ -1309,7 +1309,7 @@ export const Canvas: React.FC = () => {
       );
       
       // Generate a unique ID for the iteration
-      const iterationId = `iteration-${Date.now()}`;
+      const iterationId = crypto.randomUUID();
       
       // Calculate the position for the new iteration (positioned to the right of the original)
       const xOffset = originalDimensions?.width || 400;
@@ -1536,7 +1536,7 @@ export const Canvas: React.FC = () => {
         
         // Create a design with auth prompt
         const authDesign: Design & { needsFigmaAuth: boolean } = {
-          id: `figma-auth-${Date.now()}`,
+          id: crypto.randomUUID(), // Use a proper UUID for database compatibility
           imageUrl: '/figma-placeholder.svg', // Use a Figma placeholder 
           position: { x: 100, y: 100 },
           isFromFigma: true,
@@ -1551,8 +1551,9 @@ export const Canvas: React.FC = () => {
         return;
       }
 
-      // Generate a unique ID for this design
-      const designId = `figma-${Date.now()}`;
+      // Generate a unique ID for this design using crypto.randomUUID() 
+      // rather than figma-timestamp which causes UUID format issues
+      const designId = crypto.randomUUID();
       
       // Add a placeholder design while loading
       const placeholderDesign: Design = {
@@ -1609,7 +1610,7 @@ export const Canvas: React.FC = () => {
         
         // Create a design with auth prompt
         const authDesign: Design & { needsFigmaAuth: boolean } = {
-          id: `figma-auth-${Date.now()}`,
+          id: crypto.randomUUID(), // Use a proper UUID for database compatibility
           imageUrl: '/figma-placeholder.svg', // Use a Figma placeholder 
           position: { x: 100, y: 100 },
           isFromFigma: true,
