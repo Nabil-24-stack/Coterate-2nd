@@ -665,6 +665,27 @@ const debugImageLoad = (src: string, success: boolean, error?: string) => {
   console.log(`Image ${success ? 'loaded' : 'failed'}: ${src}${error ? ` (${error})` : ''}`);
 };
 
+// Logging utility to prevent duplicate logs
+const LogManager = {
+  prevLogs: new Map<string, string>(),
+  
+  // Log only if the message is different from the previous one with the same key
+  log: (key: string, message: string, force: boolean = false) => {
+    const prevMessage = LogManager.prevLogs.get(key);
+    if (force || prevMessage !== message) {
+      console.log(message);
+      LogManager.prevLogs.set(key, message);
+      return true;
+    }
+    return false;
+  },
+  
+  // Clear all previous logs
+  clear: () => {
+    LogManager.prevLogs.clear();
+  }
+};
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -739,11 +760,11 @@ export const Canvas: React.FC = () => {
     if (!currentPage?.id) return;
     
     const pageId = currentPage.id;
-    console.log(`Canvas: Current page changed to ${pageId}`);
+    LogManager.log('page-id-changed', `Canvas: Current page changed to ${pageId}`);
     
     // Check if this is a new page (different from the last active page)
     if (lastActivePageIdRef.current !== pageId) {
-      console.log(`Canvas: Page changed from ${lastActivePageIdRef.current} to ${pageId}`);
+      LogManager.log('page-switch', `Canvas: Page changed from ${lastActivePageIdRef.current} to ${pageId}`);
       
       // Save position for the previous page before switching
       if (lastActivePageIdRef.current) {
@@ -758,22 +779,12 @@ export const Canvas: React.FC = () => {
     }
   }, [currentPage?.id, loadCanvasPosition, saveCanvasPosition, position, scale]);
 
-  // Save position when it changes, but only for the current page
-  useEffect(() => {
-    if (!currentPage?.id) return;
-    
-    // Only save if this page is the last active page to prevent position sharing
-    if (lastActivePageIdRef.current === currentPage.id) {
-      saveCanvasPosition(currentPage.id, position, scale);
-    }
-  }, [position, scale, currentPage?.id, saveCanvasPosition]);
-
   // One-time effect to initialize position when component mounts
   // This is crucial for restoring position after page refresh
   useEffect(() => {
     if (!currentPage?.id) return;
     
-    console.log('Canvas: Component mounted, initializing position');
+    LogManager.log('component-mount', 'Canvas: Component mounted, initializing position', true);
     
     // Set the last active page ID ref
     lastActivePageIdRef.current = currentPage.id;
@@ -782,7 +793,7 @@ export const Canvas: React.FC = () => {
     const loaded = loadCanvasPosition(currentPage.id);
     
     if (!loaded) {
-      console.log('Canvas: No saved position found, using defaults');
+      LogManager.log('position-default', 'Canvas: No saved position found, using defaults');
       // No need to set defaults as they're already set in useState
     }
   }, []); // Empty dependency array = only run once on mount
@@ -897,102 +908,61 @@ export const Canvas: React.FC = () => {
   // Effect to load position and scale when page changes
   useEffect(() => {
     if (currentPage?.id) {
-      console.log('Canvas: Page changed to:', currentPage.id, currentPage.name);
+      LogManager.log('page-load', `Canvas: Page changed to: ${currentPage.id} ${currentPage.name || ''}`);
       
       // First log the current position before loading
-      console.log('Canvas: Current position before loading:', position);
+      LogManager.log('position-before', `Canvas: Current position before loading: x=${position.x}, y=${position.y}`);
       
       // Check if we have saved position data
       const key = `coterate_canvas_position_${currentPage.id}`;
       const savedData = localStorage.getItem(key);
       
       if (savedData) {
-        console.log('Canvas: Found saved position data for this page:', JSON.parse(savedData));
-        
         try {
           const parsedData = JSON.parse(savedData);
           if (parsedData.position && typeof parsedData.position.x === 'number') {
-            console.log('Canvas: Setting position to saved value:', parsedData.position);
+            LogManager.log('position-load', `Canvas: Setting position to saved value: x=${parsedData.position.x}, y=${parsedData.position.y}`);
             setPosition(parsedData.position);
           }
           
           if (typeof parsedData.scale === 'number') {
-            console.log('Canvas: Setting scale to saved value:', parsedData.scale);
+            LogManager.log('scale-load', `Canvas: Setting scale to saved value: ${parsedData.scale}`);
             setScale(parsedData.scale);
           }
         } catch (error) {
           console.error('Canvas: Error parsing saved position data:', error);
         }
       } else {
-        console.log('Canvas: No saved position data found for this page');
+        LogManager.log('position-missing', 'Canvas: No saved position data found for this page');
       }
     }
   }, [currentPage?.id]);
 
-  // One-time effect to ensure position is initialized on component mount
-  // This ensures we load position data properly after the initial render
-  useEffect(() => {
-    if (currentPage?.id) {
-      console.log('Canvas: Initial mount - ensuring position data is loaded');
-      const key = `coterate_canvas_position_${currentPage.id}`;
-      const savedData = localStorage.getItem(key);
-      
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          // Check if current position matches stored position
-          const currentPositionX = position.x;
-          const currentPositionY = position.y;
-          const storedPositionX = parsedData.position.x;
-          const storedPositionY = parsedData.position.y;
-          
-          // Only set position if it doesn't match stored values
-          if (currentPositionX !== storedPositionX || currentPositionY !== storedPositionY) {
-            console.log('Canvas: Initial position differs from stored position, updating:', 
-              {current: {x: currentPositionX, y: currentPositionY}, 
-               stored: {x: storedPositionX, y: storedPositionY}});
-            
-            // Use a timeout to ensure this happens after other initializations
-            setTimeout(() => {
-              setPosition(parsedData.position);
-              console.log('Canvas: Forced position update to stored value');
-            }, 100);
-          } else {
-            console.log('Canvas: Initial position already matches stored position');
-          }
-        } catch (error) {
-          console.error('Canvas: Error in initial position check:', error);
-        }
-      }
-    }
-  }, []); // Empty dependency array ensures this runs once on mount
-
   // Effect to load designs from page data - only runs once per page change
   useEffect(() => {
     if (currentPage) {
-      console.log('Canvas: Current page changed:', currentPage.id, currentPage.name);
-      console.log('Canvas: Current page designs:', currentPage.designs);
+      LogManager.log('page-changed', `Canvas: Current page changed: ${currentPage.id} Page ${currentPage.name || 1}`);
       
       if (currentPage.designs && Array.isArray(currentPage.designs) && currentPage.designs.length > 0) {
         // If the page already has designs array, use it
-        console.log('Canvas: Loading designs from page:', currentPage.designs.length, 'designs');
+        LogManager.log('designs-loaded', `Canvas: Loading designs from page: ${currentPage.designs.length} designs`);
         setDesigns(currentPage.designs);
       } else if (currentPage.baseImage && !designsInitialized) {
         // If the page has a baseImage (legacy format), convert it to our new designs array
-        console.log('Canvas: Converting legacy baseImage to design');
+        LogManager.log('designs-legacy', 'Canvas: Converting legacy baseImage to design');
         setDesigns([{
           id: 'legacy-design',
           imageUrl: currentPage.baseImage,
           position: { x: 0, y: 0 }
         }]);
       } else {
-        console.log('Canvas: No designs found in current page');
+        LogManager.log('designs-empty', 'Canvas: No designs found in current page');
         setDesigns([]);
       }
 
       setDesignsInitialized(true);
     } else {
-      console.log('Canvas: No current page available');
+      LogManager.log('page-none', 'Canvas: No current page available');
     }
   }, [currentPage]);
 
@@ -1010,7 +980,7 @@ export const Canvas: React.FC = () => {
 
     // Debounce updates to avoid too many database calls
     debouncedUpdateRef.current = setTimeout(() => {
-      console.log('Canvas: Saving designs to page:', designs.length, 'designs');
+      LogManager.log('designs-saved', `Canvas: Saving designs to page: ${designs.length} designs`);
       
       // Deep clone the designs array to avoid reference issues
       const designsToSave = JSON.parse(JSON.stringify(designs));
@@ -1032,7 +1002,7 @@ export const Canvas: React.FC = () => {
 
   // Reset canvas position and scale
   const resetCanvas = () => {
-    console.log('Canvas: Resetting canvas to default position and scale');
+    LogManager.log('canvas-reset', 'Canvas: Resetting canvas to default position and scale', true);
     const newPosition = { x: 0, y: 0 };
     const newScale = 1;
     
@@ -1285,10 +1255,10 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Update the handleIterationClick method to better implement PRD sections 2.4.2 and 2.4.4
+  // Handle iteration click function
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
-    console.log(`Iteration requested for design: ${designId}`);
+    LogManager.log('iteration-request', `Iteration requested for design: ${designId}`, true);
     
     // Find the design to iterate on
     const designToIterate = designs.find(d => d.id === designId);
@@ -1315,7 +1285,7 @@ export const Canvas: React.FC = () => {
     try {
       // Get the original image dimensions before proceeding
       const originalDimensions = await getImageDimensions(designToIterate.imageUrl);
-      console.log('Original image dimensions:', originalDimensions);
+      LogManager.log('image-dimensions', `Original image dimensions: ${originalDimensions.width}x${originalDimensions.height}`);
       
       // Update the processing step to show "AI Analyzing Design"
       setDesigns(prevDesigns => 
@@ -1404,14 +1374,14 @@ export const Canvas: React.FC = () => {
       });
       
       // Log the state for debugging
-      console.log('Successfully added iteration to design:', designId);
+      LogManager.log('iteration-added', `Successfully added iteration to design: ${designId}`);
       
       // Set the newly created iteration for analysis panel
       setCurrentAnalysis(newIteration);
       setAnalysisVisible(true);
       
       // Success message
-      console.log('Successfully created iteration:', newIteration);
+      LogManager.log('iteration-created', `Successfully created iteration: ${iterationId}`);
     } catch (error) {
       console.error('Error creating iteration:', error);
       alert(`Failed to create iteration: ${error}`);
@@ -1839,7 +1809,7 @@ export const Canvas: React.FC = () => {
               onRender={(success) => {
                 // Only log the first successful render to avoid console clutter
                 if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                  console.log(`Iteration ${iteration.id} rendered successfully: ${success}`);
+                  LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
                   renderedIterationsRef.current.add(iteration.id);
                 }
               }}
@@ -1849,6 +1819,22 @@ export const Canvas: React.FC = () => {
       </DesignContainer>
     );
   };
+
+  // Add effect to clear log manager cache when unmounting
+  useEffect(() => {
+    return () => {
+      // Clear logs when component unmounts
+      LogManager.clear();
+    };
+  }, []);
+
+  // Also clear the log manager cache when page changes
+  useEffect(() => {
+    if (currentPage?.id) {
+      // Clear log cache on page change to avoid stale logs
+      LogManager.clear();
+    }
+  }, [currentPage?.id]);
 
   return (
     <>
