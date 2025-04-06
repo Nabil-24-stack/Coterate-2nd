@@ -57,7 +57,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob: 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data: blob: 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';">
       
       <!-- Improved font loading -->
       <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -115,6 +115,18 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           background-color: #f0f0f0; /* Placeholder background */
         }
         
+        /* Image placeholder styling */
+        .image-placeholder {
+          background-color: #e0e0e0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid #ccc;
+          color: #888;
+          font-size: 10px;
+          overflow: hidden;
+        }
+        
         /* Font Awesome icon improvements */
         .fa, .fas, .far, .fab {
           display: inline-flex;
@@ -136,26 +148,13 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         document.addEventListener('DOMContentLoaded', function() {
           // Process all images for better loading
           const processImages = () => {
-            // Find all Unsplash images
-            const images = document.querySelectorAll('img[src*="unsplash.com"]');
+            // Find all images
+            const images = document.querySelectorAll('img');
             
             // Process each image
             images.forEach(function(img) {
-              let src = img.getAttribute('src');
+              const src = img.getAttribute('src');
               if (!src) return;
-              
-              // Fix URL format
-              src = src.replace(/\\s+/g, '');
-              
-              if (!src.includes('https://')) {
-                src = 'https://' + src.replace(/^[^a-z0-9]/i, '');
-              }
-              
-              // Add cache-busting
-              src = src + (src.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
-              
-              // Update source
-              img.setAttribute('src', src);
               
               // Set dimensions if missing
               if (!img.getAttribute('width')) {
@@ -165,54 +164,51 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
                 img.setAttribute('height', '100%');
               }
               
-              // Handle errors
-              img.onerror = function() {
-                // Fallback to placeholder
-                this.src = 'https://picsum.photos/800/600';
+              // Get dimensions for placeholder
+              const width = img.offsetWidth || parseInt(img.style.width) || 100;
+              const height = img.offsetHeight || parseInt(img.style.height) || 100;
+              
+              // Create placeholder function to replace failed images
+              const createPlaceholder = () => {
+                // Create placeholder div
+                const placeholder = document.createElement('div');
+                placeholder.className = 'image-placeholder';
+                placeholder.style.width = width + 'px';
+                placeholder.style.height = height + 'px';
                 
-                // Show fallback label
-                const parent = this.parentElement;
-                if (parent) {
-                  const note = document.createElement('div');
-                  note.style.position = 'absolute';
-                  note.style.bottom = '5px';
-                  note.style.right = '5px';
-                  note.style.background = 'rgba(0,0,0,0.7)';
-                  note.style.color = 'white';
-                  note.style.padding = '2px 5px';
-                  note.style.fontSize = '10px';
-                  note.style.borderRadius = '3px';
-                  note.textContent = 'Placeholder Image';
-                  parent.appendChild(note);
+                // Determine background color - use a gradient for visual interest
+                const colors = ['#e0e0e0', '#d0d0d0', '#f0f0f0', '#e8e8e8'];
+                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                placeholder.style.background = randomColor;
+                
+                // Replace image with placeholder
+                if (img.parentNode) {
+                  img.parentNode.replaceChild(placeholder, img);
                 }
               };
               
-              // Wrap image if needed
-              const parent = img.parentElement;
-              if (!parent.classList.contains('img-container')) {
-                const width = img.getAttribute('width');
-                const height = img.getAttribute('height');
-                
-                const wrapper = document.createElement('div');
-                wrapper.className = 'img-container';
-                wrapper.style.width = width.includes('%') ? width : width + 'px';
-                wrapper.style.height = height.includes('%') ? height : height + 'px';
-                wrapper.style.position = 'relative';
-                
-                parent.replaceChild(wrapper, img);
-                wrapper.appendChild(img);
-                
-                img.style.objectFit = 'cover';
-                img.style.width = '100%';
-                img.style.height = '100%';
-              }
+              // Handle errors - replace with placeholder
+              img.onerror = createPlaceholder;
               
-              // Force reload
-              const currentSrc = img.src;
-              img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-              setTimeout(function() {
-                img.src = currentSrc;
-              }, 10);
+              // Also handle timeout - sometimes images hang
+              setTimeout(() => {
+                if (!img.complete) {
+                  createPlaceholder();
+                }
+              }, 2000);
+            });
+            
+            // Also handle any divs with background images
+            document.querySelectorAll('[style*="background-image"]').forEach(el => {
+              const style = getComputedStyle(el);
+              const bgImage = style.backgroundImage;
+              
+              // If background image contains unsplash or placeholder domain
+              if (bgImage.includes('unsplash.com') || bgImage.includes('placeholder.com')) {
+                el.style.backgroundImage = 'none';
+                el.style.backgroundColor = '#e0e0e0';
+                el.style.border = '1px solid #ccc';
+              }
             });
           };
           

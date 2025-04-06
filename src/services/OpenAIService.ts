@@ -122,10 +122,13 @@ class OpenAIService {
             3. Ensure icon sizing and positioning exactly matches the original
             
             IMAGE REQUIREMENTS:
-            For any images identified:
-            1. Use similar placeholder images from Unsplash that match the tone/theme
-            2. Use the format "https://source.unsplash.com/random/[width]x[height]/?[keywords]"
-            3. Ensure images are sized and positioned exactly as in the original
+            For any images identified in the original design:
+            1. DO NOT use any external image URLs, placeholders, or Unsplash images
+            2. Instead, replace each image with a simple colored div (rectangle or square)
+            3. Use a background color that makes sense in the context (gray, light blue, etc.)
+            4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
+            5. Add a subtle 1px border to the div to indicate it's an image placeholder
+            6. You can add a simple CSS pattern or gradient if appropriate
             
             DESIGN ANALYSIS REQUIREMENTS:
             1. Identify the specific visual strengths of the design
@@ -149,6 +152,10 @@ class OpenAIService {
                 text: `Analyze this UI design and create a visually identical HTML/CSS version with subtle improvements to usability, accessibility, and visual hierarchy. 
 
                 The design must be recreated with PIXEL-PERFECT accuracy at ${dimensions.width}px × ${dimensions.height}px.
+                
+                IMPORTANT: For any images in the design, DO NOT use external image URLs or placeholders. 
+                Instead, replace them with simple colored div elements that match the dimensions and 
+                positioning of the original images. Use appropriate background colors and subtle borders.
                 
                 Your response must include:
                 
