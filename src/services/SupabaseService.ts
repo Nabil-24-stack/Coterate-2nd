@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Page } from '../types';
+import { Page, Design, DesignIteration } from '../types';
 
 // Add interface extension for the Window object to allow our custom property
 interface Window {
@@ -1342,6 +1342,579 @@ class SupabaseService {
     } catch (error) {
       this.logError('importFigmaDesign', `Error importing Figma design: ${error}`);
       throw error;
+    }
+  }
+
+  // New methods for normalized schema with separate tables
+  
+  // PAGES API
+
+  // Get all pages for a user with their designs
+  async getPagesWithDesigns() {
+    try {
+      const session = await this.getSession();
+      if (!session) {
+        this.logInfo('get-pages-no-session', 'No session found, returning localStorage pages');
+        return this.getLocalStoragePages();
+      }
+
+      const { data: pages, error } = await this.supabaseClient
+        .from('pages')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        this.logError('get-pages-error', 'Error fetching pages:', error);
+        return this.getLocalStoragePages();
+      }
+
+      // For each page, fetch its designs
+      const pagesWithDesigns = await Promise.all(pages.map(async (page: any) => {
+        const designs = await this.getDesignsForPage(page.id);
+        return {
+          ...page,
+          designs: designs || []
+        };
+      }));
+
+      // Update localStorage for offline access
+      try {
+        localStorage.setItem('coterate_pages', JSON.stringify(pagesWithDesigns));
+      } catch (storageError) {
+        this.logError('local-store-error', 'Error storing pages in localStorage:', storageError);
+      }
+
+      return pagesWithDesigns;
+    } catch (error) {
+      this.logError('get-pages-exception', 'Exception fetching pages:', error);
+      return this.getLocalStoragePages();
+    }
+  }
+
+  // Get pages from localStorage as a fallback
+  async getLocalStoragePages(): Promise<Page[]> {
+    try {
+      const pagesJson = localStorage.getItem('coterate_pages');
+      if (pagesJson) {
+        return JSON.parse(pagesJson) as Page[];
+      }
+      return [];
+    } catch (error) {
+      this.logError('local-storage-error', 'Error reading from localStorage:', error);
+      return [];
+    }
+  }
+
+  // Create a page in the normalized schema
+  async createPageNormalized(page: Omit<Page, 'id' | 'user_id' | 'designs'>): Promise<Page> {
+    try {
+      const session = await this.getSession();
+      if (!session) {
+        this.logInfo('create-page-no-session', 'No session found, adding to localStorage only');
+        
+        // Generate a new page with local ID
+        const localPage: Page = {
+          id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          name: page.name,
+          user_id: 'local-storage-user',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          designs: []
+        };
+        
+        // Add to localStorage
+        const existingPages = await this.getLocalStoragePages();
+        const updatedPages = [...existingPages, localPage];
+        localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
+        
+        return localPage;
+      }
+
+      // Create page in Supabase
+      const { data: newPage, error } = await this.supabaseClient
+        .from('pages')
+        .insert({
+          name: page.name,
+          user_id: session.user.id
+        })
+        .select()
+        .single();
+
+      if (error) {
+        this.logError('create-page-error', 'Error creating page:', error);
+        throw error;
+      }
+
+      // Return the new page with empty designs array
+      return {
+        ...newPage,
+        designs: []
+      } as Page;
+    } catch (error) {
+      this.logError('create-page-exception', 'Exception creating page:', error);
+      throw error;
+    }
+  }
+
+  // Delete a page and all its designs (cascade will handle design deletion)
+  async deletePageNormalized(pageId: string) {
+    try {
+      const session = await this.getSession();
+      if (!session) {
+        this.logInfo('delete-page-no-session', 'No session found, removing from localStorage only');
+        
+        // Remove from localStorage
+        const pages = await this.getLocalStoragePages();
+        const updatedPages = pages.filter((p: {id: string}) => p.id !== pageId);
+        localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
+        
+        return true;
+      }
+
+      // Delete page from Supabase
+      const { error } = await this.supabaseClient
+        .from('pages')
+        .delete()
+        .eq('id', pageId);
+
+      if (error) {
+        this.logError('delete-page-error', 'Error deleting page:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      this.logError('delete-page-exception', 'Exception deleting page:', error);
+      throw error;
+    }
+  }
+
+  // DESIGNS API
+
+  // Get all designs for a page, including their iterations
+  async getDesignsForPage(pageId: string) {
+    try {
+      const { data: designs, error } = await this.supabaseClient
+        .from('designs')
+        .select('*')
+        .eq('page_id', pageId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        this.logError('get-designs-error', 'Error fetching designs for page:', error);
+        return [];
+      }
+
+      // For each design, fetch its iterations
+      const designsWithIterations = await Promise.all(designs.map(async (design) => {
+        const iterations = await this.getIterationsForDesign(design.id);
+        
+        // Convert from normalized format to the format expected by the frontend
+        return {
+          id: design.id,
+          imageUrl: design.image_url,
+          position: { x: design.position_x, y: design.position_y },
+          dimensions: { width: design.width, height: design.height },
+          figmaFileKey: design.figma_file_key,
+          figmaNodeId: design.figma_node_id,
+          figmaSelectionLink: design.figma_selection_link,
+          isFromFigma: design.is_from_figma,
+          iterations: iterations || []
+        };
+      }));
+
+      return designsWithIterations;
+    } catch (error) {
+      this.logError('get-designs-exception', 'Exception fetching designs:', error);
+      return [];
+    }
+  }
+
+  // Create a new design for a page
+  async createDesign(pageId: string, design: {
+    imageUrl: string;
+    position: { x: number; y: number };
+    dimensions?: { width: number; height: number };
+    figmaFileKey?: string;
+    figmaNodeId?: string;
+    figmaSelectionLink?: string;
+    isFromFigma?: boolean;
+  }) {
+    try {
+      const { data: newDesign, error } = await this.supabaseClient
+        .from('designs')
+        .insert({
+          page_id: pageId,
+          image_url: design.imageUrl,
+          position_x: design.position.x,
+          position_y: design.position.y,
+          width: design.dimensions?.width || 0,
+          height: design.dimensions?.height || 0,
+          figma_file_key: design.figmaFileKey,
+          figma_node_id: design.figmaNodeId,
+          figma_selection_link: design.figmaSelectionLink,
+          is_from_figma: design.isFromFigma || false
+        })
+        .select()
+        .single();
+
+      if (error) {
+        this.logError('create-design-error', 'Error creating design:', error);
+        throw error;
+      }
+
+      // Convert to the format expected by the frontend
+      return {
+        id: newDesign.id,
+        imageUrl: newDesign.image_url,
+        position: { x: newDesign.position_x, y: newDesign.position_y },
+        dimensions: { width: newDesign.width, height: newDesign.height },
+        figmaFileKey: newDesign.figma_file_key,
+        figmaNodeId: newDesign.figma_node_id,
+        figmaSelectionLink: newDesign.figma_selection_link,
+        isFromFigma: newDesign.is_from_figma,
+        iterations: []
+      };
+    } catch (error) {
+      this.logError('create-design-exception', 'Exception creating design:', error);
+      throw error;
+    }
+  }
+
+  // Update an existing design
+  async updateDesign(designId: string, updates: {
+    imageUrl?: string;
+    position?: { x: number; y: number };
+    dimensions?: { width: number; height: number };
+  }) {
+    try {
+      const updateData: any = {};
+      
+      if (updates.imageUrl) updateData.image_url = updates.imageUrl;
+      if (updates.position) {
+        updateData.position_x = updates.position.x;
+        updateData.position_y = updates.position.y;
+      }
+      if (updates.dimensions) {
+        updateData.width = updates.dimensions.width;
+        updateData.height = updates.dimensions.height;
+      }
+      
+      updateData.updated_at = new Date().toISOString();
+
+      const { data: updatedDesign, error } = await this.supabaseClient
+        .from('designs')
+        .update(updateData)
+        .eq('id', designId)
+        .select()
+        .single();
+
+      if (error) {
+        this.logError('update-design-error', 'Error updating design:', error);
+        throw error;
+      }
+
+      return {
+        id: updatedDesign.id,
+        imageUrl: updatedDesign.image_url,
+        position: { x: updatedDesign.position_x, y: updatedDesign.position_y },
+        dimensions: { width: updatedDesign.width, height: updatedDesign.height },
+        figmaFileKey: updatedDesign.figma_file_key,
+        figmaNodeId: updatedDesign.figma_node_id,
+        figmaSelectionLink: updatedDesign.figma_selection_link,
+        isFromFigma: updatedDesign.is_from_figma
+      };
+    } catch (error) {
+      this.logError('update-design-exception', 'Exception updating design:', error);
+      throw error;
+    }
+  }
+
+  // Delete a design and its iterations (cascade will handle iteration deletion)
+  async deleteDesign(designId: string) {
+    try {
+      const { error } = await this.supabaseClient
+        .from('designs')
+        .delete()
+        .eq('id', designId);
+
+      if (error) {
+        this.logError('delete-design-error', 'Error deleting design:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      this.logError('delete-design-exception', 'Exception deleting design:', error);
+      throw error;
+    }
+  }
+
+  // ITERATIONS API
+
+  // Get all iterations for a design
+  async getIterationsForDesign(designId: string): Promise<DesignIteration[]> {
+    try {
+      const { data: iterations, error } = await this.supabaseClient
+        .from('iterations')
+        .select('*')
+        .eq('design_id', designId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        this.logError('get-iterations-error', 'Error fetching iterations for design:', error);
+        return [];
+      }
+
+      // Convert to the format expected by the frontend
+      return iterations.map(iteration => ({
+        id: iteration.id,
+        parentId: iteration.design_id,
+        htmlContent: iteration.html_content,
+        cssContent: iteration.css_content,
+        position: { x: iteration.position_x, y: iteration.position_y },
+        dimensions: { width: iteration.width, height: iteration.height },
+        analysis: iteration.analysis,
+        created_at: iteration.created_at
+      }));
+    } catch (error) {
+      this.logError('get-iterations-exception', 'Exception fetching iterations:', error);
+      return [];
+    }
+  }
+
+  // Create a new iteration for a design
+  async createIteration(designId: string, iteration: {
+    htmlContent: string;
+    cssContent: string;
+    position: { x: number; y: number };
+    dimensions?: { width: number; height: number };
+    analysis?: any;
+  }) {
+    try {
+      const { data: newIteration, error } = await this.supabaseClient
+        .from('iterations')
+        .insert({
+          design_id: designId,
+          html_content: iteration.htmlContent,
+          css_content: iteration.cssContent,
+          position_x: iteration.position.x,
+          position_y: iteration.position.y,
+          width: iteration.dimensions?.width || 0,
+          height: iteration.dimensions?.height || 0,
+          analysis: iteration.analysis || null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        this.logError('create-iteration-error', 'Error creating iteration:', error);
+        throw error;
+      }
+
+      // Convert to the format expected by the frontend
+      return {
+        id: newIteration.id,
+        parentId: newIteration.design_id,
+        htmlContent: newIteration.html_content,
+        cssContent: newIteration.css_content,
+        position: { x: newIteration.position_x, y: newIteration.position_y },
+        dimensions: { width: newIteration.width, height: newIteration.height },
+        analysis: newIteration.analysis,
+        created_at: newIteration.created_at
+      };
+    } catch (error) {
+      this.logError('create-iteration-exception', 'Exception creating iteration:', error);
+      throw error;
+    }
+  }
+
+  // Update an existing iteration
+  async updateIteration(iterationId: string, updates: {
+    position?: { x: number; y: number };
+    dimensions?: { width: number; height: number };
+  }) {
+    try {
+      const updateData: any = {};
+      
+      if (updates.position) {
+        updateData.position_x = updates.position.x;
+        updateData.position_y = updates.position.y;
+      }
+      if (updates.dimensions) {
+        updateData.width = updates.dimensions.width;
+        updateData.height = updates.dimensions.height;
+      }
+      
+      updateData.updated_at = new Date().toISOString();
+
+      const { data: updatedIteration, error } = await this.supabaseClient
+        .from('iterations')
+        .update(updateData)
+        .eq('id', iterationId)
+        .select()
+        .single();
+
+      if (error) {
+        this.logError('update-iteration-error', 'Error updating iteration:', error);
+        throw error;
+      }
+
+      return {
+        id: updatedIteration.id,
+        parentId: updatedIteration.design_id,
+        htmlContent: updatedIteration.html_content,
+        cssContent: updatedIteration.css_content,
+        position: { x: updatedIteration.position_x, y: updatedIteration.position_y },
+        dimensions: { width: updatedIteration.width, height: updatedIteration.height },
+        analysis: updatedIteration.analysis,
+        created_at: updatedIteration.created_at
+      };
+    } catch (error) {
+      this.logError('update-iteration-exception', 'Exception updating iteration:', error);
+      throw error;
+    }
+  }
+
+  // Delete an iteration
+  async deleteIteration(iterationId: string) {
+    try {
+      const { error } = await this.supabaseClient
+        .from('iterations')
+        .delete()
+        .eq('id', iterationId);
+
+      if (error) {
+        this.logError('delete-iteration-error', 'Error deleting iteration:', error);
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      this.logError('delete-iteration-exception', 'Exception deleting iteration:', error);
+      throw error;
+    }
+  }
+
+  // Migration methods
+
+  // Migrate data from old schema (designs as JSON in pages) to new normalized schema
+  async migrateToNormalizedSchema() {
+    try {
+      this.logInfo('migration-started', 'Starting migration to normalized schema');
+      
+      // Get all pages from old schema
+      const session = await this.getSession();
+      if (!session) {
+        this.logError('migration-no-session', 'No session found, cannot migrate');
+        return { success: false, message: 'No session found. User must be logged in to migrate data.' };
+      }
+
+      // Get pages from the old schema
+      const { data: oldPages, error: fetchError } = await this.supabaseClient
+        .from('pages')
+        .select('*');
+
+      if (fetchError) {
+        this.logError('migration-fetch-error', 'Error fetching pages for migration:', fetchError);
+        return { success: false, message: 'Failed to fetch existing pages.' };
+      }
+
+      if (!oldPages || oldPages.length === 0) {
+        this.logInfo('migration-no-pages', 'No pages found to migrate');
+        return { success: true, message: 'No pages found to migrate.' };
+      }
+
+      this.logInfo('migration-pages-found', `Found ${oldPages.length} pages to migrate`);
+
+      // Process each page
+      let migratedDesigns = 0;
+      let migratedIterations = 0;
+
+      for (const page of oldPages) {
+        // Skip pages without designs
+        if (!page.designs || !Array.isArray(page.designs) || page.designs.length === 0) {
+          this.logInfo('migration-skip-page', `Skipping page ${page.id} - no designs`);
+          continue;
+        }
+
+        // Migrate each design in the page
+        for (const design of page.designs) {
+          try {
+            // Create the design in the new table
+            const { data: newDesign, error: designError } = await this.supabaseClient
+              .from('designs')
+              .insert({
+                page_id: page.id,
+                image_url: design.imageUrl,
+                position_x: design.position?.x || 0,
+                position_y: design.position?.y || 0,
+                width: design.dimensions?.width || 0,
+                height: design.dimensions?.height || 0,
+                figma_file_key: design.figmaFileKey,
+                figma_node_id: design.figmaNodeId,
+                figma_selection_link: design.figmaSelectionLink,
+                is_from_figma: design.isFromFigma || false
+              })
+              .select()
+              .single();
+
+            if (designError) {
+              this.logError('migration-design-error', `Error migrating design ${design.id} for page ${page.id}:`, designError);
+              continue;
+            }
+
+            migratedDesigns++;
+            this.logInfo('migration-design-success', `Migrated design ${design.id} to new ID ${newDesign.id}`);
+
+            // Skip designs without iterations
+            if (!design.iterations || !Array.isArray(design.iterations) || design.iterations.length === 0) {
+              continue;
+            }
+
+            // Migrate each iteration of the design
+            for (const iteration of design.iterations) {
+              try {
+                const { error: iterationError } = await this.supabaseClient
+                  .from('iterations')
+                  .insert({
+                    design_id: newDesign.id,
+                    html_content: iteration.htmlContent,
+                    css_content: iteration.cssContent,
+                    position_x: iteration.position?.x || 0,
+                    position_y: iteration.position?.y || 0,
+                    width: iteration.dimensions?.width || 0,
+                    height: iteration.dimensions?.height || 0,
+                    analysis: iteration.analysis || null
+                  });
+
+                if (iterationError) {
+                  this.logError('migration-iteration-error', `Error migrating iteration ${iteration.id}:`, iterationError);
+                  continue;
+                }
+
+                migratedIterations++;
+                this.logInfo('migration-iteration-success', `Migrated iteration ${iteration.id}`);
+              } catch (iterationError) {
+                this.logError('migration-iteration-exception', `Exception migrating iteration ${iteration.id}:`, iterationError);
+              }
+            }
+          } catch (designError) {
+            this.logError('migration-design-exception', `Exception migrating design ${design.id}:`, designError);
+          }
+        }
+      }
+
+      this.logInfo('migration-complete', `Migration complete. Migrated ${migratedDesigns} designs and ${migratedIterations} iterations.`);
+      return { 
+        success: true, 
+        message: `Migration complete. Migrated ${migratedDesigns} designs and ${migratedIterations} iterations.`,
+        migratedDesigns,
+        migratedIterations
+      };
+    } catch (error) {
+      this.logError('migration-exception', 'Exception during migration:', error);
+      return { success: false, message: 'Migration failed due to an unexpected error.' };
     }
   }
 }
