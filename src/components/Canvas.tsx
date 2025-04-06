@@ -1134,21 +1134,52 @@ export const Canvas: React.FC = () => {
       // Convert the delta to canvas coordinates by dividing by the scale
       const deltaCanvasX = deltaX / scale;
       const deltaCanvasY = deltaY / scale;
-      
-      // Update design position immediately for smooth dragging
-      setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === selectedDesignId
-            ? {
-                ...design,
-                position: {
-                  x: designInitialPosition.x + deltaCanvasX,
-                  y: designInitialPosition.y + deltaCanvasY
-                }
-              }
-            : design
-        )
+
+      // Determine if the selected item is a design or an iteration
+      const isIteration = designs.some(design => 
+        design.iterations?.some(iteration => iteration.id === selectedDesignId)
       );
+      
+      if (isIteration) {
+        // Update iteration position
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => {
+            if (!design.iterations) return design;
+            
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === selectedDesignId
+                ? {
+                    ...iteration,
+                    position: {
+                      x: designInitialPosition.x + deltaCanvasX,
+                      y: designInitialPosition.y + deltaCanvasY
+                    }
+                  }
+                : iteration
+            );
+            
+            return {
+              ...design,
+              iterations: updatedIterations
+            };
+          })
+        );
+      } else {
+        // Update design position
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => 
+            design.id === selectedDesignId
+              ? {
+                  ...design,
+                  position: {
+                    x: designInitialPosition.x + deltaCanvasX,
+                    y: designInitialPosition.y + deltaCanvasY
+                  }
+                }
+              : design
+          )
+        );
+      }
       return;
     }
     
@@ -1234,17 +1265,21 @@ export const Canvas: React.FC = () => {
       // Generate a unique ID for the iteration
       const iterationId = `iteration-${Date.now()}`;
       
+      // Calculate the position for the new iteration (positioned to the right of the original)
+      const xOffset = originalDimensions?.width || 400;
+      const marginBetween = 50;
+      const iterationPosition = {
+        x: designToIterate.position.x + xOffset + marginBetween,
+        y: designToIterate.position.y
+      };
+      
       // Create the new iteration with enhanced analysis data according to PRD 2.4.4
       const newIteration: DesignIteration = {
         id: iterationId,
         parentId: designId,
         htmlContent: result.htmlCode,
         cssContent: result.cssCode,
-        position: {
-          // Position to the right of the original design
-          x: designToIterate.position.x + 400, 
-          y: designToIterate.position.y
-        },
+        position: iterationPosition, // Store absolute position instead of relative
         analysis: {
           strengths: result.analysis.strengths,
           weaknesses: result.analysis.weaknesses,
@@ -1661,17 +1696,35 @@ export const Canvas: React.FC = () => {
     if (selectedDesignId === designId) {
       setIsDesignDragging(true);
       
-      const design = designs.find(d => d.id === designId) || 
-        designs.flatMap(d => d.iterations || []).find(i => i.id === designId);
+      // Find the position based on whether it's a design or iteration
+      let position;
+      if (isIteration) {
+        // Find the iteration position
+        for (const design of designs) {
+          if (!design.iterations) continue;
+          
+          const foundIteration = design.iterations.find(it => it.id === designId);
+          if (foundIteration) {
+            position = foundIteration.position;
+            break;
+          }
+        }
+      } else {
+        // Find the design position
+        const design = designs.find(d => d.id === designId);
+        if (design) {
+          position = design.position;
+        }
+      }
       
-      if (design) {
+      if (position) {
         setDesignDragStart({
           x: e.clientX,
           y: e.clientY
         });
         setDesignInitialPosition({
-          x: design.position.x,
-          y: design.position.y
+          x: position.x,
+          y: position.y
         });
       }
     } else {
@@ -1733,24 +1786,13 @@ export const Canvas: React.FC = () => {
 
   // Render an iteration separate from the original design
   const renderIteration = (iteration: DesignIteration, index: number, parentDesign: Design) => {
-    // Calculate position for the iteration relative to the parent design
-    const xOffset = iteration.dimensions?.width || 400; // Use iteration dimensions or default
-    const marginBetween = 50; // Space between designs
-    
     return (
       <DesignContainer 
         key={`iteration-container-${iteration.id}`}
-        x={parentDesign.position.x + xOffset + marginBetween}
-        y={parentDesign.position.y}
+        x={iteration.position.x}
+        y={iteration.position.y}
       >
         <div style={{ position: 'relative' }}>
-          {/* Connection line between original and iteration */}
-          <ConnectionLine style={{
-            position: 'absolute',
-            left: -(marginBetween + 5) + 'px',
-            width: marginBetween + 'px',
-          }} />
-          
           {/* The iteration badge */}
           <IterationLabel>Iteration {index + 1}</IterationLabel>
           
