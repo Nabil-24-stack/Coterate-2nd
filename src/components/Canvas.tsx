@@ -1554,15 +1554,15 @@ export const Canvas: React.FC = () => {
         return;
       }
 
-      // Skip DB creation if no Supabase session
+      // Determine if we need to use local storage only
+      // We use local storage if there's no authenticated Supabase session
       const useLocalStorage = !session;
       
       if (useLocalStorage) {
-        console.log('No Supabase session, will use local storage only');
+        console.log('No Supabase session, using local storage only');
       }
 
-      // Generate a unique ID for this design using crypto.randomUUID() 
-      // rather than figma-timestamp which causes UUID format issues
+      // Generate a unique ID for this design
       const designId = crypto.randomUUID();
       
       // Add a placeholder design while loading
@@ -1595,13 +1595,14 @@ export const Canvas: React.FC = () => {
       
       console.log('Successfully imported Figma design:', importResult);
       
-      // Update the placeholder design with the actual image
+      // Update the placeholder design with the actual image in local state
       setDesigns(prev => prev.map(design => 
         design.id === designId
           ? {
               ...design,
               imageUrl: importResult.imageUrl,
-              name: importResult.name
+              name: importResult.name,
+              dimensions: { width: 500, height: 400 } // Default dimensions
             }
           : design
       ));
@@ -1609,11 +1610,12 @@ export const Canvas: React.FC = () => {
       // Clear pending link since we've processed it
       setPendingFigmaLink(null);
       
-      // If we have a current page and user is authenticated, create in Supabase as well
-      if (currentPage?.id && !useLocalStorage) {
+      // Only attempt database operations if we have a valid Supabase session
+      // This is critical to avoid RLS policy violations
+      if (currentPage?.id && session) {
         try {
           console.log('Creating design in Supabase database');
-          await supabaseService.createDesign(currentPage.id, {
+          const dbDesign = await supabaseService.createDesign(currentPage.id, {
             imageUrl: importResult.imageUrl,
             position: { x: 100, y: 100 },
             dimensions: { 
@@ -1625,11 +1627,25 @@ export const Canvas: React.FC = () => {
             figmaSelectionLink: `https://www.figma.com/file/${fileKey}?node-id=${nodeId}`,
             isFromFigma: true
           });
-          console.log('Successfully created design in database');
+          console.log('Successfully created design in database:', dbDesign);
+          
+          // If the database creation was successful, update the local design with the DB-generated ID
+          if (dbDesign && dbDesign.id) {
+            setDesigns(prev => prev.map(design => 
+              design.id === designId
+                ? {
+                    ...design,
+                    id: dbDesign.id as string // Cast to string to satisfy TypeScript
+                  }
+                : design
+            ));
+          }
         } catch (dbError) {
           console.error('Error saving design to database:', dbError);
           // Continue with local storage even if database save fails
         }
+      } else {
+        console.log('Skipping database creation - no valid session or page ID');
       }
     } catch (error: any) {
       console.error('Error fetching Figma node:', error);

@@ -435,7 +435,7 @@ class SupabaseService {
   // Get the current user session
   async getSession() {
     try {
-      this.logInfo('get-session', 'Getting session from Supabase');
+      // Always try to get the session from Supabase first
       const { data, error } = await this.supabaseClient.auth.getSession();
       
       if (error) {
@@ -443,29 +443,17 @@ class SupabaseService {
         return null;
       }
       
-      // Check if we have a valid session
-      if (data.session) {
-        this.logInfo('session-found', 'Valid session found, user is authenticated');
+      if (data?.session) {
+        this.logInfo('session-found', `Valid Supabase session found for user: ${data.session.user.id}`);
         return data.session;
       }
       
-      this.logInfo('no-session', 'No valid session found');
-      
-      // Fallback to localStorage - for backwards compatibility
-      const providerToken = localStorage.getItem('figma_provider_token');
-      const accessToken = localStorage.getItem('figma_access_token');
-      
-      if (providerToken || accessToken) {
-        this.logInfo('local-token', 'Found token in localStorage, treating as authenticated');
-        // Return a minimal mock session object with just the essential user ID
-        return { 
-          user: { id: 'local-storage-user' } 
-        };
-      }
-      
+      // If no valid Supabase session, do NOT fallback to using a fake session
+      // This was causing RLS policy violations - only use real authenticated sessions
+      this.logInfo('no-session', 'No valid Supabase session found');
       return null;
     } catch (error) {
-      this.logError('session-unexpected', 'Unexpected error getting session:', error);
+      this.logError('session-exception', 'Exception getting session:', error);
       return null;
     }
   }
