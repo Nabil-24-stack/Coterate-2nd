@@ -147,17 +147,22 @@ const EmptyCanvasMessage = styled.div`
   text-align: center;
   max-width: 500px;
   line-height: 1.5;
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 
   h2 {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 600;
     margin-bottom: 12px;
-    color: #555;
+    color: #333;
   }
 
   p {
     font-size: 16px;
-    color: #888;
+    color: #666;
   }
 `;
 
