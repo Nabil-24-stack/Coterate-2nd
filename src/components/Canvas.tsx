@@ -150,7 +150,6 @@ const EmptyCanvasMessage = styled.div`
   background-color: white;
   padding: 30px 40px;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(0, 0, 0, 0.05);
 
   h2 {
