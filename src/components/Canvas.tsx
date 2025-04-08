@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
-import { Design, DesignIteration } from '../types';
+import { Design, DesignIteration, Page } from '../types';
 import supabaseService from '../services/SupabaseService';
 import openAIService from '../services/OpenAIService';
 import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
@@ -693,6 +693,9 @@ export const Canvas: React.FC = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 }); // Default position, we'll load saved value when ready
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // Add a state to track if we've overridden loading state for safety
+  const [loadingSafetyOverride, setLoadingSafetyOverride] = useState(false);
   
   // Track the last active page ID to prevent position sharing between pages
   const lastActivePageIdRef = useRef<string | null>(null);
@@ -1884,11 +1887,46 @@ export const Canvas: React.FC = () => {
     }
   }, [currentPage?.id]);
 
+  // Safety timeout to prevent infinite loading state
+  useEffect(() => {
+    // If loading is true for too long, we'll override it
+    if (loading) {
+      const safetyTimeout = setTimeout(() => {
+        LogManager.log('safety-override', 'Canvas: Loading taking too long, applying safety override', true);
+        setLoadingSafetyOverride(true);
+        
+        // Try to load designs from localStorage
+        try {
+          const storedPages = localStorage.getItem('coterate_pages');
+          if (storedPages) {
+            const parsedPages = JSON.parse(storedPages) as Page[];
+            LogManager.log('local-pages', `Canvas: Found ${parsedPages.length} pages in localStorage`, true);
+            
+            // Find the current page ID from localStorage
+            const lastActivePageId = localStorage.getItem('coterate_last_active_page');
+            if (lastActivePageId) {
+              const localPage = parsedPages.find(page => page.id === lastActivePageId);
+              if (localPage && localPage.designs && localPage.designs.length > 0) {
+                LogManager.log('local-designs', `Canvas: Loading ${localPage.designs.length} designs from localStorage`, true);
+                setDesigns(localPage.designs);
+                setDesignsInitialized(true);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Canvas: Error loading from localStorage in safety override:', error);
+        }
+      }, 5000); // 5 seconds
+      
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [loading]);
+
   return (
     <>
       <GlobalStyle />
       <CanvasContainer ref={containerRef}>
-        {loading ? (
+        {loading && !loadingSafetyOverride ? (
           <LoadingIndicator>
             <LoadingSpinner />
             <span>Loading designs...</span>
