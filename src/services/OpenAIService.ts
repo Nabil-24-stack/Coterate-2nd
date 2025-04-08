@@ -6,6 +6,30 @@ interface DesignAnalysisResponse {
     weaknesses: string[];
     improvementAreas: string[];
     specificChanges?: string[];
+    visualHierarchy: {
+      issues: string[];
+      improvements: string[];
+    };
+    colorContrast: {
+      issues: string[];
+      improvements: string[];
+    };
+    componentSelection: {
+      issues: string[];
+      improvements: string[];
+    };
+    textLegibility: {
+      issues: string[];
+      improvements: string[];
+    };
+    usability: {
+      issues: string[];
+      improvements: string[];
+    };
+    accessibility: {
+      issues: string[];
+      improvements: string[];
+    };
   };
   htmlCode: string;
   cssCode: string;
@@ -85,25 +109,50 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills. Your task is to analyze a design image and create a visually identical HTML/CSS version with subtle improvements to usability while maintaining the exact visual style.
+            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an improved HTML/CSS version that addresses those issues while maintaining the design's visual identity.
 
-            VISUAL FIDELITY REQUIREMENTS (HIGHEST PRIORITY):
-            1. Create HTML/CSS that PERFECTLY matches the visual appearance of the original design
-            2. Maintain exact spacing, alignment, and proportions from the original
-            3. Match colors with precise hex/rgba values that look identical to the original
-            4. Replicate typography with exact font sizes, weights, line heights, and letter spacing
-            5. Preserve all visual elements including shadows, gradients, borders, and rounded corners
-            6. Ensure the rendered result is indistinguishable from the original at a glance
-            7. Position elements using absolute positioning when necessary to achieve pixel-perfect layout
+            DESIGN ANALYSIS REQUIREMENTS (HIGHEST PRIORITY):
+            Perform a comprehensive analysis of the design focusing on:
             
-            IMPROVEMENT REQUIREMENTS (SECONDARY PRIORITY):
-            While maintaining visual fidelity, make subtle enhancements to:
-            1. Visual hierarchy - ensure important elements stand out appropriately
-            2. Color contrast - improve accessibility without changing the color palette feel
-            3. Text legibility - ensure all text is readable while preserving the original look
-            4. Component spacing - maintain the original spacing while ensuring consistent rhythm
-            5. Element alignment - ensure pixel-perfect alignment throughout the design
-
+            1. Visual hierarchy:
+              - Analyze how effectively the design guides the user's attention
+              - Identify elements that compete for attention or are not properly emphasized
+              - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
+            
+            2. Color contrast and accessibility:
+              - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
+              - Analyze color combinations that may cause visibility or accessibility issues
+              - Evaluate overall color harmony and effective use of color to convey information
+            
+            3. Component selection and placement:
+              - Evaluate the appropriateness of UI components for their intended functions
+              - Identify issues with component placement, grouping, or organization
+              - Assess consistency in component usage throughout the design
+            
+            4. Text legibility:
+              - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
+              - Evaluate line length, line height, letter spacing, and overall readability
+              - Assess font choices for appropriateness to the content and brand
+            
+            5. Overall usability:
+              - Analyze the intuitiveness of interactions and flows
+              - Identify potential points of confusion or friction
+              - Evaluate spacing, alignment, and overall layout effectiveness
+            
+            6. Accessibility considerations:
+              - Identify potential issues for users with disabilities
+              - Assess keyboard navigability, screen reader compatibility, and semantic structure
+              - Evaluate compliance with WCAG guidelines
+            
+            IMPROVEMENT REQUIREMENTS:
+            Based on your analysis, create an improved version that:
+            
+            1. Maintains the original design's visual identity and brand elements
+            2. Addresses all identified issues in visual hierarchy, contrast, component selection, text legibility, usability, and accessibility
+            3. Makes thoughtful, evidence-based improvements that enhance the user experience
+            4. Preserves the original layout and structure while making targeted enhancements
+            5. Follows best practices in modern UI/UX design
+            
             DIMENSIONS REQUIREMENT:
             The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
             
@@ -130,47 +179,44 @@ class OpenAIService {
             5. Add a subtle 1px border to the div to indicate it's an image placeholder
             6. You can add a simple CSS pattern or gradient if appropriate
             
-            DESIGN ANALYSIS REQUIREMENTS:
-            1. Identify the specific visual strengths of the design
-            2. Identify specific weaknesses in terms of usability and accessibility
-            3. List SPECIFIC improvements made in your implementation versus the original
-            4. Extract the exact color palette with accurate hex codes
-            5. Identify the fonts used with specific weights and styles
-            6. List all UI components present in the design
-            7. Include a "Specific Changes" section that precisely details every enhancement made
-
-            Your response MUST include:
-            1. HTML code block (marked with \`\`\`html)
-            2. CSS code block (marked with \`\`\`css)
-            3. Detailed analysis section with all requirements above`
+            Your analysis MUST be organized into these specific sections:
+            1. Visual Hierarchy - Issues and recommended improvements
+            2. Color Contrast and Accessibility - Issues and recommended improvements
+            3. Component Selection and Placement - Issues and recommended improvements
+            4. Text Legibility - Issues and recommended improvements
+            5. Overall Usability - Issues and recommended improvements
+            6. Accessibility Considerations - Issues and recommended improvements
+            7. General Strengths - What the design does well
+            8. General Weaknesses - Overall issues with the design
+            9. Specific Changes Made - Detailed before/after descriptions of all changes implemented
+            10. Color Palette - Exact hex codes for all colors used
+            11. Typography - Font families, sizes, weights used
+            12. UI Components - List of all components identified in the design`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Analyze this UI design and create a visually identical HTML/CSS version with subtle improvements to usability, accessibility, and visual hierarchy. 
+                text: `Analyze this UI design according to UI/UX best practices and create an improved HTML/CSS version that addresses any identified issues. 
 
-                The design must be recreated with PIXEL-PERFECT accuracy at ${dimensions.width}px × ${dimensions.height}px.
+                Perform a detailed analysis focusing specifically on:
+                1. Visual hierarchy
+                2. Color contrast and accessibility
+                3. Component selection and placement
+                4. Text legibility
+                5. Overall usability
+                6. Accessibility considerations
                 
-                IMPORTANT: For any images in the design, DO NOT use external image URLs or placeholders. 
-                Instead, replace them with simple colored div elements that match the dimensions and 
-                positioning of the original images. Use appropriate background colors and subtle borders.
+                Then create an improved version that:
+                - Maintains the original design's visual identity
+                - Addresses all identified issues
+                - Makes thoughtful improvements to enhance user experience
+                - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
                 
-                Your response must include:
+                For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
                 
-                1. A complete HTML/CSS implementation that matches the original design with perfect visual fidelity
-                2. Thorough analysis including:
-                   - Design strengths
-                   - Design weaknesses
-                   - Specific improvements made (list EACH change with clear before/after description)
-                   - Complete color palette with exact hex codes
-                   - Typography specifications
-                   - UI components identified
-                
-                Focus on recreating the design with PERFECT visual fidelity first, then make subtle improvements to usability.
-                
-                Every visual detail matters - spacing, alignment, typography, colors, and component layout must be exact.
+                Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented.
                 ${linkedInsights.length > 0 ? insightsPrompt : ''}`
               },
               {
@@ -264,7 +310,31 @@ class OpenAIService {
         strengths: [],
         weaknesses: [],
         improvementAreas: [],
-        specificChanges: []
+        specificChanges: [],
+        visualHierarchy: {
+          issues: [],
+          improvements: []
+        },
+        colorContrast: {
+          issues: [],
+          improvements: []
+        },
+        componentSelection: {
+          issues: [],
+          improvements: []
+        },
+        textLegibility: {
+          issues: [],
+          improvements: []
+        },
+        usability: {
+          issues: [],
+          improvements: []
+        },
+        accessibility: {
+          issues: [],
+          improvements: []
+        }
       },
       htmlCode: '',
       cssCode: '',
@@ -292,19 +362,30 @@ class OpenAIService {
       result.cssCode = cssMatch[1].trim();
     }
     
-    // Extract strengths
-    result.analysis.strengths = this.extractListItems(response, 'Strengths');
+    // Extract general analysis sections
+    result.analysis.strengths = this.extractListItems(response, 'Strengths|General Strengths');
+    result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses|General Weaknesses');
+    result.analysis.improvementAreas = this.extractListItems(response, 'Improvements|Improvement Areas|Areas for Improvement');
+    result.analysis.specificChanges = this.extractListItems(response, 'Specific Changes|Changes Made|Implemented Changes');
     
-    // Extract weaknesses
-    result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses');
+    // Extract specific analysis categories
+    result.analysis.visualHierarchy.issues = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.visualHierarchy.improvements = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
     
-    // Extract improvement areas
-    result.analysis.improvementAreas = this.extractListItems(response, 
-      'Improvements|Improvement Areas|Areas for Improvement');
+    result.analysis.colorContrast.issues = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.colorContrast.improvements = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
     
-    // Extract specific changes
-    result.analysis.specificChanges = this.extractListItems(response, 
-      'Specific Changes|Changes Made|Implemented Changes');
+    result.analysis.componentSelection.issues = this.extractListItems(response, 'Component Selection(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Component Placement(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.componentSelection.improvements = this.extractListItems(response, 'Component Selection(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Component Placement(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+    
+    result.analysis.textLegibility.issues = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.textLegibility.improvements = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+    
+    result.analysis.usability.issues = this.extractListItems(response, 'Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Overall Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.usability.improvements = this.extractListItems(response, 'Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Overall Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+    
+    result.analysis.accessibility.issues = this.extractListItems(response, 'Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility Considerations(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+    result.analysis.accessibility.improvements = this.extractListItems(response, 'Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility Considerations(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
     
     // Extract colors
     result.metadata.colors.primary = this.extractColors(response, 'Primary');
@@ -320,8 +401,7 @@ class OpenAIService {
     
     // Extract user insights applied if relevant
     if (hasUserInsights) {
-      result.userInsightsApplied = this.extractListItems(response, 
-        'User Insights Applied|User Insights|User Research Applied');
+      result.userInsightsApplied = this.extractListItems(response, 'User Insights Applied|User Insights|User Research Applied');
     }
     
     return result;

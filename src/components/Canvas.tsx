@@ -214,7 +214,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.95);
   display: ${props => props.visible ? 'flex' : 'none'};
   flex-direction: column;
   align-items: center;
@@ -226,17 +226,20 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
   color: #333;
   font-size: 16px;
   line-height: 1.5;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
   
   h3 {
     margin-top: 15px;
     margin-bottom: 5px;
     font-weight: 600;
+    color: #4f46e5;
   }
   
   p {
     margin: 5px 0 15px;
     max-width: 300px;
     opacity: 0.8;
+    font-size: 14px;
   }
   
   svg {
@@ -251,6 +254,53 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
     }
   }
   
+  .analysis-list {
+    margin: 5px 0;
+    padding: 0;
+    list-style: none;
+    text-align: left;
+    display: ${props => props.step === 'analyzing' ? 'flex' : 'none'};
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+    
+    li {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      svg {
+        width: 14px;
+        height: 14px;
+        animation: none;
+      }
+      
+      &.active svg {
+        animation: pulse 1.5s ease-in-out infinite;
+        
+        @keyframes pulse {
+          0% { opacity: 0.5; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1.05); }
+          100% { opacity: 0.5; transform: scale(0.95); }
+        }
+      }
+      
+      &.completed {
+        color: #4caf50;
+      }
+      
+      &.pending {
+        color: #9e9e9e;
+      }
+      
+      &.active {
+        color: #4f46e5;
+        font-weight: 500;
+      }
+    }
+  }
+  
   .progress-bar {
     width: 80%;
     height: 4px;
@@ -261,7 +311,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
     
     .progress {
       height: 100%;
-      background-color: #007bff;
+      background-color: #4f46e5;
       border-radius: 4px;
       transition: width 0.5s ease-in-out;
       width: ${props => {
@@ -274,6 +324,13 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
       }};
     }
   }
+  
+  .step-description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    opacity: 0.8;
+  }
 `;
 
 // Add a custom spinner component
@@ -284,12 +341,54 @@ const Spinner = () => (
       cy="25" 
       r="20" 
       fill="none" 
-      stroke="#007bff" 
+      stroke="#4f46e5" 
       strokeWidth="5"
       strokeDasharray="80 50" 
     />
   </svg>
 );
+
+// Add component for the processing steps renderings
+const ProcessingSteps = ({ step }: { step: 'analyzing' | 'recreating' | 'rendering' | null }) => {
+  return (
+    <ul className="analysis-list">
+      <li className={step === 'analyzing' ? 'active' : (step === 'recreating' || step === 'rendering' ? 'completed' : 'pending')}>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {step === 'analyzing' ? (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+          ) : (step === 'recreating' || step === 'rendering') ? (
+            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor" />
+          ) : (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.5" />
+          )}
+        </svg>
+        Analyzing visual hierarchy, contrast, and components
+      </li>
+      <li className={step === 'recreating' ? 'active' : (step === 'rendering' ? 'completed' : 'pending')}>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {step === 'recreating' ? (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+          ) : step === 'rendering' ? (
+            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor" />
+          ) : (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.5" />
+          )}
+        </svg>
+        Generating improved design based on analysis
+      </li>
+      <li className={step === 'rendering' ? 'active' : 'pending'}>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {step === 'rendering' ? (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+          ) : (
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.5" />
+          )}
+        </svg>
+        Finalizing and rendering improved UI
+      </li>
+    </ul>
+  );
+};
 
 // Enhance the AnalysisPanel to better display changes
 const AnalysisPanel = styled.div<{ visible: boolean }>`
@@ -365,109 +464,139 @@ const Tab = styled.button<{ active: boolean }>`
 
 // Enhanced content area
 const AnalysisPanelContent = styled.div`
-  padding: 15px 20px;
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto;
+  padding: 15px;
   
   h4 {
-    margin: 15px 0 8px;
-    font-size: 14px;
-    color: #333;
+    margin-top: 20px;
+    margin-bottom: 10px;
     font-weight: 600;
+    color: #333;
     display: flex;
     align-items: center;
+    gap: 6px;
     
     svg {
-      margin-right: 6px;
+      flex-shrink: 0;
     }
   }
   
+  h5 {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+    font-size: 14px;
+  }
+  
   ul {
-    margin: 0 0 15px;
-    padding: 0 0 0 20px;
+    margin: 0;
+    padding-left: 20px;
     
     li {
-      margin-bottom: 8px;
-      font-size: 13px;
-      color: #555;
-      line-height: 1.4;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+  }
+  
+  .comparison-container {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    
+    .comparison-title {
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    
+    .comparison-view {
+      display: flex;
+      gap: 15px;
+      
+      .comparison-half {
+        flex: 1;
+        
+        .comparison-label {
+          font-size: 12px;
+          margin-bottom: 6px;
+          color: #666;
+          text-align: center;
+        }
+      }
     }
   }
   
   .color-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-bottom: 15px;
-  }
-  
-  .color-swatch {
-    height: 30px;
-    border-radius: 4px;
-    position: relative;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 10px;
+    margin: 10px 0 20px;
     
-    span {
-      position: absolute;
-      bottom: -20px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 10px;
-      color: #666;
-    }
-  }
-  
-  // Style for the changes list
-  .changes-list {
-    li {
-      background-color: #f8f9ff;
-      padding: 8px 10px;
+    .color-swatch {
+      height: 70px;
       border-radius: 4px;
-      border-left: 3px solid #4f46e5;
-      margin-bottom: 10px;
-      list-style: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 5px;
+      position: relative;
+      overflow: hidden;
+      
+      span {
+        font-size: 10px;
+        color: white;
+        text-shadow: 0 0 2px rgba(0,0,0,0.8);
+        background: rgba(0,0,0,0.2);
+        padding: 2px 4px;
+        border-radius: 2px;
+      }
     }
   }
   
-  // Style for the comparison view
-  .comparison-container {
+  .analysis-section {
     display: flex;
     flex-direction: column;
     margin-bottom: 20px;
-  }
-  
-  .comparison-title {
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    color: #444;
-  }
-  
-  .comparison-view {
-    display: flex;
-    border: 1px solid #eee;
-    border-radius: 6px;
-    overflow: hidden;
     
-    .comparison-half {
-      flex: 1;
-      position: relative;
+    .analysis-subsection {
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
       
-      .comparison-label {
-        position: absolute;
-        top: 0;
-        left: 0;
-        padding: 3px 6px;
-        background-color: rgba(0, 0, 0, 0.5);
-        color: white;
-        font-size: 11px;
-        border-bottom-right-radius: 4px;
+      h5 {
+        margin-top: 0;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 600;
+        color: #333;
+        
+        &:before {
+          content: '';
+          display: block;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background-color: #4f46e5;
+        }
       }
       
-      &:first-child {
-        border-right: 1px dashed #ccc;
+      ul {
+        margin: 10px 0 0;
       }
+    }
+  }
+  
+  .changes-list {
+    li {
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      border-left: 3px solid #4f46e5;
     }
   }
 `;
@@ -1332,6 +1461,32 @@ export const Canvas: React.FC = () => {
           strengths: result.analysis.strengths,
           weaknesses: result.analysis.weaknesses,
           improvementAreas: result.analysis.improvementAreas,
+          specificChanges: result.analysis.specificChanges,
+          // Add the enhanced UX analysis categories
+          visualHierarchy: {
+            issues: result.analysis.visualHierarchy?.issues || [],
+            improvements: result.analysis.visualHierarchy?.improvements || []
+          },
+          colorContrast: {
+            issues: result.analysis.colorContrast?.issues || [],
+            improvements: result.analysis.colorContrast?.improvements || []
+          },
+          componentSelection: {
+            issues: result.analysis.componentSelection?.issues || [],
+            improvements: result.analysis.componentSelection?.improvements || []
+          },
+          textLegibility: {
+            issues: result.analysis.textLegibility?.issues || [],
+            improvements: result.analysis.textLegibility?.improvements || []
+          },
+          usability: {
+            issues: result.analysis.usability?.issues || [],
+            improvements: result.analysis.usability?.improvements || []
+          },
+          accessibility: {
+            issues: result.analysis.accessibility?.issues || [],
+            improvements: result.analysis.accessibility?.improvements || []
+          },
           metadata: {
             colors: result.metadata.colors,
             fonts: result.metadata.fonts,
@@ -1378,8 +1533,9 @@ export const Canvas: React.FC = () => {
       // Log the state for debugging
       LogManager.log('iteration-added', `Successfully added iteration to design: ${designId}`);
       
-      // Set the newly created iteration for analysis panel
+      // Set the newly created iteration for analysis panel and set the UX Analysis tab as active
       setCurrentAnalysis(newIteration);
+      setActiveTab('uxanalysis');
       setAnalysisVisible(true);
       
       // Success message
@@ -1770,7 +1926,7 @@ export const Canvas: React.FC = () => {
   }, [selectedDesignId]);
   
   // Add state for active tab
-  const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'colors'>('changes');
+  const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'uxanalysis' | 'colors'>('changes');
   
   // Update the render part to include the processing overlay with steps
   const renderDesign = (design: ExtendedDesign) => {
@@ -1810,8 +1966,14 @@ export const Canvas: React.FC = () => {
                 {design.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
                 {design.processingStep === 'rendering' && 'Preparing to display your improved design...'}
               </p>
+              <ProcessingSteps step={design.processingStep || null} />
               <div className="progress-bar">
                 <div className="progress"></div>
+              </div>
+              <div className="step-description">
+                {design.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
+                {design.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
+                {design.processingStep === 'rendering' && 'Final touches and optimizations...'}
               </div>
             </ProcessingOverlay>
           </>
@@ -2005,6 +2167,12 @@ export const Canvas: React.FC = () => {
               Analysis
             </Tab>
             <Tab 
+              active={activeTab === 'uxanalysis'} 
+              onClick={() => setActiveTab('uxanalysis')}
+            >
+              UX Analysis
+            </Tab>
+            <Tab 
               active={activeTab === 'colors'} 
               onClick={() => setActiveTab('colors')}
             >
@@ -2101,6 +2269,162 @@ export const Canvas: React.FC = () => {
                         <li key={i}>{area}</li>
                       ))}
                     </ul>
+                  </>
+                )}
+                
+                {/* UX Analysis Tab */}
+                {activeTab === 'uxanalysis' && (
+                  <>
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14l-6-6z" fill="#4f46e5"/>
+                      </svg>
+                      Visual Hierarchy
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.visualHierarchy?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.visualHierarchy?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7z" fill="#FF9800"/>
+                        <path d="M12 17c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5z" fill="#FF9800"/>
+                      </svg>
+                      Color Contrast & Accessibility
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.colorContrast?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.colorContrast?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" fill="#4CAF50"/>
+                      </svg>
+                      Component Selection & Placement
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.componentSelection?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.componentSelection?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z" fill="#03A9F4"/>
+                      </svg>
+                      Text Legibility
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.textLegibility?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.textLegibility?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z" fill="#9C27B0"/>
+                      </svg>
+                      Overall Usability
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.usability?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.usability?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <h4>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" fill="#607D8B"/>
+                      </svg>
+                      Accessibility Considerations
+                    </h4>
+                    <div className="analysis-section">
+                      <div className="analysis-subsection">
+                        <h5>Issues</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.accessibility?.issues.map((issue, i) => (
+                            <li key={i}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="analysis-subsection">
+                        <h5>Improvements</h5>
+                        <ul>
+                          {currentAnalysis.analysis?.accessibility?.improvements.map((improvement, i) => (
+                            <li key={i}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
                   </>
                 )}
                 

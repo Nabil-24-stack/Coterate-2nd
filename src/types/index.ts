@@ -34,6 +34,30 @@ export interface DesignAnalysis {
   weaknesses: string[];
   improvementAreas: string[];
   specificChanges?: string[];
+  visualHierarchy?: {
+    issues: string[];
+    improvements: string[];
+  };
+  colorContrast?: {
+    issues: string[];
+    improvements: string[];
+  };
+  componentSelection?: {
+    issues: string[];
+    improvements: string[];
+  };
+  textLegibility?: {
+    issues: string[];
+    improvements: string[];
+  };
+  usability?: {
+    issues: string[];
+    improvements: string[];
+  };
+  accessibility?: {
+    issues: string[];
+    improvements: string[];
+  };
   metadata?: {
     colors?: {
       primary?: string[];
