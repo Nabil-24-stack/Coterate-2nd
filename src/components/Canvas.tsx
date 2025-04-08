@@ -1324,7 +1324,7 @@ export const Canvas: React.FC = () => {
     // Set the selected design ID
     setSelectedDesignId(designId);
     
-    // If it's an iteration, also show its analysis data
+    // If it's an iteration, show its analysis data
     if (isIteration) {
       const iteration = designs.flatMap(d => d.iterations || [])
         .find(it => it.id === designId);
@@ -1333,6 +1333,12 @@ export const Canvas: React.FC = () => {
         setCurrentAnalysis(iteration);
         setAnalysisVisible(true);
       }
+    } else {
+      // If it's a regular design, clear the current analysis
+      setCurrentAnalysis(null);
+      // Optionally close the analysis panel when clicking on a regular design
+      // Comment this line if you want to keep the panel open
+      setAnalysisVisible(false);
     }
   };
   
@@ -1636,6 +1642,7 @@ export const Canvas: React.FC = () => {
   // Toggle analysis panel visibility
   const toggleAnalysisPanel = () => {
     setAnalysisVisible((prev: boolean) => !prev);
+    // Don't clear currentAnalysis when closing the panel so it's preserved when reopening
   };
   
   // Select an iteration for viewing in the analysis panel
@@ -2045,6 +2052,13 @@ export const Canvas: React.FC = () => {
 
   // Render an iteration separate from the original design
   const renderIteration = (iteration: DesignIteration, index: number, parentDesign: Design) => {
+    // Function to handle showing analysis when iteration is clicked
+    const handleShowAnalysis = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setCurrentAnalysis(iteration);
+      setAnalysisVisible(true);
+    };
+  
     return (
       <DesignContainer 
         key={`iteration-container-${iteration.id}`}
@@ -2066,7 +2080,11 @@ export const Canvas: React.FC = () => {
           {/* The iteration design itself */}
           <IterationDesignCard 
             isSelected={selectedDesignId === iteration.id}
-            onClick={(e) => handleDesignClick(e, iteration.id)}
+            onClick={(e) => {
+              handleDesignClick(e, iteration.id);
+              // Always show analysis when clicking an iteration
+              handleShowAnalysis(e);
+            }}
             onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
             style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
           >
@@ -2439,7 +2457,7 @@ export const Canvas: React.FC = () => {
                     
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z" fill="#9C27B0"/>
+                        <path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42 2.89 2.87L15 21h6v-6zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#9C27B0"/>
                       </svg>
                       Overall Usability
                     </h4>
@@ -2464,7 +2482,7 @@ export const Canvas: React.FC = () => {
                     
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" fill="#607D8B"/>
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#607D8B"/>
                       </svg>
                       Accessibility Considerations
                     </h4>
