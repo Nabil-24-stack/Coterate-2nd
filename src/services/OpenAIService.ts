@@ -109,9 +109,11 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an improved HTML/CSS version that addresses those issues while maintaining the design's visual identity.
+            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S LOOK AND STRUCTURE.
 
-            DESIGN ANALYSIS REQUIREMENTS (HIGHEST PRIORITY):
+            MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
+
+            DESIGN ANALYSIS REQUIREMENTS:
             Perform a comprehensive analysis of the design focusing on:
             
             1. Visual hierarchy:
@@ -145,13 +147,13 @@ class OpenAIService {
               - Evaluate compliance with WCAG guidelines
             
             IMPROVEMENT REQUIREMENTS:
-            Based on your analysis, create an improved version that:
+            Based on your analysis, create an IMPROVED VERSION that:
             
-            1. Maintains the original design's visual identity and brand elements
-            2. Addresses all identified issues in visual hierarchy, contrast, component selection, text legibility, usability, and accessibility
-            3. Makes thoughtful, evidence-based improvements that enhance the user experience
-            4. Preserves the original layout and structure while making targeted enhancements
-            5. Follows best practices in modern UI/UX design
+            1. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout and components must remain unchanged
+            2. Makes targeted improvements to address the identified issues
+            3. Preserves the original brand identity, color scheme, and visual language
+            4. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
+            5. Ensures the improved version is immediately recognizable as an iteration of the original
             
             DIMENSIONS REQUIREMENT:
             The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
@@ -198,8 +200,10 @@ class OpenAIService {
             content: [
               {
                 type: 'text',
-                text: `Analyze this UI design according to UI/UX best practices and create an improved HTML/CSS version that addresses any identified issues. 
+                text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains most of the original design while addressing specific issues.
 
+                THIS IS VERY IMPORTANT: The improved version should look like an ITERATION of the original design, not a completely new design. A user should recognize it as the same UI but with targeted improvements.
+                
                 Perform a detailed analysis focusing specifically on:
                 1. Visual hierarchy
                 2. Color contrast and accessibility
@@ -209,9 +213,8 @@ class OpenAIService {
                 6. Accessibility considerations
                 
                 Then create an improved version that:
-                - Maintains the original design's visual identity
-                - Addresses all identified issues
-                - Makes thoughtful improvements to enhance user experience
+                - Maintains at least 85% of the original design's structure and components
+                - Makes targeted improvements to address identified issues
                 - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
                 
                 For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
@@ -487,10 +490,10 @@ class OpenAIService {
           "Optimize spacing and alignment for better visual flow"
         ],
         specificChanges: [
-          "Increased contrast ratio of text elements from 3:1 to 4.5:1",
-          "Added visual feedback for interactive elements",
-          "Refined typography scale for better readability",
-          "Improved button design with more distinct states"
+          "Increased contrast ratio of primary button text from 3:1 to 4.5:1",
+          "Added visual feedback on hover states for all interactive elements",
+          "Fixed inconsistent spacing between section elements",
+          "Enhanced form field styling for better input affordance"
         ],
         visualHierarchy: {
           issues: [
@@ -499,9 +502,9 @@ class OpenAIService {
             "Content grouping could be more clearly defined"
           ],
           improvements: [
-            "Enhanced emphasis on primary actions through size and color",
+            "Enhanced emphasis on primary actions while maintaining original position and size",
             "Applied appropriate visual weight to headings and key content",
-            "Improved content grouping through spacing and visual cues"
+            "Improved content grouping through subtle spacing adjustments"
           ]
         },
         colorContrast: {
@@ -511,9 +514,9 @@ class OpenAIService {
             "Color alone is used to convey information in some cases"
           ],
           improvements: [
-            "Adjusted text colors to achieve at least 4.5:1 contrast ratio",
-            "Enhanced color differences for better distinction",
-            "Added non-color indicators to convey information"
+            "Adjusted text colors to achieve at least 4.5:1 contrast ratio while keeping original color theme",
+            "Enhanced color differences for better distinction without changing the overall color scheme",
+            "Added non-color indicators to convey information while preserving original design elements"
           ]
         },
         componentSelection: {
@@ -523,9 +526,9 @@ class OpenAIService {
             "Modal dialogs lack clear dismissal mechanisms"
           ],
           improvements: [
-            "Standardized form controls with clear visual cues",
-            "Applied consistent styling to navigation elements",
-            "Added clear close buttons and escape mechanisms to modals"
+            "Enhanced form controls with subtle visual cues while maintaining original placement",
+            "Applied consistent styling to navigation elements without restructuring the navigation",
+            "Added clear close buttons to modals using the existing visual language"
           ]
         },
         textLegibility: {
@@ -535,9 +538,9 @@ class OpenAIService {
             "Long lines of text span too wide for comfortable reading"
           ],
           improvements: [
-            "Increased minimum text size to 12px",
-            "Adjusted line height to 1.5 for better readability",
-            "Limited line length to approximately 70 characters"
+            "Increased minimum text size to 12px while keeping original font family and styling",
+            "Adjusted line height to 1.5 for better readability without changing text position",
+            "Limited line length to approximately 70 characters while preserving layout structure"
           ]
         },
         usability: {
@@ -547,9 +550,9 @@ class OpenAIService {
             "Some interactive elements lack clear hover/focus states"
           ],
           improvements: [
-            "Increased size of all interactive elements to at least 44x44px",
-            "Added immediate and clear validation feedback",
-            "Enhanced hover/focus states for all interactive elements"
+            "Slightly increased size of interactive elements while maintaining their position and alignment",
+            "Added immediate and clear validation feedback that matches the original UI style",
+            "Enhanced hover/focus states for all interactive elements using the original color palette"
           ]
         },
         accessibility: {
@@ -559,9 +562,9 @@ class OpenAIService {
             "Focus order is not logical in some sections"
           ],
           improvements: [
-            "Added descriptive alt text to all images",
-            "Associated labels with all form fields",
-            "Fixed focus order to follow natural content flow"
+            "Added descriptive alt text to all images without changing their appearance",
+            "Associated labels with all form fields while maintaining the original form layout",
+            "Fixed focus order to follow natural content flow without restructuring the UI"
           ]
         }
       },
@@ -574,10 +577,12 @@ class OpenAIService {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+  <!-- This is a demo fallback response. In production, this would be an iterated version of the original UI -->
   <div class="container">
+    <!-- Preserving original header structure -->
     <header class="header">
       <div class="logo">
-        <h1>Brand Logo</h1>
+        <h1>Original Logo</h1>
       </div>
       <nav class="main-nav">
         <ul>
@@ -587,75 +592,79 @@ class OpenAIService {
           <li><a href="#">About</a></li>
         </ul>
       </nav>
+      <!-- Enhancement: Improved button with better contrast -->
       <div class="cta-button">
         <button class="primary-button">Get Started</button>
       </div>
     </header>
     
     <main>
+      <!-- Preserving original hero structure with improved contrast -->
       <section class="hero">
         <div class="hero-content">
-          <h2>Create Beautiful Designs Faster</h2>
-          <p>Our platform helps you iterate on designs with AI-powered feedback and improvements.</p>
+          <h2>Original Headline Text</h2>
+          <p>Original description text with improved line height and spacing.</p>
           <button class="primary-button">Try It Now</button>
         </div>
         <div class="hero-image">
-          <!-- Placeholder for image -->
+          <!-- Image placeholder preserving original dimensions -->
           <div class="image-placeholder"></div>
         </div>
       </section>
       
+      <!-- Original features section with improved spacing -->
       <section class="features">
         <h3>Key Features</h3>
         <div class="feature-cards">
           <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-magic"></i></div>
-            <h4>AI-Powered Design</h4>
-            <p>Get intelligent suggestions to improve your designs.</p>
+            <h4>Original Feature Title</h4>
+            <p>Original feature description with improved legibility.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-            <h4>Rapid Iteration</h4>
-            <p>Iterate faster with instant feedback and changes.</p>
+            <h4>Original Feature Title</h4>
+            <p>Original feature description with improved legibility.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-users"></i></div>
-            <h4>User Insights</h4>
-            <p>Incorporate real user feedback into your iterations.</p>
+            <h4>Original Feature Title</h4>
+            <p>Original feature description with improved legibility.</p>
           </div>
         </div>
       </section>
     </main>
     
+    <!-- Preserving original footer structure -->
     <footer>
       <div class="footer-links">
         <div class="footer-column">
-          <h5>Product</h5>
+          <h5>Original Footer Title</h5>
           <ul>
-            <li><a href="#">Features</a></li>
-            <li><a href="#">Pricing</a></li>
-            <li><a href="#">FAQ</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
           </ul>
         </div>
         <div class="footer-column">
-          <h5>Company</h5>
+          <h5>Original Footer Title</h5>
           <ul>
-            <li><a href="#">About Us</a></li>
-            <li><a href="#">Careers</a></li>
-            <li><a href="#">Contact</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
           </ul>
         </div>
         <div class="footer-column">
-          <h5>Resources</h5>
+          <h5>Original Footer Title</h5>
           <ul>
-            <li><a href="#">Blog</a></li>
-            <li><a href="#">Documentation</a></li>
-            <li><a href="#">Support</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
+            <li><a href="#">Original Link</a></li>
           </ul>
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2023 Coterate. All rights reserved.</p>
+        <p>Original copyright text.</p>
       </div>
     </footer>
   </div>
@@ -663,11 +672,12 @@ class OpenAIService {
 </html>`,
       cssCode: `/* CSS Variables for consistent theming */
 :root {
+  /* Preserving original color values with adjustments for accessibility */
   --primary-color: #4f46e5;
   --primary-hover: #4338ca;
   --secondary-color: #6b7280;
   --text-color: #1f2937;
-  --light-text: #6b7280;
+  --light-text: #4b5563; /* Slightly darker than original for better contrast */
   --background: #ffffff;
   --light-bg: #f9fafb;
   --border-color: #e5e7eb;
@@ -681,7 +691,7 @@ class OpenAIService {
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* Base styles */
+/* Base styles - preserving original with minor enhancements */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -689,20 +699,21 @@ class OpenAIService {
 }
 
 body {
+  /* Preserving original font stack */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   color: var(--text-color);
-  line-height: 1.5;
+  line-height: 1.5; /* Improved from original 1.3 */
   background-color: var(--background);
-  font-size: 16px;
+  font-size: 16px; /* Preserved from original */
 }
 
 .container {
-  width: ${dimensions.width}px;
+  width: ${dimensions.width}px; /* Preserving original width */
   margin: 0 auto;
   overflow: hidden;
 }
 
-/* Typography */
+/* Typography - preserving original with minor enhancements for readability */
 h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--spacing-md);
   font-weight: 600;
@@ -710,34 +721,34 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 h1 {
-  font-size: 1.875rem;
+  font-size: 1.875rem; /* Preserved from original */
 }
 
 h2 {
-  font-size: 2.25rem;
+  font-size: 2.25rem; /* Preserved from original */
   color: var(--text-color);
 }
 
 h3 {
-  font-size: 1.5rem;
+  font-size: 1.5rem; /* Preserved from original */
   text-align: center;
   margin-bottom: var(--spacing-xl);
 }
 
 h4 {
-  font-size: 1.25rem;
+  font-size: 1.25rem; /* Preserved from original */
   margin-bottom: var(--spacing-sm);
 }
 
 h5 {
-  font-size: 1rem;
+  font-size: 1rem; /* Preserved from original */
   margin-bottom: var(--spacing-md);
   color: var(--secondary-color);
 }
 
 p {
   margin-bottom: var(--spacing-md);
-  color: var(--light-text);
+  color: var(--light-text); /* Adjusted for better contrast */
 }
 
 a {
@@ -746,16 +757,17 @@ a {
   transition: color 0.2s ease;
 }
 
+/* Enhancement: Better hover states while preserving original styling */
 a:hover, a:focus {
   color: var(--primary-hover);
   text-decoration: underline;
 }
 
-/* Buttons */
+/* Buttons - preserving original with accessibility enhancements */
 .primary-button {
   background-color: var(--primary-color);
   color: white;
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.5rem; /* Preserved from original */
   border-radius: var(--border-radius);
   border: none;
   font-weight: 500;
@@ -769,6 +781,7 @@ a:hover, a:focus {
   background-color: var(--primary-hover);
 }
 
+/* Enhancement: Better focus states */
 .primary-button:focus {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
@@ -778,7 +791,7 @@ a:hover, a:focus {
   transform: translateY(1px);
 }
 
-/* Header */
+/* Header - preserving original structure */
 .header {
   display: flex;
   justify-content: space-between;
@@ -807,7 +820,7 @@ a:hover, a:focus {
   color: var(--primary-color);
 }
 
-/* Hero Section */
+/* Hero Section - preserving original layout */
 .hero {
   display: flex;
   align-items: center;
@@ -820,12 +833,12 @@ a:hover, a:focus {
 }
 
 .hero-content h2 {
-  font-size: 2.5rem;
+  font-size: 2.5rem; /* Preserved from original */
   margin-bottom: var(--spacing-md);
 }
 
 .hero-content p {
-  font-size: 1.125rem;
+  font-size: 1.125rem; /* Preserved from original */
   margin-bottom: var(--spacing-lg);
 }
 
@@ -838,13 +851,13 @@ a:hover, a:focus {
 
 .image-placeholder {
   width: 100%;
-  height: 300px;
+  height: 300px; /* Preserved from original */
   background-color: #e5e7eb;
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
 }
 
-/* Features Section */
+/* Features Section - preserving original with minor improvements */
 .features {
   padding: var(--spacing-xl) 0;
   background-color: var(--light-bg);
@@ -865,8 +878,9 @@ a:hover, a:focus {
   transition: transform 0.2s ease;
 }
 
+/* Enhancement: Subtle hover effect */
 .feature-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-2px); /* More subtle than original */
 }
 
 .feature-icon {
@@ -875,7 +889,7 @@ a:hover, a:focus {
   margin-bottom: var(--spacing-md);
 }
 
-/* Footer */
+/* Footer - preserving original structure */
 footer {
   background-color: var(--light-bg);
   padding: var(--spacing-xl) 0;
@@ -898,7 +912,7 @@ footer {
 
 .footer-column a {
   color: var(--light-text);
-  font-size: 0.875rem;
+  font-size: 0.875rem; /* Preserved from original */
 }
 
 .footer-bottom {
@@ -925,7 +939,7 @@ footer {
           primary: ['#4f46e5', '#4338ca'],
           secondary: ['#6b7280'],
           background: ['#ffffff', '#f9fafb'],
-          text: ['#1f2937', '#6b7280']
+          text: ['#1f2937', '#4b5563']  // Slightly adjusted for better contrast
         },
         fonts: [
           'Inter', 
