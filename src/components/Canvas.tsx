@@ -1540,107 +1540,45 @@ export const Canvas: React.FC = () => {
       // Update designs with a properly immutable state update
       setDesigns(prevDesigns => {
         return prevDesigns.map(design => {
-          if (design.id === designId) {
-            // Create a new object for the design being updated
-            return {
-              ...design,
-              // Make sure to preserve the original design properties
-              imageUrl: design.imageUrl,
-              position: design.position,
-              // Add the iteration to iterations array (or create a new array)
-              iterations: [...(design.iterations || []), newIteration],
-              // Clear processing state
-              isProcessing: false,
-              processingStep: null
-            };
+          if (design.id !== designId) {
+            return design;
           }
-          return design;
+          
+          // Create or append to iterations array
+          const existingIterations = design.iterations || [];
+          const updatedIterations = [...existingIterations, newIteration];
+          
+          // Return the updated design with a new iterations array and reset the processing flag
+          return {
+            ...design,
+            iterations: updatedIterations,
+            isProcessing: false,
+            processingStep: null
+          };
         });
       });
       
-      // Try to persist to database, but don't let it block the UI experience
-      try {
-        // We'll continue even if the database operation fails
-        await persistDesignUpdate(designId, newIteration);
-        LogManager.log('iteration-persisted', `Successfully persisted iteration to database: ${iterationId}`);
-      } catch (dbError) {
-        // Log the error but don't affect the user experience
-        console.error('Error persisting iteration to database:', dbError);
-        LogManager.log('iteration-persist-failed', `Failed to persist iteration to database: ${dbError}`, true);
-        
-        // The iteration will still work in local state even if database persistence fails
-        console.log('Iteration will continue to work locally in this session');
-      }
+      // In a simple localStorage-only version, we don't need to persist to any database
+      // as the state changes will trigger our effect that saves to localStorage
+      console.log('Iteration stored in local state only, will be saved to localStorage');
       
-      // Log the state for debugging
-      LogManager.log('iteration-added', `Successfully added iteration to design: ${designId}`);
-      
-      // Set the newly created iteration for analysis panel and set the UX Analysis tab as active
+      // Set the current analysis to show the analysis panel
       setCurrentAnalysis(newIteration);
-      setActiveTab('uxanalysis');
       setAnalysisVisible(true);
-      
-      // Success message
-      LogManager.log('iteration-created', `Successfully created iteration: ${iterationId}`);
     } catch (error) {
-      console.error('Error creating iteration:', error);
-      alert(`Failed to create iteration: ${error}`);
+      console.error('Error generating iteration:', error);
       
-      // Clear processing state
+      // Reset the processing state on error
       setDesigns(prevDesigns => 
         prevDesigns.map(design => 
-          design.id === designId
-            ? { ...design, isProcessing: false, processingStep: null }
+          design.id === designId 
+            ? { ...design, isProcessing: false, processingStep: null } 
             : design
         )
       );
-    }
-  };
-  
-  // Helper function to persist design update to database
-  const persistDesignUpdate = async (designId: string, newIteration: DesignIteration) => {
-    // First check if we're in a demo environment where we don't expect database persistence
-    if (window.location.hostname === 'localhost' || 
-        window.location.hostname.includes('vercel.app') || 
-        window.location.hostname.includes('netlify.app')) {
       
-      // For demo environments, we'll skip database operations
-      // Check if user is logged in with Supabase
-      try {
-        const session = await supabaseService.getSession();
-        const isDemo = !session;
-        if (isDemo) {
-          console.log('Running in demo mode, skipping database operations');
-          // Simulate a successful operation after a short delay
-          await new Promise(resolve => setTimeout(resolve, 500));
-          return;
-        }
-      } catch (e) {
-        console.log('Error checking session, running in demo mode');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return;
-      }
-    }
-    
-    try {
-      // Try to create the iteration using the provided createIteration method
-      await supabaseService.createIteration(designId, {
-        htmlContent: newIteration.htmlContent,
-        cssContent: newIteration.cssContent,
-        position: newIteration.position,
-        dimensions: newIteration.dimensions,
-        analysis: newIteration.analysis
-      });
-    } catch (error: any) {
-      // Check for specific Supabase error
-      if (error?.code === 'PGRST116') {
-        console.warn('Database returned no rows, but continuing with local operation');
-      } else if (error.message && error.message.includes('not found')) {
-        console.warn(`Design ${designId} not found in database, operating in local-only mode`);
-      } else {
-        // Rethrow other errors
-        throw error;
-      }
+      // Show an error message
+      alert('Error generating iteration: ' + (error as Error).message);
     }
   };
   
@@ -1775,12 +1713,10 @@ export const Canvas: React.FC = () => {
       console.log(`Fetching Figma node - File: ${fileKey}, Node: ${nodeId}`);
       setFigmaAuthError(null);
       
-      // Check authentication status for both Figma and Supabase
+      // Check authentication status for Figma
       const isAuth = await supabaseService.isAuthenticatedWithFigma();
-      const session = await supabaseService.getSession();
       
       console.log('Figma authentication status:', isAuth);
-      console.log('Supabase session:', session ? 'Available' : 'Not available');
       
       if (!isAuth) {
         console.log('Not authenticated with Figma, showing auth prompt');
@@ -1800,14 +1736,6 @@ export const Canvas: React.FC = () => {
         setDesigns(prev => [...prev, authDesign]);
         setPendingFigmaLink({ fileKey, nodeId, isValid: true });
         return;
-      }
-
-      // Determine if we need to use local storage only
-      // We use local storage if there's no authenticated Supabase session
-      const useLocalStorage = !session;
-      
-      if (useLocalStorage) {
-        console.log('No Supabase session, using local storage only');
       }
 
       // Generate a unique ID for this design
@@ -1858,43 +1786,9 @@ export const Canvas: React.FC = () => {
       // Clear pending link since we've processed it
       setPendingFigmaLink(null);
       
-      // Only attempt database operations if we have a valid Supabase session
-      // This is critical to avoid RLS policy violations
-      if (currentPage?.id && session) {
-        try {
-          console.log('Creating design in Supabase database');
-          const dbDesign = await supabaseService.createDesign(currentPage.id, {
-            imageUrl: importResult.imageUrl,
-            position: { x: 100, y: 100 },
-            dimensions: { 
-              width: 500, // Default width if not available
-              height: 400 // Default height if not available
-            },
-            figmaFileKey: fileKey,
-            figmaNodeId: nodeId,
-            figmaSelectionLink: `https://www.figma.com/file/${fileKey}?node-id=${nodeId}`,
-            isFromFigma: true
-          });
-          console.log('Successfully created design in database:', dbDesign);
-          
-          // If the database creation was successful, update the local design with the DB-generated ID
-          if (dbDesign && dbDesign.id) {
-            setDesigns(prev => prev.map(design => 
-              design.id === designId
-                ? {
-                    ...design,
-                    id: dbDesign.id as string // Cast to string to satisfy TypeScript
-                  }
-                : design
-            ));
-          }
-        } catch (dbError) {
-          console.error('Error saving design to database:', dbError);
-          // Continue with local storage even if database save fails
-        }
-      } else {
-        console.log('Skipping database creation - no valid session or page ID');
-      }
+      // We no longer need to store in Supabase database - only in local state
+      console.log('Design stored in local state only, skipping database operations');
+      
     } catch (error: any) {
       console.error('Error fetching Figma node:', error);
       setFigmaAuthError(error.message || 'Failed to fetch Figma design.');

@@ -272,27 +272,12 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentPage?.id]);
   
-  // Add a new page
+  // Add a new page - modified to use only localStorage
   const addPage = async (name: string, baseImage?: string) => {
     try {
       logInfo('adding', `Adding new page: ${name}`);
       
-      const session = await supabaseService.getSession();
-      
-      if (session) {
-        // Use the new normalized schema method
-        const newPage = await supabaseService.createPageNormalized({ name });
-        
-        if (newPage) {
-          // Update state with the new page
-          setPages(prevPages => [...prevPages, newPage]);
-          setCurrentPage(newPage);
-          logInfo('success', `Page added successfully: ${name}`);
-          return;
-        }
-      }
-      
-      // Fallback to local storage if Supabase call fails or there's no session
+      // Create a new page object
       const newPage: Page = {
         id: generateUUID(),
         name,
@@ -308,216 +293,57 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const updatedPages = [...pages, newPage];
         localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
-        logInfo('local-stored', 'Page saved to localStorage');
+        logInfo('local-stored', 'Pages saved to localStorage');
       } catch (error) {
-        logError('local-store-error', 'Error saving page to localStorage:', error);
+        logError('local-store-error', 'Error saving pages to localStorage:', error);
       }
+      
+      logInfo('success', `Page added successfully: ${name}`);
     } catch (error) {
       logError('add-page-error', 'Error adding page:', error);
     }
   };
   
-  // Update an existing page
+  // Update an existing page - modified to use only localStorage
   const updatePage = async (id: string, updates: Partial<Page>) => {
     try {
       logInfo('updating', `Updating page with ID: ${id}`);
       
-      // Handle design updates specifically
-      if (updates.designs) {
-        const pageDesigns = updates.designs;
-        
-        // Get the current page from state
-        const pageToUpdate = pages.find(p => p.id === id);
-        if (!pageToUpdate) {
-          logError('page-not-found', `Page ${id} not found for updating designs`);
-          return;
-        }
-        
-        // Get the session
-        const session = await supabaseService.getSession();
-        
-        if (session) {
-          // Process each design individually to use normalized schema
-          // We'll need to compare with existing designs to find new, updated, or deleted designs
-          const existingDesigns = pageToUpdate.designs || [];
-          
-          // Handle new designs (designs in updates that don't exist in current page)
-          const newDesigns = pageDesigns.filter(
-            design => !existingDesigns.some(existing => existing.id === design.id)
-          );
-          
-          // Create each new design
-          for (const newDesign of newDesigns) {
-            try {
-              await supabaseService.createDesign(id, {
-                imageUrl: newDesign.imageUrl,
-                position: newDesign.position,
-                dimensions: newDesign.dimensions,
-                figmaFileKey: newDesign.figmaFileKey,
-                figmaNodeId: newDesign.figmaNodeId,
-                figmaSelectionLink: newDesign.figmaSelectionLink,
-                isFromFigma: newDesign.isFromFigma
-              });
-            } catch (error) {
-              logError('create-design-error', `Error creating design for page ${id}:`, error);
-            }
-          }
-          
-          // Handle updated designs (designs that exist in both but may have changed)
-          const updatedDesigns = pageDesigns.filter(
-            design => existingDesigns.some(existing => existing.id === design.id)
-          );
-          
-          // Update each modified design
-          for (const updatedDesign of updatedDesigns) {
-            try {
-              await supabaseService.updateDesign(updatedDesign.id, {
-                position: updatedDesign.position,
-                dimensions: updatedDesign.dimensions,
-                imageUrl: updatedDesign.imageUrl
-              });
-              
-              // Handle iterations for each design
-              if (updatedDesign.iterations) {
-                const existingDesign = existingDesigns.find(d => d.id === updatedDesign.id);
-                const existingIterations = existingDesign?.iterations || [];
-                
-                // Find new iterations
-                const newIterations = updatedDesign.iterations.filter(
-                  iteration => !existingIterations.some(existing => existing.id === iteration.id)
-                );
-                
-                // Create each new iteration
-                for (const newIteration of newIterations) {
-                  try {
-                    await supabaseService.createIteration(updatedDesign.id, {
-                      htmlContent: newIteration.htmlContent,
-                      cssContent: newIteration.cssContent,
-                      position: newIteration.position,
-                      dimensions: newIteration.dimensions,
-                      analysis: newIteration.analysis
-                    });
-                  } catch (error) {
-                    logError('create-iteration-error', `Error creating iteration for design ${updatedDesign.id}:`, error);
-                  }
-                }
-                
-                // Find updated iterations
-                const updatedIterations = updatedDesign.iterations.filter(
-                  iteration => existingIterations.some(existing => existing.id === iteration.id)
-                );
-                
-                // Update each modified iteration
-                for (const updatedIteration of updatedIterations) {
-                  try {
-                    await supabaseService.updateIteration(updatedIteration.id, {
-                      position: updatedIteration.position,
-                      dimensions: updatedIteration.dimensions
-                    });
-                  } catch (error) {
-                    logError('update-iteration-error', `Error updating iteration ${updatedIteration.id}:`, error);
-                  }
-                }
-              }
-            } catch (error) {
-              logError('update-design-error', `Error updating design ${updatedDesign.id}:`, error);
-            }
-          }
-          
-          // Handle deleted designs (designs in current page that aren't in the updates)
-          const deletedDesigns = existingDesigns.filter(
-            design => !pageDesigns.some(updated => updated.id === design.id)
-          );
-          
-          // Delete each removed design
-          for (const deletedDesign of deletedDesigns) {
-            try {
-              await supabaseService.deleteDesign(deletedDesign.id);
-            } catch (error) {
-              logError('delete-design-error', `Error deleting design ${deletedDesign.id}:`, error);
-            }
-          }
-        }
+      // Find the page in the current state
+      const pageIndex = pages.findIndex(p => p.id === id);
+      if (pageIndex === -1) {
+        logError('page-not-found', `Page ${id} not found for updating`);
+        return;
       }
       
-      // Update page metadata (name, etc.) and local state
-      // These changes need to be kept separate from the design changes to avoid conflicts
-      if (updates.name) {
-        try {
-          // Update in Supabase if session exists
-          const session = await supabaseService.getSession();
-          if (session) {
-            // Only update basic properties, not designs (handled separately above)
-            const basicUpdates = { ...updates };
-            delete basicUpdates.designs; // Remove designs to avoid overwriting
-            
-            await supabaseService.updatePage(id, basicUpdates);
-          }
-        } catch (error) {
-          logError('update-page-metadata-error', `Error updating page metadata for ${id}:`, error);
-        }
-      }
+      // Create an updated version of the pages array
+      const updatedPages = [...pages];
+      updatedPages[pageIndex] = {
+        ...updatedPages[pageIndex],
+        ...updates
+      };
       
-      // Update local state regardless of Supabase success
-      setPages(prevPages => prevPages.map(page => {
-        if (page.id === id) {
-          // Merge updates with current page state
-          return { ...page, ...updates };
-        }
-        return page;
-      }));
+      // Update state
+      setPages(updatedPages);
       
-      // If we're updating the current page, also update currentPage state
-      if (currentPage?.id === id) {
-        setCurrentPage(prev => prev ? { ...prev, ...updates } : null);
-      }
-      
-      // Update localStorage
+      // Save to localStorage
       try {
-        const updatedPages = pages.map(page => 
-          page.id === id ? { ...page, ...updates } : page
-        );
         localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
-        logInfo('local-stored', 'Updated pages in localStorage after page update');
+        logInfo('local-stored', 'Updated pages saved to localStorage');
       } catch (error) {
-        logError('local-store-error', 'Error updating localStorage after page update:', error);
+        logError('local-store-error', 'Error saving updated pages to localStorage:', error);
       }
     } catch (error) {
       logError('update-page-error', 'Error updating page:', error);
     }
   };
   
-  // Delete a page
+  // Delete a page - modified to use only localStorage
   const deletePage = async (id: string) => {
     try {
       logInfo('deleting', `Deleting page with ID: ${id}`);
       
-      const session = await supabaseService.getSession();
-      
-      if (session) {
-        // Use the new normalized schema method
-        const success = await supabaseService.deletePageNormalized(id);
-        
-        if (success) {
-          // Update state
-          const updatedPages = pages.filter(page => page.id !== id);
-          setPages(updatedPages);
-          
-          // If the deleted page was the current page, select another page
-          if (currentPage && currentPage.id === id) {
-            if (updatedPages.length > 0) {
-              setCurrentPage(updatedPages[0]);
-            } else {
-              setCurrentPage(null);
-            }
-          }
-          
-          logInfo('success', `Page deleted successfully: ${id}`);
-          return;
-        }
-      }
-      
-      // Fallback to localStorage if Supabase call fails or there's no session
+      // Update state by filtering out the deleted page
       const updatedPages = pages.filter(page => page.id !== id);
       setPages(updatedPages);
       
@@ -537,6 +363,8 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         logError('local-store-error', 'Error updating localStorage after deletion:', error);
       }
+      
+      logInfo('success', `Page deleted successfully: ${id}`);
     } catch (error) {
       logError('delete-page-error', 'Error deleting page:', error);
     }
