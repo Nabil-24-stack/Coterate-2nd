@@ -873,28 +873,31 @@ export const Canvas: React.FC = () => {
   // Reference to track if we've initialized position for this page
   const positionInitializedRef = useRef<{[pageId: string]: boolean}>({});
 
-  // Function to save canvas position - single source of truth for saving
-  const saveCanvasPosition = useCallback((pageId: string, pos: {x: number, y: number}, scl: number) => {
+  // Modified saveCanvasPosition function for more reliable saving
+  const saveCanvasPosition = useCallback((pageId: string, pos: { x: number; y: number }, scl: number) => {
     if (!pageId) return;
     
     try {
       const key = `coterate_canvas_position_${pageId}`;
-      const data = { position: pos, scale: scl };
-      localStorage.setItem(key, JSON.stringify(data));
-      console.log(`Canvas: Saved position for page ${pageId}:`, data);
+      const positionData = {
+        position: pos,
+        scale: scl
+      };
+      localStorage.setItem(key, JSON.stringify(positionData));
+      console.log(`Canvas: Saved position for page ${pageId}:`, positionData);
     } catch (error) {
-      console.error('Canvas: Error saving position:', error);
+      console.error(`Canvas: Error saving position for page ${pageId}:`, error);
     }
   }, []);
 
-  // Function to load canvas position from localStorage
-  const loadCanvasPosition = useCallback((pageId: string, force = false) => {
+  // Modified loadCanvasPosition function with immediate state updates
+  const loadCanvasPosition = useCallback((pageId: string, force: boolean = false) => {
     if (!pageId) return false;
     
-    // Skip if we've already initialized this page's position and not forcing
+    // Only load once per page unless forced
     if (positionInitializedRef.current[pageId] && !force) {
       console.log(`Canvas: Position already initialized for page ${pageId}, skipping load`);
-      return false;
+      return true;
     }
     
     try {
@@ -932,11 +935,11 @@ export const Canvas: React.FC = () => {
     if (!currentPage?.id) return;
     
     const pageId = currentPage.id;
-    LogManager.log('page-id-changed', `Canvas: Current page changed to ${pageId}`);
+    console.log(`Canvas: Current page changed to ${pageId}`);
     
     // Check if this is a new page (different from the last active page)
     if (lastActivePageIdRef.current !== pageId) {
-      LogManager.log('page-switch', `Canvas: Page changed from ${lastActivePageIdRef.current} to ${pageId}`);
+      console.log(`Canvas: Page changed from ${lastActivePageIdRef.current || 'none'} to ${pageId}`);
       
       // Save position for the previous page before switching
       if (lastActivePageIdRef.current) {
@@ -956,7 +959,7 @@ export const Canvas: React.FC = () => {
   useEffect(() => {
     if (!currentPage?.id) return;
     
-    LogManager.log('component-mount', 'Canvas: Component mounted, initializing position', true);
+    console.log('Canvas: Component mounted, initializing position', true);
     
     // Set the last active page ID ref
     lastActivePageIdRef.current = currentPage.id;
@@ -965,10 +968,27 @@ export const Canvas: React.FC = () => {
     const loaded = loadCanvasPosition(currentPage.id);
     
     if (!loaded) {
-      LogManager.log('position-default', 'Canvas: No saved position found, using defaults');
+      console.log('Canvas: No saved position found, using defaults');
       // No need to set defaults as they're already set in useState
     }
   }, []); // Empty dependency array = only run once on mount
+
+  // User interaction tracking - add this below position related refs
+  const userInteractingRef = useRef(false);
+
+  // Add a new effect to save position periodically during user interaction
+  useEffect(() => {
+    if (!currentPage?.id || !userInteractingRef.current) return;
+    
+    // Save the position after a delay to avoid excessive writes
+    const timeoutId = setTimeout(() => {
+      if (currentPage?.id) {
+        saveCanvasPosition(currentPage.id, position, scale);
+      }
+    }, 500); // 500ms debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [position, scale, currentPage?.id, saveCanvasPosition]);
 
   // State for multiple designs
   const [designs, setDesigns] = useState<ExtendedDesign[]>([]);
@@ -1244,6 +1264,9 @@ export const Canvas: React.FC = () => {
   
   // Add back the handleCanvasMouseDown function for canvas panning
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Start tracking user interaction
+    userInteractingRef.current = true;
+    
     // Check if clicking on any design
     const clickedDesignId = designs.find(design => {
       const designRef = getDesignRef(design.id);
@@ -1340,17 +1363,6 @@ export const Canvas: React.FC = () => {
       };
       setPosition(newPosition);
     }
-  };
-  
-  // Handle mouse up to stop dragging
-  const handleMouseUp = () => {
-    // Check if we were dragging the canvas (panning)
-    if (isDragging && currentPage?.id) {
-      saveCanvasPosition(currentPage.id, position, scale);
-    }
-    
-    setIsDragging(false);
-    setIsDesignDragging(false);
   };
   
   // Handle click on a design
@@ -2085,6 +2097,20 @@ export const Canvas: React.FC = () => {
       return () => clearTimeout(safetyTimeout);
     }
   }, [loading]);
+
+  // Modified handleMouseUp to save position and track end of user interaction
+  const handleMouseUp = () => {
+    // Check if we were dragging the canvas (panning)
+    if (isDragging && currentPage?.id) {
+      saveCanvasPosition(currentPage.id, position, scale);
+    }
+    
+    setIsDragging(false);
+    setIsDesignDragging(false);
+    
+    // Reset user interaction flag
+    userInteractingRef.current = false;
+  };
 
   return (
     <>
