@@ -911,18 +911,39 @@ export const Canvas: React.FC = () => {
         // Directly update the state with saved values
         if (data.position && typeof data.position.x === 'number') {
           setPosition(data.position);
+          console.log(`Canvas: Setting saved position x=${data.position.x}, y=${data.position.y}`);
+        } else {
+          // Set default position if saved position is invalid
+          console.log(`Canvas: Invalid position data for page ${pageId}, using default`);
+          setPosition({ x: 0, y: 0 });
         }
         
         if (typeof data.scale === 'number') {
           setScale(data.scale);
+          console.log(`Canvas: Setting saved scale: ${data.scale}`);
+        } else {
+          // Set default scale if saved scale is invalid
+          console.log(`Canvas: Invalid scale data for page ${pageId}, using default`);
+          setScale(1);
         }
         
         // Mark this page as initialized
         positionInitializedRef.current[pageId] = true;
         return true;
+      } else {
+        // No saved data found, set defaults for this page
+        console.log(`Canvas: No saved position found for page ${pageId}, using defaults`);
+        setPosition({ x: 0, y: 0 });
+        setScale(1);
+        
+        // Also save these defaults to localStorage
+        saveCanvasPosition(pageId, { x: 0, y: 0 }, 1);
       }
     } catch (error) {
       console.error(`Canvas: Error loading position for page ${pageId}:`, error);
+      // Set default values in case of error
+      setPosition({ x: 0, y: 0 });
+      setScale(1);
     }
     
     // Mark as initialized even if no data found to prevent repeated attempts
@@ -946,49 +967,30 @@ export const Canvas: React.FC = () => {
         saveCanvasPosition(lastActivePageIdRef.current, position, scale);
       }
       
-      // Load position for the new page
+      // Always force load position when switching pages
       loadCanvasPosition(pageId, true);
       
       // Update the ref with the current page ID
       lastActivePageIdRef.current = pageId;
     }
-  }, [currentPage?.id, loadCanvasPosition, saveCanvasPosition, position, scale]);
-
-  // One-time effect to initialize position when component mounts
-  // This is crucial for restoring position after page refresh
-  useEffect(() => {
-    if (!currentPage?.id) return;
-    
-    console.log('Canvas: Component mounted, initializing position', true);
-    
-    // Set the last active page ID ref
-    lastActivePageIdRef.current = currentPage.id;
-    
-    // Try to load the saved position
-    const loaded = loadCanvasPosition(currentPage.id);
-    
-    if (!loaded) {
-      console.log('Canvas: No saved position found, using defaults');
-      // No need to set defaults as they're already set in useState
-    }
-  }, []); // Empty dependency array = only run once on mount
+  }, [currentPage?.id, loadCanvasPosition, saveCanvasPosition]);
 
   // User interaction tracking - add this below position related refs
   const userInteractingRef = useRef(false);
 
-  // Add a new effect to save position periodically during user interaction
+  // Remove the following effect as it's causing issues with position loading
+  // Modified effect to save canvas position and scale to localStorage when they change
   useEffect(() => {
     if (!currentPage?.id || !userInteractingRef.current) return;
     
-    // Save the position after a delay to avoid excessive writes
     const timeoutId = setTimeout(() => {
       if (currentPage?.id) {
         saveCanvasPosition(currentPage.id, position, scale);
       }
-    }, 500); // 500ms debounce
+    }, 300); // Reduced debounce time for faster response
     
     return () => clearTimeout(timeoutId);
-  }, [position, scale, currentPage?.id, saveCanvasPosition]);
+  }, [position, scale, currentPage?.id, saveCanvasPosition, userInteractingRef]);
 
   // State for multiple designs
   const [designs, setDesigns] = useState<ExtendedDesign[]>([]);
@@ -1065,98 +1067,6 @@ export const Canvas: React.FC = () => {
       }
     }
   };
-
-  // Modified effect to save canvas position and scale to localStorage when they change
-  useEffect(() => {
-    if (currentPage?.id) {
-      try {
-        const positionData = {
-          position,
-          scale
-        };
-        const key = `coterate_canvas_position_${currentPage.id}`;
-        localStorage.setItem(key, JSON.stringify(positionData));
-        console.log('Canvas: Saved position to localStorage:', key, positionData);
-        
-        // Verify storage
-        const savedData = localStorage.getItem(key);
-        if (savedData) {
-          const parsedData = JSON.parse(savedData);
-          console.log('Canvas: Verification - position saved correctly:', 
-            position.x === parsedData.position.x && 
-            position.y === parsedData.position.y);
-        }
-      } catch (error) {
-        console.error('Canvas: Error saving position to localStorage:', error);
-      }
-    }
-  }, [position, scale, currentPage?.id]);
-
-  // Extra effect to log position changes for debugging
-  useEffect(() => {
-    console.log('Canvas: Position changed to:', position);
-  }, [position]);
-
-  // Effect to load position and scale when page changes
-  useEffect(() => {
-    if (currentPage?.id) {
-      LogManager.log('page-load', `Canvas: Page changed to: ${currentPage.id} ${currentPage.name || ''}`);
-      
-      // First log the current position before loading
-      LogManager.log('position-before', `Canvas: Current position before loading: x=${position.x}, y=${position.y}`);
-      
-      // Check if we have saved position data
-      const key = `coterate_canvas_position_${currentPage.id}`;
-      const savedData = localStorage.getItem(key);
-      
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          if (parsedData.position && typeof parsedData.position.x === 'number') {
-            LogManager.log('position-load', `Canvas: Setting position to saved value: x=${parsedData.position.x}, y=${parsedData.position.y}`);
-            setPosition(parsedData.position);
-          }
-          
-          if (typeof parsedData.scale === 'number') {
-            LogManager.log('scale-load', `Canvas: Setting scale to saved value: ${parsedData.scale}`);
-            setScale(parsedData.scale);
-          }
-        } catch (error) {
-          console.error('Canvas: Error parsing saved position data:', error);
-        }
-      } else {
-        LogManager.log('position-missing', 'Canvas: No saved position data found for this page');
-      }
-    }
-  }, [currentPage?.id]);
-
-  // Effect to load designs from page data - only runs once per page change
-  useEffect(() => {
-    if (currentPage) {
-      LogManager.log('page-changed', `Canvas: Current page changed: ${currentPage.id} Page ${currentPage.name || 1}`);
-      
-      if (currentPage.designs && Array.isArray(currentPage.designs) && currentPage.designs.length > 0) {
-        // If the page already has designs array, use it
-        LogManager.log('designs-loaded', `Canvas: Loading designs from page: ${currentPage.designs.length} designs`);
-        setDesigns(currentPage.designs);
-      } else if (currentPage.baseImage && !designsInitialized) {
-        // If the page has a baseImage (legacy format), convert it to our new designs array
-        LogManager.log('designs-legacy', 'Canvas: Converting legacy baseImage to design');
-        setDesigns([{
-          id: 'legacy-design',
-          imageUrl: currentPage.baseImage,
-          position: { x: 0, y: 0 }
-        }]);
-      } else {
-        LogManager.log('designs-empty', 'Canvas: No designs found in current page');
-        setDesigns([]);
-      }
-
-      setDesignsInitialized(true);
-    } else {
-      LogManager.log('page-none', 'Canvas: No current page available');
-    }
-  }, [currentPage]);
 
   // Save designs to page whenever they change
   useEffect(() => {
@@ -2111,6 +2021,47 @@ export const Canvas: React.FC = () => {
     // Reset user interaction flag
     userInteractingRef.current = false;
   };
+
+  // Effect to load designs from page data - only runs once per page change
+  useEffect(() => {
+    if (currentPage) {
+      LogManager.log('page-changed', `Canvas: Current page changed: ${currentPage.id} Page ${currentPage.name || 1}`);
+      
+      if (currentPage.designs && Array.isArray(currentPage.designs) && currentPage.designs.length > 0) {
+        // If the page already has designs array, use it
+        LogManager.log('designs-loaded', `Canvas: Loading designs from page: ${currentPage.designs.length} designs`);
+        setDesigns(currentPage.designs);
+      } else if (currentPage.baseImage && !designsInitialized) {
+        // If the page has a baseImage (legacy format), convert it to our new designs array
+        LogManager.log('designs-legacy', 'Canvas: Converting legacy baseImage to design');
+        setDesigns([{
+          id: 'legacy-design',
+          imageUrl: currentPage.baseImage,
+          position: { x: 0, y: 0 }
+        }]);
+      } else {
+        LogManager.log('designs-empty', 'Canvas: No designs found in current page');
+        setDesigns([]);
+      }
+
+      setDesignsInitialized(true);
+    } else {
+      LogManager.log('page-none', 'Canvas: No current page available');
+    }
+  }, [currentPage]);
+
+  // One-time effect to initialize position when component mounts
+  useEffect(() => {
+    if (!currentPage?.id) return;
+    
+    console.log('Canvas: Component mounted, initializing position', true);
+    
+    // Set the last active page ID ref
+    lastActivePageIdRef.current = currentPage.id;
+    
+    // Try to load the saved position
+    loadCanvasPosition(currentPage.id);
+  }, []); // Empty dependency array = only run once on mount
 
   return (
     <>
