@@ -814,6 +814,47 @@ const LogManager = {
   }
 };
 
+// Add a styled component for the View Analysis button
+const ViewAnalysisButton = styled.button`
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  
+  &:hover {
+    background-color: #4338ca;
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+`;
+
+// Add a HoverContainer to handle the hover state
+const HoverContainer = styled.div`
+  position: relative;
+  
+  &:hover ${ViewAnalysisButton} {
+    opacity: 1;
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -1316,30 +1357,11 @@ export const Canvas: React.FC = () => {
   const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
     
-    // Check if this is an iteration
-    const isIteration = designs.some(design => 
-      design.iterations?.some(iteration => iteration.id === designId)
-    );
-    
     // Set the selected design ID
     setSelectedDesignId(designId);
     
-    // If it's an iteration, show its analysis data
-    if (isIteration) {
-      const iteration = designs.flatMap(d => d.iterations || [])
-        .find(it => it.id === designId);
-      
-      if (iteration) {
-        setCurrentAnalysis(iteration);
-        setAnalysisVisible(true);
-      }
-    } else {
-      // If it's a regular design, clear the current analysis
-      setCurrentAnalysis(null);
-      // Optionally close the analysis panel when clicking on a regular design
-      // Comment this line if you want to keep the panel open
-      setAnalysisVisible(false);
-    }
+    // Note: We no longer automatically open the analysis panel for iterations
+    // as we've moved that functionality to the View Analysis button
   };
   
   // Add the handleDesignMouseDown function back
@@ -2052,62 +2074,69 @@ export const Canvas: React.FC = () => {
 
   // Render an iteration separate from the original design
   const renderIteration = (iteration: DesignIteration, index: number, parentDesign: Design) => {
-    // Function to handle showing analysis when iteration is clicked
+    // Function to handle showing analysis when button is clicked
     const handleShowAnalysis = (e: React.MouseEvent) => {
       e.stopPropagation();
       setCurrentAnalysis(iteration);
       setAnalysisVisible(true);
     };
-  
+
     return (
       <DesignContainer 
         key={`iteration-container-${iteration.id}`}
         x={iteration.position.x}
         y={iteration.position.y}
       >
-        <div style={{ position: 'relative' }}>
-          {/* The iteration badge */}
-          <IterationLabel>Iteration {index + 1}</IterationLabel>
-          
-          {/* The improved design badge */}
-          <NewDesignBadge>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
+        <HoverContainer>
+          {/* The View Analysis button that appears on hover */}
+          <ViewAnalysisButton onClick={handleShowAnalysis}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3C4.5 3 1.5 8 1.5 8C1.5 8 4.5 13 8 13C11.5 13 14.5 8 14.5 8C14.5 8 11.5 3 8 3Z" stroke="white" strokeWidth="1.5"/>
+              <circle cx="8" cy="8" r="2" stroke="white" strokeWidth="1.5"/>
             </svg>
-            Improved
-          </NewDesignBadge>
+            View Analysis
+          </ViewAnalysisButton>
           
-          {/* The iteration design itself */}
-          <IterationDesignCard 
-            isSelected={selectedDesignId === iteration.id}
-            onClick={(e) => {
-              handleDesignClick(e, iteration.id);
-              // Always show analysis when clicking an iteration
-              handleShowAnalysis(e);
-            }}
-            onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-            style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
-          >
-            <HtmlDesignRenderer
-              ref={(el: HtmlDesignRendererHandle | null) => {
-                if (el) {
-                  designRefs.current[iteration.id] = el as any;
-                }
-              }}
-              htmlContent={iteration.htmlContent} 
-              cssContent={iteration.cssContent}
-              width={iteration.dimensions?.width} 
-              height={iteration.dimensions?.height}
-              onRender={(success) => {
-                // Only log the first successful render to avoid console clutter
-                if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                  LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
-                  renderedIterationsRef.current.add(iteration.id);
-                }
-              }}
-            />
-          </IterationDesignCard>
-        </div>
+          <div style={{ position: 'relative' }}>
+            {/* The iteration badge */}
+            <IterationLabel>Iteration {index + 1}</IterationLabel>
+            
+            {/* The improved design badge */}
+            <NewDesignBadge>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
+              </svg>
+              Improved
+            </NewDesignBadge>
+            
+            {/* The iteration design itself */}
+            <IterationDesignCard 
+              isSelected={selectedDesignId === iteration.id}
+              onClick={(e) => handleDesignClick(e, iteration.id)}
+              onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+              style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
+            >
+              <HtmlDesignRenderer
+                ref={(el: HtmlDesignRendererHandle | null) => {
+                  if (el) {
+                    designRefs.current[iteration.id] = el as any;
+                  }
+                }}
+                htmlContent={iteration.htmlContent} 
+                cssContent={iteration.cssContent}
+                width={iteration.dimensions?.width} 
+                height={iteration.dimensions?.height}
+                onRender={(success) => {
+                  // Only log the first successful render to avoid console clutter
+                  if (success && !renderedIterationsRef.current.has(iteration.id)) {
+                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
+                    renderedIterationsRef.current.add(iteration.id);
+                  }
+                }}
+              />
+            </IterationDesignCard>
+          </div>
+        </HoverContainer>
       </DesignContainer>
     );
   };
