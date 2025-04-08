@@ -76,7 +76,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throttledLog(key, 'error', `PageContext: ${message}`, ...args);
   }, [throttledLog]);
   
-  // Effect to load pages from Supabase when the component mounts
+  // Effect to load pages from localStorage when the component mounts
   useEffect(() => {
     // Set a safety timeout to prevent infinite loading state
     const safetyTimeout = setTimeout(() => {
@@ -89,21 +89,19 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadPages = async () => {
       try {
         setLoading(true);
-        logInfo('loading', 'Loading pages from Supabase or localStorage');
+        logInfo('loading', 'Loading pages from localStorage');
         
         let loadedPages: Page[] = [];
-        let loadedFromLocalStorage = false;
         
-        // First try to load from localStorage for immediate display
+        // Try to load from localStorage
         try {
           const storedPages = localStorage.getItem('coterate_pages');
           
           if (storedPages) {
             const parsedPages = JSON.parse(storedPages) as Page[];
             if (parsedPages && parsedPages.length > 0) {
-              logInfo('loaded-local-first', `Immediately loaded ${parsedPages.length} pages from localStorage`);
+              logInfo('loaded-local', `Loaded ${parsedPages.length} pages from localStorage`);
               loadedPages = parsedPages;
-              loadedFromLocalStorage = true;
               
               // Set pages immediately for faster rendering
               setPages(parsedPages);
@@ -113,7 +111,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (lastActivePageId) {
                 const lastActivePage = parsedPages.find(page => page.id === lastActivePageId);
                 if (lastActivePage) {
-                  logInfo('restore-page-immediate', 'Restoring last active page:', lastActivePage.name);
+                  logInfo('restore-page', 'Restoring last active page:', lastActivePage.name);
                   setCurrentPage(lastActivePage);
                 } else {
                   setCurrentPage(parsedPages[0]);
@@ -121,77 +119,13 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
               } else {
                 setCurrentPage(parsedPages[0]);
               }
-              
-              // Set loading to false to show content immediately
-              setLoading(false);
             }
           }
         } catch (localStorageError) {
-          logError('local-store-error-initial', 'Error loading pages from localStorage initially:', localStorageError);
+          logError('local-store-error', 'Error loading pages from localStorage:', localStorageError);
         }
         
-        // Then try to get pages from Supabase in the background
-        try {
-          logInfo('attempting', 'Attempting to load pages from Supabase');
-          const sessionPromise = supabaseService.getSession();
-          
-          // Add a timeout to the session fetch
-          const sessionWithTimeout = Promise.race([
-            sessionPromise,
-            new Promise<null>((resolve) => {
-              setTimeout(() => {
-                logInfo('session-timeout', 'Session fetch timed out');
-                resolve(null);
-              }, 3000); // 3 second timeout
-            })
-          ]);
-          
-          const session = await sessionWithTimeout;
-          logInfo('session-available', 'Session available:', !!session);
-          
-          if (session) {
-            logInfo('user-authenticated', 'User authenticated, loading pages from Supabase');
-            // Use the new normalized schema method
-            const supabasePages = await supabaseService.getPagesWithDesigns();
-            
-            if (supabasePages && supabasePages.length > 0) {
-              logInfo('success', `Successfully loaded ${supabasePages.length} pages from Supabase`);
-              
-              // Only update if we got valid pages from Supabase
-              loadedPages = supabasePages;
-              
-              // Store loaded pages in localStorage as a fallback for offline access
-              try {
-                localStorage.setItem('coterate_pages', JSON.stringify(loadedPages));
-                logInfo('local-stored', 'Stored loaded pages in localStorage');
-              } catch (storageError) {
-                logError('local-store-error', 'Error storing pages in localStorage:', storageError);
-              }
-              
-              // Update state with Supabase data
-              setPages(loadedPages);
-              
-              // Update current page if needed
-              const lastActivePageId = localStorage.getItem('coterate_last_active_page');
-              if (lastActivePageId) {
-                const lastActivePage = loadedPages.find(page => page.id === lastActivePageId);
-                if (lastActivePage) {
-                  setCurrentPage(lastActivePage);
-                }
-              } else if (!currentPage && loadedPages.length > 0) {
-                setCurrentPage(loadedPages[0]);
-              }
-            } else {
-              logInfo('no-pages-found', 'No pages found in Supabase');
-            }
-          } else {
-            logInfo('user-not-authenticated', 'User not authenticated with Supabase');
-          }
-        } catch (supabaseError) {
-          logError('supabase-error', 'Error loading pages from Supabase:', supabaseError);
-        }
-        
-        // If no pages loaded from either source, create a default page
+        // If no pages loaded, create a default page
         if (loadedPages.length === 0) {
           logInfo('no-pages-found', 'No pages found, creating default page');
           const defaultPage: Page = {
@@ -202,33 +136,13 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           loadedPages = [defaultPage];
           
-          // Try to save the default page
+          // Save to localStorage
           try {
-            const session = await supabaseService.getSession();
-            if (session) {
-              try {
-                await supabaseService.createPage(defaultPage);
-                logInfo('success', 'Default page saved to Supabase');
-              } catch (error) {
-                logError('error', 'Error saving default page to Supabase:', error);
-              }
-            }
-            
-            // Save to localStorage regardless
-            try {
-              localStorage.setItem('coterate_pages', JSON.stringify(loadedPages));
-            } catch (storageError) {
-              logError('local-store-error', 'Error storing default page in localStorage:', storageError);
-            }
-          } catch (error) {
-            logError('session-check-error', 'Error checking session for default page:', error);
-            
-            // Save to localStorage only
-            try {
-              localStorage.setItem('coterate_pages', JSON.stringify(loadedPages));
-            } catch (storageError) {
-              logError('local-store-error', 'Error storing default page in localStorage:', storageError);
-            }
+            localStorage.setItem('coterate_pages', JSON.stringify(loadedPages));
+            localStorage.setItem('coterate_last_active_page', defaultPage.id);
+            logInfo('local-stored', 'Default page saved to localStorage');
+          } catch (storageError) {
+            logError('local-store-error', 'Error storing default page in localStorage:', storageError);
           }
           
           setPages(loadedPages);
@@ -246,6 +160,15 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         setPages([fallbackPage]);
         setCurrentPage(fallbackPage);
+        
+        // Save fallback page to localStorage
+        try {
+          localStorage.setItem('coterate_pages', JSON.stringify([fallbackPage]));
+          localStorage.setItem('coterate_last_active_page', fallbackPage.id);
+          logInfo('fallback-stored', 'Fallback page saved to localStorage');
+        } catch (storageError) {
+          logError('fallback-store-error', 'Error storing fallback page in localStorage:', storageError);
+        }
       } finally {
         // Ensure loading is set to false
         setLoading(false);
@@ -260,19 +183,19 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearTimeout(safetyTimeout);
   }, []);
   
-  // Effect to save the current page ID to localStorage when it changes
+  // Add a useEffect to save the current page ID to localStorage when it changes
   useEffect(() => {
-    if (currentPage?.id) {
+    if (currentPage) {
       try {
         localStorage.setItem('coterate_last_active_page', currentPage.id);
-        logInfo('saved-current-page', `Saved current page ID to localStorage: ${currentPage.id}`);
+        logInfo('current-page-stored', `Saved current page ID to localStorage: ${currentPage.id}`);
       } catch (error) {
-        logError('save-current-page-error', 'Error saving current page ID to localStorage:', error);
+        logError('current-page-store-error', 'Error saving current page ID to localStorage:', error);
       }
     }
-  }, [currentPage?.id]);
+  }, [currentPage]);
   
-  // Add a new page - modified to use only localStorage
+  // Add a new page - modified to properly update localStorage
   const addPage = async (name: string, baseImage?: string) => {
     try {
       logInfo('adding', `Adding new page: ${name}`);
@@ -285,15 +208,21 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
         designs: []
       };
       
-      // Update local state
-      setPages(prevPages => [...prevPages, newPage]);
+      // First, get the current pages (to ensure we have the latest state)
+      let currentPages = [...pages];
+      
+      // Add the new page to our array
+      const updatedPages = [...currentPages, newPage];
+      
+      // Update React state
+      setPages(updatedPages);
       setCurrentPage(newPage);
       
-      // Save to localStorage
+      // Save to localStorage - use the updatedPages array directly to ensure consistency
       try {
-        const updatedPages = [...pages, newPage];
         localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
-        logInfo('local-stored', 'Pages saved to localStorage');
+        localStorage.setItem('coterate_last_active_page', newPage.id);
+        logInfo('local-stored', `Pages saved to localStorage: ${updatedPages.length} pages`);
       } catch (error) {
         logError('local-store-error', 'Error saving pages to localStorage:', error);
       }
@@ -304,7 +233,7 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Update an existing page - modified to use only localStorage
+  // Update an existing page - modified to properly update localStorage
   const updatePage = async (id: string, updates: Partial<Page>) => {
     try {
       logInfo('updating', `Updating page with ID: ${id}`);
@@ -326,10 +255,18 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update state
       setPages(updatedPages);
       
+      // If we're updating the current page, also update the currentPage reference
+      if (currentPage?.id === id) {
+        setCurrentPage({
+          ...currentPage,
+          ...updates
+        });
+      }
+      
       // Save to localStorage
       try {
         localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
-        logInfo('local-stored', 'Updated pages saved to localStorage');
+        logInfo('local-stored', `Updated pages saved to localStorage: ${updatedPages.length} pages`);
       } catch (error) {
         logError('local-store-error', 'Error saving updated pages to localStorage:', error);
       }
@@ -338,28 +275,35 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Delete a page - modified to use only localStorage
+  // Delete a page - modified to properly update localStorage
   const deletePage = async (id: string) => {
     try {
       logInfo('deleting', `Deleting page with ID: ${id}`);
       
       // Update state by filtering out the deleted page
       const updatedPages = pages.filter(page => page.id !== id);
+      
+      // First update state
       setPages(updatedPages);
       
       // If the deleted page was the current page, select another page
       if (currentPage && currentPage.id === id) {
         if (updatedPages.length > 0) {
-          setCurrentPage(updatedPages[0]);
+          const newCurrentPage = updatedPages[0];
+          setCurrentPage(newCurrentPage);
+          // Also update the last active page in localStorage
+          localStorage.setItem('coterate_last_active_page', newCurrentPage.id);
         } else {
           setCurrentPage(null);
+          // Clear the last active page if we have no pages left
+          localStorage.removeItem('coterate_last_active_page');
         }
       }
       
       // Update localStorage
       try {
         localStorage.setItem('coterate_pages', JSON.stringify(updatedPages));
-        logInfo('local-stored', 'Updated pages in localStorage after deletion');
+        logInfo('local-stored', `Updated pages in localStorage: ${updatedPages.length} pages remaining`);
       } catch (error) {
         logError('local-store-error', 'Error updating localStorage after deletion:', error);
       }
