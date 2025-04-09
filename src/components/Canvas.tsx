@@ -897,7 +897,7 @@ const DesignCardContainer = styled.div`
   }
 `;
 
-export const Canvas: React.FC = (): React.ReactNode => {
+export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
   // Canvas state
