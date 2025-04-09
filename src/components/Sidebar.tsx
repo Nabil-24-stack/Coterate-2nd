@@ -85,28 +85,6 @@ const PageList = styled.div`
   margin-top: 8px;
 `;
 
-const PageItem = styled.div<{ isActive: boolean }>`
-  padding: 12px 16px;
-  cursor: pointer;
-  background-color: ${props => props.isActive ? '#EFEFEF' : 'transparent'};
-  position: relative;
-  
-  &:hover {
-    background-color: ${props => props.isActive ? '#EFEFEF' : 'rgba(0, 0, 0, 0.03)'};
-  }
-`;
-
-const PageName = styled.div`
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative;
-  color: #333;
-  font-size: 14px;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-`;
-
 const MoreButtonContainer = styled.div`
   position: relative;
   display: inline-block;
@@ -124,6 +102,38 @@ const MoreButton = styled.button`
   &:hover {
     opacity: 1;
   }
+`;
+
+const PageItem = styled.div<{ isActive: boolean }>`
+  padding: 12px 16px;
+  cursor: pointer;
+  background-color: ${props => props.isActive ? '#EFEFEF' : 'transparent'};
+  position: relative;
+  
+  &:hover {
+    background-color: ${props => props.isActive ? '#EFEFEF' : 'rgba(0, 0, 0, 0.03)'};
+  }
+  
+  /* Hide the MoreButton by default */
+  ${MoreButton} {
+    display: none;
+  }
+  
+  /* Show the MoreButton on hover */
+  &:hover ${MoreButton} {
+    display: inline-block;
+  }
+`;
+
+const PageName = styled.div`
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  color: #333;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
 const DropdownMenu = styled.div`
