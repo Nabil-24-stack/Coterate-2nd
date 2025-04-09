@@ -684,6 +684,12 @@ type ExtendedDesign = Design & {
   processingStep?: 'analyzing' | 'recreating' | 'rendering' | null;
 };
 
+// Also extend the DesignIteration type to include processing fields
+type ExtendedDesignIteration = DesignIteration & {
+  isProcessing?: boolean;
+  processingStep?: 'analyzing' | 'recreating' | 'rendering' | null;
+};
+
 // Add a debug function to log the designs state
 const logDesignsState = (designs: ExtendedDesign[], message: string) => {
   console.log(`${message}: ${designs.length} designs`);
@@ -891,12 +897,12 @@ const DesignCardContainer = styled.div`
   }
 `;
 
-export const Canvas: React.FC = () => {
+export const Canvas: React.FC = (): React.ReactNode => {
   const { currentPage, updatePage, loading } = usePageContext();
   
   // Canvas state
-  const [scale, setScale] = useState(1); // Default to 1, we'll load the saved value when page ID is available
-  const [position, setPosition] = useState({ x: 0, y: 0 }); // Default position, we'll load saved value when ready
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   
@@ -1413,16 +1419,24 @@ export const Canvas: React.FC = () => {
       return;
     }
     
-    // Set processing state for this specific design
+    // Set processing state for this specific design or iteration
     setDesigns(prevDesigns => 
       prevDesigns.map(design => {
         if (design.id === designId) {
           // If it's a base design
           return { ...design, isProcessing: true, processingStep: 'analyzing' };
-        } else if (design.iterations?.some(it => it.id === designId)) {
-          // If it's an iteration, set processing on the parent design
-          // This is just for UI indication, the actual iteration will be added to the parent
-          return { ...design, isProcessing: true, processingStep: 'analyzing' };
+        } else if (design.iterations) {
+          // Check if the designId matches any of this design's iterations
+          const updatedIterations = design.iterations.map(iteration => 
+            iteration.id === designId
+              ? { ...iteration, isProcessing: true, processingStep: 'analyzing' }
+              : iteration
+          );
+          
+          // Only return a new design object if one of its iterations changed
+          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+            return { ...design, iterations: updatedIterations };
+          }
         }
         return design;
       })
@@ -1454,8 +1468,21 @@ export const Canvas: React.FC = () => {
       // Update the processing step to show "AI Analyzing Design"
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
-          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+          if (design.id === designId) {
+            // If it's a base design
             return { ...design, processingStep: 'analyzing' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, processingStep: 'analyzing' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
           }
           return design;
         })
@@ -1476,8 +1503,21 @@ export const Canvas: React.FC = () => {
       // Update the processing step to "Generating Improved Design"
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
-          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+          if (design.id === designId) {
+            // If it's a base design
             return { ...design, processingStep: 'recreating' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, processingStep: 'recreating' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
           }
           return design;
         })
@@ -1550,8 +1590,21 @@ export const Canvas: React.FC = () => {
       // Update the processing step
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
-          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+          if (design.id === designId) {
+            // If it's a base design
             return { ...design, processingStep: 'rendering' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, processingStep: 'rendering' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
           }
           return design;
         })
@@ -1568,14 +1621,20 @@ export const Canvas: React.FC = () => {
             if (design.iterations?.some(it => it.id === designId)) {
               // Create or append to iterations array
               const existingIterations = design.iterations || [];
-              const updatedIterations = [...existingIterations, newIteration];
               
-              // Return the updated design with a new iterations array and reset the processing flag
+              // Reset the processing state on the iteration that was clicked
+              const updatedExistingIterations = existingIterations.map(it => 
+                it.id === designId 
+                  ? { ...it, isProcessing: false, processingStep: null } 
+                  : it
+              );
+              
+              const updatedIterations = [...updatedExistingIterations, newIteration];
+              
+              // Return the updated design with a new iterations array
               return {
                 ...design,
-                iterations: updatedIterations,
-                isProcessing: false,
-                processingStep: null
+                iterations: updatedIterations
               };
             }
           } else if (design.id === designId) {
@@ -1609,8 +1668,21 @@ export const Canvas: React.FC = () => {
       // Reset the processing state on error
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
-          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+          if (design.id === designId) {
+            // Reset if it's a base design
             return { ...design, isProcessing: false, processingStep: null };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, isProcessing: false, processingStep: null }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
           }
           return design;
         })
@@ -2007,7 +2079,7 @@ export const Canvas: React.FC = () => {
   };
 
   // Render an iteration separate from the original design
-  const renderIteration = (iteration: DesignIteration, index: number, parentDesign: Design) => {
+  const renderIteration = (iteration: ExtendedDesignIteration, index: number, parentDesign: Design) => {
     // Function to handle showing analysis when button is clicked
     const handleShowAnalysis = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -2070,6 +2142,33 @@ export const Canvas: React.FC = () => {
                     }
                   }}
                 />
+                
+                {/* Add processing overlay for iterations */}
+                <ProcessingOverlay 
+                  visible={!!iteration.isProcessing} 
+                  step={iteration.processingStep || null}
+                >
+                  <Spinner />
+                  <h3>
+                    {iteration.processingStep === 'analyzing' && 'Analyzing Design'}
+                    {iteration.processingStep === 'recreating' && 'Generating Improved Design'}
+                    {iteration.processingStep === 'rendering' && 'Finalizing Design'}
+                  </h3>
+                  <p>
+                    {iteration.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
+                    {iteration.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
+                    {iteration.processingStep === 'rendering' && 'Preparing to display your improved design...'}
+                  </p>
+                  <ProcessingSteps step={iteration.processingStep || null} />
+                  <div className="progress-bar">
+                    <div className="progress"></div>
+                  </div>
+                  <div className="step-description">
+                    {iteration.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
+                    {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
+                    {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
+                  </div>
+                </ProcessingOverlay>
               </IterationDesignCard>
               
               {/* The plus button that appears on hover */}
@@ -2229,73 +2328,7 @@ export const Canvas: React.FC = () => {
                   {/* Render all iterations separately */}
                   {designs.flatMap((design) => 
                     (design.iterations || []).map((iteration, index) => 
-                      <DesignContainer 
-                        key={`iteration-container-${iteration.id}`}
-                        x={iteration.position.x}
-                        y={iteration.position.y}
-                      >
-                        <HoverContainer>
-                          {/* The View Analysis button that appears on hover */}
-                          <ViewAnalysisButton onClick={() => {
-                            setCurrentAnalysis(iteration);
-                            setAnalysisVisible(true);
-                          }}>
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M8 3C4.5 3 1.5 8 1.5 8C1.5 8 4.5 13 8 13C11.5 13 14.5 8 14.5 8C14.5 8 11.5 3 8 3Z" stroke="white" strokeWidth="1.5"/>
-                              <circle cx="8" cy="8" r="2" stroke="white" strokeWidth="1.5"/>
-                            </svg>
-                            View Analysis
-                          </ViewAnalysisButton>
-                          
-                          <div style={{ position: 'relative' }}>
-                            {/* The iteration badge */}
-                            <IterationLabel>Iteration {index + 1}</IterationLabel>
-                            
-                            {/* The improved design badge */}
-                            <NewDesignBadge>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
-                              </svg>
-                              Improved
-                            </NewDesignBadge>
-                            
-                            {/* Wrap the iteration design in a container that shows the plus button on hover */}
-                            <IterationCardContainer>
-                              {/* The iteration design itself */}
-                              <IterationDesignCard 
-                                isSelected={selectedDesignId === iteration.id}
-                                onClick={(e) => handleDesignClick(e, iteration.id)}
-                                onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-                                style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
-                              >
-                                <HtmlDesignRenderer
-                                  ref={(el: HtmlDesignRendererHandle | null) => {
-                                    if (el) {
-                                      designRefs.current[iteration.id] = el as any;
-                                    }
-                                  }}
-                                  htmlContent={iteration.htmlContent} 
-                                  cssContent={iteration.cssContent}
-                                  width={iteration.dimensions?.width} 
-                                  height={iteration.dimensions?.height}
-                                  onRender={(success) => {
-                                    // Only log the first successful render to avoid console clutter
-                                    if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                                      LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
-                                      renderedIterationsRef.current.add(iteration.id);
-                                    }
-                                  }}
-                                />
-                              </IterationDesignCard>
-                              
-                              {/* The plus button that appears on hover */}
-                              <IterationButton onClick={(e) => handleIterationClick(e, iteration.id)}>
-                                <PlusIcon />
-                              </IterationButton>
-                            </IterationCardContainer>
-                          </div>
-                        </HoverContainer>
-                      </DesignContainer>
+                      renderIteration(iteration as ExtendedDesignIteration, index, design)
                     )
                   )}
                 </>
@@ -2355,7 +2388,7 @@ export const Canvas: React.FC = () => {
             {currentAnalysis ? (
               <>
                 {/* Changes Tab */}
-                {activeTab === 'changes' && (
+                {activeTab === 'changes' && currentAnalysis && (
                   <>
                     {/* Before/After Comparison */}
                     <div className="comparison-container">
@@ -2403,7 +2436,7 @@ export const Canvas: React.FC = () => {
                 )}
                 
                 {/* Analysis Tab */}
-                {activeTab === 'analysis' && (
+                {activeTab === 'analysis' && currentAnalysis && (
                   <>
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2444,7 +2477,7 @@ export const Canvas: React.FC = () => {
                 )}
                 
                 {/* UX Analysis Tab */}
-                {activeTab === 'uxanalysis' && (
+                {activeTab === 'uxanalysis' && currentAnalysis && (
                   <>
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2600,7 +2633,7 @@ export const Canvas: React.FC = () => {
                 )}
                 
                 {/* Colors & Typography Tab */}
-                {activeTab === 'colors' && (
+                {activeTab === 'colors' && currentAnalysis && (
                   <>
                     <h4>Color Palette</h4>
                     <div className="color-grid">
