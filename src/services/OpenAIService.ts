@@ -75,10 +75,59 @@ class OpenAIService {
     return !!this.apiKey;
   }
   
+  // Helper to check if we're in a development environment
+  private isDevEnvironment(): boolean {
+    // Check if NODE_ENV is explicitly set to 'development'
+    if (process.env.NODE_ENV === 'development') {
+      return true;
+    }
+    
+    // Fallback: check hostname for common development patterns
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      return hostname === 'localhost' || 
+             hostname === '127.0.0.1' ||
+             hostname.includes('.local');
+    }
+    
+    return false;
+  }
+
+  // Helper to check if we're in a production environment where we should NEVER use fallbacks
+  private isProductionEnvironment(): boolean {
+    // Check if explicitly set to production
+    if (process.env.NODE_ENV === 'production') {
+      return true;
+    }
+    
+    // Check hostname for production patterns
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      return hostname.includes('.com') || 
+             hostname.includes('.org') || 
+             hostname.includes('.io') ||
+             hostname.includes('.app') ||
+             hostname.includes('.vercel.app') ||
+             hostname.includes('.netlify.app');
+    }
+    
+    return false;
+  }
+  
   // Main method to analyze design image and generate improved version
   async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
     if (!this.apiKey) {
-      throw new Error('OpenAI API key not configured');
+      console.error('OpenAI API key not configured, cannot generate design iteration');
+      
+      // In production, never use fallback for missing API key
+      if (this.isProductionEnvironment()) {
+        throw new Error('OpenAI API key not configured. Please set it in your environment variables.');
+      }
+      
+      // Only in development, use fallback if API key is missing
+      console.log('Development environment detected, using fallback response for missing API key');
+      const dimensions = await this.getImageDimensions(imageUrl);
+      return this.getFallbackAnalysisResponse(dimensions);
     }
     
     try {
@@ -89,10 +138,18 @@ class OpenAIService {
         // Already a data URL, extract the base64 part
         base64Image = imageUrl.split(',')[1];
       } else {
-        // Fetch the image and convert to base64
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        base64Image = await this.blobToBase64(blob);
+        try {
+          // Fetch the image and convert to base64
+          const response = await fetch(imageUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+          }
+          const blob = await response.blob();
+          base64Image = await this.blobToBase64(blob);
+        } catch (error: any) {
+          console.error('Error fetching image:', error);
+          throw new Error(`Failed to process image: ${error.message}`);
+        }
       }
       
       // Get image dimensions
@@ -291,27 +348,41 @@ class OpenAIService {
           },
           body: JSON.stringify(requestBody)
         });
-      } catch (fetchError) {
-        console.error('Direct OpenAI API call failed, possibly due to CORS:', fetchError);
+      } catch (error: any) {
+        console.error('Direct OpenAI API call failed, error details:', error);
         
-        // Try using a fallback demo response for development/preview
-        console.log('Generating a fallback demo response for testing purposes');
-        return this.getFallbackAnalysisResponse(dimensions);
+        // In production, never use fallback
+        if (this.isProductionEnvironment()) {
+          throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
+        }
+        
+        // Only use fallback during development
+        if (this.isDevEnvironment()) {
+          console.log('Development environment detected, using fallback response for testing');
+          return this.getFallbackAnalysisResponse(dimensions);
+        }
+        
+        // Default behavior for unknown environments - throw the error
+        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
       }
       
       if (!openaiResponse.ok) {
         const errorText = await openaiResponse.text();
-        console.error('OpenAI API error:', errorText);
+        console.error('OpenAI API error response:', errorText);
         
-        // Return fallback demo response if in development/preview
-        if (window.location.hostname === 'localhost' || 
-            window.location.hostname.includes('vercel.app') ||
-            window.location.hostname.includes('netlify.app')) {
-          console.log('Using fallback demo response for this environment');
+        // In production, never use fallback
+        if (this.isProductionEnvironment()) {
+          throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
+        }
+        
+        // Only use fallback in development
+        if (this.isDevEnvironment()) {
+          console.log('Development environment detected, using fallback response for testing');
           return this.getFallbackAnalysisResponse(dimensions);
         }
         
-        throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}`);
+        // Default behavior
+        throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
       }
       
       const data = await openaiResponse.json();
@@ -321,18 +392,22 @@ class OpenAIService {
       
       // Parse the response to extract HTML, CSS, and analysis
       return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing design:', error);
       
-      // Return fallback demo response for development/preview environments
-      if (window.location.hostname === 'localhost' || 
-          window.location.hostname.includes('vercel.app') ||
-          window.location.hostname.includes('netlify.app')) {
-        console.log('Error occurred during analysis, using fallback demo response');
+      // In production, never use fallback
+      if (this.isProductionEnvironment()) {
+        throw new Error(`Failed to generate design iteration: ${error.message}`);
+      }
+      
+      // Only use fallback in development
+      if (this.isDevEnvironment()) {
+        console.log('Development environment detected, using fallback response');
         return this.getFallbackAnalysisResponse(await this.getImageDimensions(imageUrl));
       }
       
-      throw error;
+      // Default behavior
+      throw new Error(`Failed to generate design iteration: ${error.message}`);
     }
   }
   
