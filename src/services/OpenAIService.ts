@@ -139,15 +139,59 @@ class OpenAIService {
         base64Image = imageUrl.split(',')[1];
       } else {
         try {
-          // Fetch the image and convert to base64
-          const response = await fetch(imageUrl);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+          // Get image dimensions first - we need these regardless of fetch method
+          const dimensions = await this.getImageDimensions(imageUrl);
+          
+          // Try to handle CORS issues with Figma images
+          let fetchResponse;
+          try {
+            // First attempt: direct fetch
+            fetchResponse = await fetch(imageUrl, { mode: 'cors' });
+          } catch (directFetchError) {
+            console.log('Direct fetch failed, trying with proxy or CORS mode: no-cors');
+            try {
+              // Second attempt: try with no-cors mode
+              fetchResponse = await fetch(imageUrl, { mode: 'no-cors' });
+            } catch (corsError) {
+              // If both failed, try with a proxy if we have one, otherwise rethrow
+              console.error('Both fetch attempts failed:', corsError);
+              // If the image URL is a Figma URL, try to create a placeholder or use a cached version
+              if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
+                // For Figma images that fail with CORS, use a hardcoded data URL as fallback
+                console.log('Figma image detected, using data URL fallback');
+                // Convert the design to a basic data URL by drawing it on a canvas
+                const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
+                if (dataUrl) {
+                  base64Image = dataUrl.split(',')[1];
+                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
+                }
+              }
+              throw corsError;
+            }
           }
-          const blob = await response.blob();
+          
+          if (!fetchResponse.ok) {
+            throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
+          }
+          
+          const blob = await fetchResponse.blob();
           base64Image = await this.blobToBase64(blob);
         } catch (error: any) {
           console.error('Error fetching image:', error);
+          
+          // Try to create a data URL from the image as a last resort
+          try {
+            console.log('Attempting to create data URL from image as fallback');
+            const dimensions = await this.getImageDimensions(imageUrl);
+            const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
+            if (dataUrl) {
+              base64Image = dataUrl.split(',')[1];
+              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
+            }
+          } catch (fallbackError) {
+            console.error('Fallback attempt also failed:', fallbackError);
+          }
+          
           throw new Error(`Failed to process image: ${error.message}`);
         }
       }
@@ -1131,6 +1175,290 @@ footer {
         ]
       }
     };
+  }
+
+  // Add this helper method to create a data URL from an image
+  private async createDataUrlFromFigmaImage(imageUrl: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      // Set a timeout to avoid hanging
+      const timeoutId = setTimeout(() => {
+        console.log('Image load timed out, resolving with null');
+        resolve(null);
+      }, 5000);
+      
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || 800;
+          canvas.height = img.naturalHeight || 600;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            resolve(dataUrl);
+          } else {
+            resolve(null);
+          }
+        } catch (error) {
+          console.error('Error creating data URL:', error);
+          resolve(null);
+        }
+      };
+      
+      img.onerror = () => {
+        clearTimeout(timeoutId);
+        console.error('Error loading image for data URL creation');
+        resolve(null);
+      };
+      
+      // Add a random query parameter to bypass cache
+      img.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    });
+  }
+
+  // Add this method to continue with the OpenAI analysis once we have the base64 image
+  private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[]): Promise<DesignAnalysisResponse> {
+    // Process linked insights if available
+    let insightsPrompt = '';
+    if (linkedInsights && linkedInsights.length > 0) {
+      insightsPrompt = '\n\nImportant user insights to consider:\n';
+      linkedInsights.forEach((insight, index) => {
+        const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
+        insightsPrompt += `${index + 1}. ${summary}\n`;
+      });
+      insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
+    }
+    
+    const requestBody = {
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
+
+          MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
+
+          DESIGN SYSTEM EXTRACTION:
+          First, you must carefully extract and document the EXACT design system from the original design:
+          
+          1. Color palette: 
+             - Document every single color used in the UI with precise hex codes
+             - Identify primary, secondary, accent, background, and text colors
+             - Note the exact usage pattern of each color (e.g., which color is used for primary buttons vs secondary buttons)
+          
+          2. Typography:
+             - Document every font family used
+             - Note the exact font sizes used for each text element type (headings, body, buttons, labels, etc.)
+             - Document font weights, line heights, and letter spacing
+             - Map out the typographic hierarchy exactly as used in the design
+          
+          3. UI Components:
+             - Document every UI component type (buttons, inputs, checkboxes, etc.)
+             - For each component, note its exact styling (colors, borders, shadows, padding)
+             - Document different states if visible (hover, active, disabled)
+             - Identify any consistent padding or spacing patterns between components
+          
+          This design system extraction is CRITICAL - you must use these EXACT same values in your improved version.
+          
+          DESIGN ANALYSIS REQUIREMENTS:
+          Perform a comprehensive analysis of the design focusing on:
+          
+          1. Visual hierarchy:
+            - Analyze how effectively the design guides the user's attention
+            - Identify elements that compete for attention or are not properly emphasized
+            - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
+          
+          2. Color contrast and accessibility:
+            - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
+            - Analyze color combinations that may cause visibility or accessibility issues
+            - Evaluate overall color harmony and effective use of color to convey information
+          
+          3. Component selection and placement:
+            - Evaluate the appropriateness of UI components for their intended functions
+            - Identify issues with component placement, grouping, or organization
+            - Assess consistency in component usage throughout the design
+          
+          4. Text legibility:
+            - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
+            - Evaluate line length, line height, letter spacing, and overall readability
+            - Assess font choices for appropriateness to the content and brand
+          
+          5. Overall usability:
+            - Analyze the intuitiveness of interactions and flows
+            - Identify potential points of confusion or friction
+            - Evaluate spacing, alignment, and overall layout effectiveness
+          
+          6. Accessibility considerations:
+            - Identify potential issues for users with disabilities
+            - Assess keyboard navigability, screen reader compatibility, and semantic structure
+            - Evaluate compliance with WCAG guidelines
+          
+          IMPROVEMENT REQUIREMENTS:
+          Based on your analysis, create an IMPROVED VERSION that:
+          
+          1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
+          2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
+          3. Makes targeted improvements ONLY to:
+             - Visual hierarchy through component rearrangement where appropriate
+             - Component selection where a more appropriate component type serves the same function better
+             - Spacing and alignment to improve clarity and flow
+             - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
+          4. When swapping a UI component for a more appropriate one (e.g., radio button to checkbox), you MUST style the new component using the EXACT SAME design system (colors, borders, etc.) as the original component
+          5. Never changes the core brand identity or visual language
+          6. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
+          7. Ensures the improved version is immediately recognizable as an iteration of the original
+          
+          DIMENSIONS REQUIREMENT:
+          The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
+          
+          CSS REQUIREMENTS:
+          1. Use CSS Grid and Flexbox for layouts that need to be responsive
+          2. Use absolute positioning for pixel-perfect placement when needed
+          3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
+          4. Ensure clean, well-organized CSS with descriptive class names
+          5. Include detailed comments in CSS explaining design decisions
+          6. Avoid arbitrary magic numbers - document any precise pixel measurements
+          
+          ICON REQUIREMENTS:
+          For any icons identified in the UI:
+          1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
+          2. If no perfect Font Awesome match exists, create the icon using CSS
+          3. Ensure icon sizing and positioning exactly matches the original
+          4. Apply the EXACT SAME colors from the original design to the icons
+          
+          IMAGE REQUIREMENTS:
+          For any images identified in the original design:
+          1. DO NOT use any external image URLs, placeholders, or Unsplash images
+          2. Instead, replace each image with a simple colored div (rectangle or square)
+          3. Use a background color that makes sense in the context (gray, light blue, etc.)
+          4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
+          5. Add a subtle 1px border to the div to indicate it's an image placeholder
+          6. You can add a simple CSS pattern or gradient if appropriate
+          
+          Your analysis MUST be organized into these specific sections:
+          1. Design System Extraction - Detailed documentation of colors, typography, and component styles
+          2. Visual Hierarchy - Issues and recommended improvements
+          3. Color Contrast and Accessibility - Issues and recommended improvements
+          4. Component Selection and Placement - Issues and recommended improvements
+          5. Text Legibility - Issues and recommended improvements
+          6. Overall Usability - Issues and recommended improvements
+          7. Accessibility Considerations - Issues and recommended improvements
+          8. General Strengths - What the design does well
+          9. General Weaknesses - Overall issues with the design
+          10. Specific Changes Made - Detailed before/after descriptions of all changes implemented
+          11. Color Palette - Exact hex codes for all colors used, noting that these are preserved from the original
+          12. Typography - Font families, sizes, weights used, noting that these are preserved from the original
+          13. UI Components - List of all components identified in the design, noting any that were swapped and how their styling was preserved`
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains the original design system while addressing specific issues.
+
+              THIS IS VERY IMPORTANT: 
+              - The improved version should look like an ITERATION of the original design, not a completely new design.
+              - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
+              - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
+              - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
+              
+              Perform a detailed analysis focusing specifically on:
+              1. Visual hierarchy
+              2. Color contrast and accessibility
+              3. Component selection and placement
+              4. Text legibility
+              5. Overall usability
+              6. Accessibility considerations
+              
+              Then create an improved version that:
+              - Uses the EXACT SAME colors, typography, and UI component styles as the original
+              - Maintains at least 85% of the original design's structure
+              - Makes targeted improvements through better component arrangement or more appropriate component selection
+              - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
+              
+              For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
+              
+              Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented, with special attention to how you preserved the original design system.
+              ${linkedInsights.length > 0 ? insightsPrompt : ''}`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 4000,
+      temperature: 0.5
+    };
+    
+    console.log('Sending request to OpenAI API for design analysis...');
+    
+    // Since direct fetch may face CORS issues in browser environment, use a proxy 
+    // or fallback to server-side processing if needed
+    let openaiResponse;
+    
+    try {
+      // First try direct API call
+      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (error: any) {
+      console.error('Direct OpenAI API call failed, error details:', error);
+      
+      // In production, never use fallback
+      if (this.isProductionEnvironment()) {
+        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
+      }
+      
+      // Only use fallback during development
+      if (this.isDevEnvironment()) {
+        console.log('Development environment detected, using fallback response for testing');
+        return this.getFallbackAnalysisResponse(dimensions);
+      }
+      
+      // Default behavior for unknown environments - throw the error
+      throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
+    }
+    
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error('OpenAI API error response:', errorText);
+      
+      // In production, never use fallback
+      if (this.isProductionEnvironment()) {
+        throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
+      }
+      
+      // Only use fallback in development
+      if (this.isDevEnvironment()) {
+        console.log('Development environment detected, using fallback response for testing');
+        return this.getFallbackAnalysisResponse(dimensions);
+      }
+      
+      // Default behavior
+      throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
+    }
+    
+    const data = await openaiResponse.json();
+    
+    // Extract the response content
+    const responseContent = data.choices[0].message.content;
+    
+    // Parse the response to extract HTML, CSS, and analysis
+    return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
   }
 }
 
