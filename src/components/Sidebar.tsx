@@ -83,6 +83,9 @@ const PageList = styled.div`
   flex: 1;
   overflow-y: auto;
   margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 `;
 
 const MoreButtonContainer = styled.div`
@@ -97,11 +100,12 @@ const MoreButton = styled.button`
   font-size: 12px;
   color: #666;
   padding: 2px 8px;
-  opacity: 0.5;
-  
-  &:hover {
-    opacity: 1;
-  }
+  opacity: 0;
+  transition: opacity 0.2s;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
 `;
 
 const PageItem = styled.div<{ isActive: boolean }>`
@@ -109,19 +113,18 @@ const PageItem = styled.div<{ isActive: boolean }>`
   cursor: pointer;
   background-color: ${props => props.isActive ? '#EFEFEF' : 'transparent'};
   position: relative;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
   
   &:hover {
     background-color: ${props => props.isActive ? '#EFEFEF' : 'rgba(0, 0, 0, 0.03)'};
   }
   
-  /* Hide the MoreButton by default */
-  ${MoreButton} {
-    display: none;
-  }
-  
-  /* Show the MoreButton on hover */
+  /* Show the MoreButton on hover with opacity transition */
   &:hover ${MoreButton} {
-    display: inline-block;
+    opacity: 0.5;
   }
 `;
 
@@ -134,6 +137,11 @@ const PageName = styled.div`
   color: #333;
   font-size: 14px;
   font-family: 'Plus Jakarta Sans', sans-serif;
+  width: 100%;
+  padding-right: 30px; /* Add space for the MoreButton */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 const DropdownMenu = styled.div`
