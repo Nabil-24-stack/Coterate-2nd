@@ -83,6 +83,26 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
   // Process the CSS content
   const processedCssContent = preprocessCss(cssContent || '');
 
+  // Extract unique webfonts from CSS to preload
+  const extractWebFonts = (css: string): string[] => {
+    // Extract font-family declarations
+    const fontFamilyMatches = css.match(/font-family:\s*([^;]+)/g) || [];
+    const fontFamilies = fontFamilyMatches
+      .map(match => match.replace(/font-family:\s*/, '').trim())
+      .map(family => {
+        // Remove quotes and split by comma
+        const cleaned = family.replace(/['"]/g, '');
+        return cleaned.split(',').map(f => f.trim());
+      })
+      .flat()
+      .filter((f, i, self) => self.indexOf(f) === i); // Unique values
+    
+    return fontFamilies;
+  };
+  
+  // Get any custom fonts from the CSS
+  const customFonts = extractWebFonts(processedCssContent);
+
   // Combine HTML and CSS content with viewport settings to ensure proper sizing
   const combinedContent = `
     <!DOCTYPE html>
@@ -90,19 +110,19 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data: blob: 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data: blob: 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';">
       
-      <!-- Improved font loading -->
+      <!-- Improved font loading with comprehensive set -->
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Roboto:wght@100;300;400;500;700;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@100;200;300;400;500;600;700;800;900&family=Lato:wght@100;300;400;700;900&family=Montserrat:wght@100;200;300;400;500;600;700;800;900&family=Source+Sans+Pro:wght@200;300;400;600;700;900&family=Nunito:wght@200;300;400;500;600;700;800;900&family=Raleway:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
       
       <!-- Font Awesome for icons -->
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       
       <style>
-        /* Reset styles */
-        * {
+        /* CSS Reset - more comprehensive for better rendering */
+        *, *::before, *::after {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
@@ -116,12 +136,60 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         }
         
         body {
-          font-family: 'Inter', 'Roboto', 'Plus Jakarta Sans', 'Open Sans', sans-serif;
+          font-family: 'Inter', 'Roboto', 'Plus Jakarta Sans', 'Open Sans', 'Poppins', 'Lato', 'Montserrat', 'Source Sans Pro', 'Nunito', 'Raleway', sans-serif;
           line-height: 1.5;
           position: relative;
           color: #333333;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+        
+        /* Standard UI component styling - helps maintain consistency with original styles */
+        button, .button {
+          cursor: pointer;
+          font-family: inherit;
+          border: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        }
+        
+        input, select, textarea {
+          font-family: inherit;
+          font-size: inherit;
+        }
+        
+        /* Form elements consistency */
+        input[type="checkbox"], input[type="radio"] {
+          appearance: none;
+          -webkit-appearance: none;
+          width: 1rem;
+          height: 1rem;
+          border: 1px solid #ccc;
+          display: grid;
+          place-content: center;
+        }
+        
+        input[type="checkbox"] {
+          border-radius: 3px;
+        }
+        
+        input[type="radio"] {
+          border-radius: 50%;
+        }
+        
+        input[type="checkbox"]:checked::before, input[type="radio"]:checked::before {
+          content: "";
+          width: 0.65em;
+          height: 0.65em;
+          transform: scale(1);
+          background-color: currentColor;
+        }
+        
+        input[type="radio"]:checked::before {
+          border-radius: 50%;
         }
         
         /* Image placeholder styling */
@@ -213,10 +281,26 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
             });
           };
           
+          // Process form elements for better styling
+          const processFormElements = () => {
+            // Style checkboxes and radio buttons consistently
+            document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => {
+              // If the input doesn't have a CSS custom property for color, inherit from parent
+              const computedStyle = getComputedStyle(input);
+              if (!computedStyle.getPropertyValue('--checkbox-color') && !computedStyle.getPropertyValue('--radio-color')) {
+                const parentColor = getComputedStyle(input.parentElement || document.body).color;
+                input.style.setProperty('--checkbox-color', parentColor);
+                input.style.setProperty('--radio-color', parentColor);
+                input.style.color = parentColor;
+              }
+            });
+          };
+          
           // Run all processors
           processImages();
           processIcons();
           processPositionedElements();
+          processFormElements();
           
           // Signal that content is loaded and ready
           if (window.parent) {
@@ -226,7 +310,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
       </script>
     </head>
     <body>
-      ${processedHtmlContent || '<div>No content to display</div>'}
+      ${processedHtmlContent}
     </body>
     </html>
   `;

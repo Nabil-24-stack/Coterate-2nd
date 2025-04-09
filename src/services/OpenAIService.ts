@@ -30,6 +30,11 @@ interface DesignAnalysisResponse {
       issues: string[];
       improvements: string[];
     };
+    designSystem: {
+      colorPalette: string[];
+      typography: string[];
+      components: string[];
+    };
   };
   htmlCode: string;
   cssCode: string;
@@ -109,10 +114,32 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S LOOK AND STRUCTURE.
+            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
 
             MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
 
+            DESIGN SYSTEM EXTRACTION:
+            First, you must carefully extract and document the EXACT design system from the original design:
+            
+            1. Color palette: 
+               - Document every single color used in the UI with precise hex codes
+               - Identify primary, secondary, accent, background, and text colors
+               - Note the exact usage pattern of each color (e.g., which color is used for primary buttons vs secondary buttons)
+            
+            2. Typography:
+               - Document every font family used
+               - Note the exact font sizes used for each text element type (headings, body, buttons, labels, etc.)
+               - Document font weights, line heights, and letter spacing
+               - Map out the typographic hierarchy exactly as used in the design
+            
+            3. UI Components:
+               - Document every UI component type (buttons, inputs, checkboxes, etc.)
+               - For each component, note its exact styling (colors, borders, shadows, padding)
+               - Document different states if visible (hover, active, disabled)
+               - Identify any consistent padding or spacing patterns between components
+            
+            This design system extraction is CRITICAL - you must use these EXACT same values in your improved version.
+            
             DESIGN ANALYSIS REQUIREMENTS:
             Perform a comprehensive analysis of the design focusing on:
             
@@ -149,11 +176,17 @@ class OpenAIService {
             IMPROVEMENT REQUIREMENTS:
             Based on your analysis, create an IMPROVED VERSION that:
             
-            1. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout and components must remain unchanged
-            2. Makes targeted improvements to address the identified issues
-            3. Preserves the original brand identity, color scheme, and visual language
-            4. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
-            5. Ensures the improved version is immediately recognizable as an iteration of the original
+            1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
+            2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
+            3. Makes targeted improvements ONLY to:
+               - Visual hierarchy through component rearrangement where appropriate
+               - Component selection where a more appropriate component type serves the same function better
+               - Spacing and alignment to improve clarity and flow
+               - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
+            4. When swapping a UI component for a more appropriate one (e.g., radio button to checkbox), you MUST style the new component using the EXACT SAME design system (colors, borders, etc.) as the original component
+            5. Never changes the core brand identity or visual language
+            6. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
+            7. Ensures the improved version is immediately recognizable as an iteration of the original
             
             DIMENSIONS REQUIREMENT:
             The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
@@ -161,7 +194,7 @@ class OpenAIService {
             CSS REQUIREMENTS:
             1. Use CSS Grid and Flexbox for layouts that need to be responsive
             2. Use absolute positioning for pixel-perfect placement when needed
-            3. Include CSS variables for colors, spacing, and typography
+            3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
             4. Ensure clean, well-organized CSS with descriptive class names
             5. Include detailed comments in CSS explaining design decisions
             6. Avoid arbitrary magic numbers - document any precise pixel measurements
@@ -171,6 +204,7 @@ class OpenAIService {
             1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
             2. If no perfect Font Awesome match exists, create the icon using CSS
             3. Ensure icon sizing and positioning exactly matches the original
+            4. Apply the EXACT SAME colors from the original design to the icons
             
             IMAGE REQUIREMENTS:
             For any images identified in the original design:
@@ -182,27 +216,32 @@ class OpenAIService {
             6. You can add a simple CSS pattern or gradient if appropriate
             
             Your analysis MUST be organized into these specific sections:
-            1. Visual Hierarchy - Issues and recommended improvements
-            2. Color Contrast and Accessibility - Issues and recommended improvements
-            3. Component Selection and Placement - Issues and recommended improvements
-            4. Text Legibility - Issues and recommended improvements
-            5. Overall Usability - Issues and recommended improvements
-            6. Accessibility Considerations - Issues and recommended improvements
-            7. General Strengths - What the design does well
-            8. General Weaknesses - Overall issues with the design
-            9. Specific Changes Made - Detailed before/after descriptions of all changes implemented
-            10. Color Palette - Exact hex codes for all colors used
-            11. Typography - Font families, sizes, weights used
-            12. UI Components - List of all components identified in the design`
+            1. Design System Extraction - Detailed documentation of colors, typography, and component styles
+            2. Visual Hierarchy - Issues and recommended improvements
+            3. Color Contrast and Accessibility - Issues and recommended improvements
+            4. Component Selection and Placement - Issues and recommended improvements
+            5. Text Legibility - Issues and recommended improvements
+            6. Overall Usability - Issues and recommended improvements
+            7. Accessibility Considerations - Issues and recommended improvements
+            8. General Strengths - What the design does well
+            9. General Weaknesses - Overall issues with the design
+            10. Specific Changes Made - Detailed before/after descriptions of all changes implemented
+            11. Color Palette - Exact hex codes for all colors used, noting that these are preserved from the original
+            12. Typography - Font families, sizes, weights used, noting that these are preserved from the original
+            13. UI Components - List of all components identified in the design, noting any that were swapped and how their styling was preserved`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains most of the original design while addressing specific issues.
+                text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains the original design system while addressing specific issues.
 
-                THIS IS VERY IMPORTANT: The improved version should look like an ITERATION of the original design, not a completely new design. A user should recognize it as the same UI but with targeted improvements.
+                THIS IS VERY IMPORTANT: 
+                - The improved version should look like an ITERATION of the original design, not a completely new design.
+                - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
+                - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
+                - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
                 
                 Perform a detailed analysis focusing specifically on:
                 1. Visual hierarchy
@@ -213,13 +252,14 @@ class OpenAIService {
                 6. Accessibility considerations
                 
                 Then create an improved version that:
-                - Maintains at least 85% of the original design's structure and components
-                - Makes targeted improvements to address identified issues
+                - Uses the EXACT SAME colors, typography, and UI component styles as the original
+                - Maintains at least 85% of the original design's structure
+                - Makes targeted improvements through better component arrangement or more appropriate component selection
                 - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
                 
                 For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
                 
-                Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented.
+                Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented, with special attention to how you preserved the original design system.
                 ${linkedInsights.length > 0 ? insightsPrompt : ''}`
               },
               {
@@ -368,6 +408,11 @@ class OpenAIService {
         accessibility: {
           issues: [],
           improvements: []
+        },
+        designSystem: {
+          colorPalette: [],
+          typography: [],
+          components: []
         }
       },
       htmlCode: '',
@@ -395,6 +440,11 @@ class OpenAIService {
     if (cssMatch && cssMatch[1]) {
       result.cssCode = cssMatch[1].trim();
     }
+    
+    // Extract design system information
+    result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
+    result.analysis.designSystem.typography = this.extractListItems(response, 'Typography|Design System Extraction.*?Typography');
+    result.analysis.designSystem.components = this.extractListItems(response, 'UI Components|Design System Extraction.*?Components');
     
     // Extract general analysis sections
     result.analysis.strengths = this.extractListItems(response, 'Strengths|General Strengths');
@@ -426,6 +476,34 @@ class OpenAIService {
     result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
     result.metadata.colors.background = this.extractColors(response, 'Background');
     result.metadata.colors.text = this.extractColors(response, 'Text');
+    
+    // Extract all colors from CSS as a fallback
+    if (result.cssCode) {
+      const allCssColors = result.cssCode.match(/#[0-9A-Fa-f]{3,6}|rgba?\([^)]+\)/g) || [];
+      
+      // If we couldn't extract colors from the analysis, use the CSS colors
+      if (
+        result.metadata.colors.primary.length === 0 &&
+        result.metadata.colors.secondary.length === 0 &&
+        result.metadata.colors.background.length === 0 &&
+        result.metadata.colors.text.length === 0
+      ) {
+        // Add unique colors from CSS - using Array.from instead of spread to handle Set in TypeScript
+        const uniqueColors = Array.from(new Set(allCssColors));
+        result.metadata.colors.primary = uniqueColors.slice(0, 2);
+        result.metadata.colors.secondary = uniqueColors.slice(2, 4);
+        result.metadata.colors.background = uniqueColors.slice(4, 6);
+        result.metadata.colors.text = uniqueColors.slice(6, 8);
+      }
+    }
+    
+    // Extract fonts from CSS as a fallback
+    if (result.cssCode && result.metadata.fonts.length === 0) {
+      const fontFamilies = result.cssCode.match(/font-family:\s*([^;]+)/g) || [];
+      result.metadata.fonts = fontFamilies
+        .map(f => f.replace('font-family:', '').trim())
+        .filter((f, i, self) => self.indexOf(f) === i); // Unique values only
+    }
     
     // Extract fonts
     result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
@@ -509,62 +587,82 @@ class OpenAIService {
         },
         colorContrast: {
           issues: [
-            "Text on colored backgrounds doesn't meet WCAG AA standards",
-            "Some subtle color differences are hard to distinguish",
-            "Color alone is used to convey information in some cases"
+            "Primary button text has insufficient contrast (3:1)",
+            "Some secondary text is too light against the background",
+            "Link colors don't provide enough distinction from regular text"
           ],
           improvements: [
-            "Adjusted text colors to achieve at least 4.5:1 contrast ratio while keeping original color theme",
-            "Enhanced color differences for better distinction without changing the overall color scheme",
-            "Added non-color indicators to convey information while preserving original design elements"
+            "Increased button text contrast to 4.5:1 while preserving brand colors",
+            "Darkened secondary text by 15% to improve readability",
+            "Made links more distinctive without changing the overall color scheme"
           ]
         },
         componentSelection: {
           issues: [
-            "Some form controls lack clear input affordances",
-            "Navigation elements aren't consistently styled",
-            "Modal dialogs lack clear dismissal mechanisms"
+            "Some toggle controls are ambiguous in their current state",
+            "Input fields lack clear focus states",
+            "Dropdown menus have insufficient visual cues"
           ],
           improvements: [
-            "Enhanced form controls with subtle visual cues while maintaining original placement",
-            "Applied consistent styling to navigation elements without restructuring the navigation",
-            "Added clear close buttons to modals using the existing visual language"
+            "Enhanced toggle controls with more distinct visual states",
+            "Added clear focus indicators to all interactive elements",
+            "Improved dropdown affordance with consistent visual cues"
           ]
         },
         textLegibility: {
           issues: [
-            "Some text is too small at 10px",
-            "Line height is too tight in paragraph text",
-            "Long lines of text span too wide for comfortable reading"
+            "Body text is too small in some sections",
+            "Line height is insufficient for comfortable reading",
+            "Some headings lack sufficient spacing from body text"
           ],
           improvements: [
-            "Increased minimum text size to 12px while keeping original font family and styling",
-            "Adjusted line height to 1.5 for better readability without changing text position",
-            "Limited line length to approximately 70 characters while preserving layout structure"
+            "Increased body text size from 14px to 16px where needed",
+            "Adjusted line height to 1.5 times the font size for better readability",
+            "Added appropriate spacing between headings and related content"
           ]
         },
         usability: {
           issues: [
-            "Click/tap targets are too small in some areas",
-            "Form validation feedback is delayed or unclear",
-            "Some interactive elements lack clear hover/focus states"
+            "Navigation structure is not immediately clear",
+            "Some interactive elements don't appear clickable",
+            "Form submission process lacks visual feedback"
           ],
           improvements: [
-            "Slightly increased size of interactive elements while maintaining their position and alignment",
-            "Added immediate and clear validation feedback that matches the original UI style",
-            "Enhanced hover/focus states for all interactive elements using the original color palette"
+            "Enhanced navigation indicators while maintaining original structure",
+            "Improved hover/focus states for all interactive elements",
+            "Added clear visual feedback for form interactions"
           ]
         },
         accessibility: {
           issues: [
-            "Missing alt text for images",
-            "Form fields lack proper labels",
-            "Focus order is not logical in some sections"
+            "Keyboard navigation path is not logical",
+            "Some interactive elements lack accessible names",
+            "Color alone is used to convey some information"
           ],
           improvements: [
-            "Added descriptive alt text to all images without changing their appearance",
-            "Associated labels with all form fields while maintaining the original form layout",
-            "Fixed focus order to follow natural content flow without restructuring the UI"
+            "Fixed focus order to follow natural content flow without restructuring the UI",
+            "Added proper aria-labels while maintaining visual design",
+            "Added non-color indicators for important state information"
+          ]
+        },
+        designSystem: {
+          colorPalette: [
+            "Primary: #4A6CF7 - Used for primary buttons, links, and key accent elements",
+            "Secondary: #6F7DEB - Used for secondary buttons and supporting elements",
+            "Background: #FFFFFF (main), #F8F9FB (secondary) - Used for page and card backgrounds",
+            "Text: #1D2939 (headings), #4B5563 (body), #6B7280 (secondary text)"
+          ],
+          typography: [
+            "Headings: Plus Jakarta Sans, 28px/700 (h1), 24px/600 (h2), 20px/600 (h3)",
+            "Body: Inter, 16px/400 (primary), 14px/400 (secondary)",
+            "Buttons: Inter, 16px/500",
+            "Labels: Inter, 14px/500"
+          ],
+          components: [
+            "Buttons: Rounded corners (8px), consistent padding (16px horizontal, 10px vertical), primary (#4A6CF7), secondary (#EEF1FF with #6F7DEB text)",
+            "Input fields: 1px border (#E5E7EB), 8px border radius, 12px padding, #F9FAFB background",
+            "Cards: White background, subtle shadow (0 2px 5px rgba(0,0,0,0.08)), 16px border radius, 24px padding",
+            "Navigation: Consistent 16px spacing between items, 2px accent indicator for active items"
           ]
         }
       },
