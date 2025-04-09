@@ -1336,13 +1336,36 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Handle iteration click function
+  // Modify the handleIterationClick function to handle both original designs and iterations
   const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
     LogManager.log('iteration-request', `Iteration requested for design: ${designId}`, true);
     
-    // Find the design to iterate on
-    const designToIterate = designs.find(d => d.id === designId);
+    // First determine if the selected ID is for a base design or an iteration
+    const isIteration = designs.some(design => 
+      design.iterations?.some(iteration => iteration.id === designId)
+    );
+    
+    let designToIterate: Design | DesignIteration | undefined;
+    let parentDesign: Design | undefined;
+    
+    if (isIteration) {
+      // Find the parent design and the iteration
+      for (const design of designs) {
+        if (!design.iterations) continue;
+        
+        const iteration = design.iterations.find(it => it.id === designId);
+        if (iteration) {
+          designToIterate = iteration;
+          parentDesign = design;
+          break;
+        }
+      }
+    } else {
+      // It's a base design
+      designToIterate = designs.find(d => d.id === designId);
+    }
+    
     if (!designToIterate) {
       console.error(`Could not find design with ID: ${designId}`);
       return;
@@ -1356,37 +1379,72 @@ export const Canvas: React.FC = () => {
     
     // Set processing state for this specific design
     setDesigns(prevDesigns => 
-      prevDesigns.map(design => 
-        design.id === designId
-          ? { ...design, isProcessing: true, processingStep: 'analyzing' }
-          : design
-      )
+      prevDesigns.map(design => {
+        if (design.id === designId) {
+          // If it's a base design
+          return { ...design, isProcessing: true, processingStep: 'analyzing' };
+        } else if (design.iterations?.some(it => it.id === designId)) {
+          // If it's an iteration, set processing on the parent design
+          // This is just for UI indication, the actual iteration will be added to the parent
+          return { ...design, isProcessing: true, processingStep: 'analyzing' };
+        }
+        return design;
+      })
     );
     
     try {
-      // Get the original image dimensions before proceeding
-      const originalDimensions = await getImageDimensions(designToIterate.imageUrl);
-      LogManager.log('image-dimensions', `Original image dimensions: ${originalDimensions.width}x${originalDimensions.height}`);
+      // Get the original dimensions depending on whether we have an original or iteration
+      let originalDimensions;
+      let sourceImageUrl: string;
+      
+      if (isIteration) {
+        // For iterations, we use the dimensions from the iteration
+        originalDimensions = (designToIterate as DesignIteration).dimensions || 
+          { width: 500, height: 400 }; // Default dimensions
+        
+        // For an iteration, we need to use the parent design's image URL
+        if (parentDesign && parentDesign.imageUrl) {
+          sourceImageUrl = parentDesign.imageUrl;
+        } else {
+          throw new Error('Cannot find parent design for iteration');
+        }
+      } else {
+        // For base designs, we use the imageUrl
+        sourceImageUrl = (designToIterate as Design).imageUrl;
+        originalDimensions = await getImageDimensions(sourceImageUrl);
+        LogManager.log('image-dimensions', `Original image dimensions: ${originalDimensions.width}x${originalDimensions.height}`);
+      }
       
       // Update the processing step to show "AI Analyzing Design"
       setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === designId
-            ? { ...design, processingStep: 'analyzing' }
-            : design
-        )
+        prevDesigns.map(design => {
+          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+            return { ...design, processingStep: 'analyzing' };
+          }
+          return design;
+        })
       );
       
       // Step 1: AI Analysis - Call OpenAI service to analyze the design according to PRD 2.4.2
-      const result = await openAIService.analyzeDesignAndGenerateHTML(designToIterate.imageUrl);
+      let result;
+      if (isIteration) {
+        // For iterations, we need to call a specialized method that can analyze HTML/CSS
+        // For now, we'll use the same method with the parent's image URL
+        // This is a temporary solution until we implement proper HTML/CSS analysis
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+      } else {
+        // For base designs, we use the existing method with the image URL
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+      }
       
       // Update the processing step to "Generating Improved Design"
       setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === designId
-            ? { ...design, processingStep: 'recreating' }
-            : design
-        )
+        prevDesigns.map(design => {
+          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+            return { ...design, processingStep: 'recreating' };
+          }
+          return design;
+        })
       );
       
       // Generate a unique ID for the iteration
@@ -1395,15 +1453,21 @@ export const Canvas: React.FC = () => {
       // Calculate the position for the new iteration (positioned to the right of the original)
       const xOffset = originalDimensions?.width || 400;
       const marginBetween = 50;
+      
+      // Get the position of the design we're iterating on
+      const designPosition = isIteration
+        ? (designToIterate as DesignIteration).position
+        : (designToIterate as Design).position;
+      
       const iterationPosition = {
-        x: designToIterate.position.x + xOffset + marginBetween,
-        y: designToIterate.position.y
+        x: designPosition.x + xOffset + marginBetween,
+        y: designPosition.y
       };
       
       // Create the new iteration with enhanced analysis data according to PRD 2.4.4
       const newIteration: DesignIteration = {
         id: iterationId,
-        parentId: designId,
+        parentId: isIteration ? (designToIterate as DesignIteration).parentId : designId,
         htmlContent: result.htmlCode,
         cssContent: result.cssCode,
         position: iterationPosition, // Store absolute position instead of relative
@@ -1449,11 +1513,12 @@ export const Canvas: React.FC = () => {
       
       // Update the processing step
       setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === designId
-            ? { ...design, processingStep: 'rendering' }
-            : design
-        )
+        prevDesigns.map(design => {
+          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+            return { ...design, processingStep: 'rendering' };
+          }
+          return design;
+        })
       );
       
       // Short delay to show the rendering step
@@ -1462,21 +1527,36 @@ export const Canvas: React.FC = () => {
       // Update designs with a properly immutable state update
       setDesigns(prevDesigns => {
         return prevDesigns.map(design => {
-          if (design.id !== designId) {
-            return design;
+          if (isIteration) {
+            // If we're iterating on an iteration, add the new iteration to its parent
+            if (design.iterations?.some(it => it.id === designId)) {
+              // Create or append to iterations array
+              const existingIterations = design.iterations || [];
+              const updatedIterations = [...existingIterations, newIteration];
+              
+              // Return the updated design with a new iterations array and reset the processing flag
+              return {
+                ...design,
+                iterations: updatedIterations,
+                isProcessing: false,
+                processingStep: null
+              };
+            }
+          } else if (design.id === designId) {
+            // If we're iterating on a base design
+            // Create or append to iterations array
+            const existingIterations = design.iterations || [];
+            const updatedIterations = [...existingIterations, newIteration];
+            
+            // Return the updated design with a new iterations array and reset the processing flag
+            return {
+              ...design,
+              iterations: updatedIterations,
+              isProcessing: false,
+              processingStep: null
+            };
           }
-          
-          // Create or append to iterations array
-          const existingIterations = design.iterations || [];
-          const updatedIterations = [...existingIterations, newIteration];
-          
-          // Return the updated design with a new iterations array and reset the processing flag
-          return {
-            ...design,
-            iterations: updatedIterations,
-            isProcessing: false,
-            processingStep: null
-          };
+          return design;
         });
       });
       
@@ -1492,11 +1572,12 @@ export const Canvas: React.FC = () => {
       
       // Reset the processing state on error
       setDesigns(prevDesigns => 
-        prevDesigns.map(design => 
-          design.id === designId 
-            ? { ...design, isProcessing: false, processingStep: null } 
-            : design
-        )
+        prevDesigns.map(design => {
+          if (design.id === designId || design.iterations?.some(it => it.id === designId)) {
+            return { ...design, isProcessing: false, processingStep: null };
+          }
+          return design;
+        })
       );
       
       // Show an error message
@@ -1950,6 +2031,13 @@ export const Canvas: React.FC = () => {
                   }
                 }}
               />
+              
+              {/* Add the iteration button when selected */}
+              {selectedDesignId === iteration.id && (
+                <IterationButton onClick={(e) => handleIterationClick(e, iteration.id)}>
+                  <PlusIcon />
+                </IterationButton>
+              )}
             </IterationDesignCard>
           </div>
         </HoverContainer>
