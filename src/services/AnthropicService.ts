@@ -1715,8 +1715,21 @@ class AnthropicService {
         figmaNodeId: designInfo.figmaNodeId 
       });
       
+      // Try the direct vision-based approach first as it's more reliable
+      if (imageUrl) {
+        console.log('Using direct vision-based approach with Claude 3.7 Sonnet');
+        try {
+          const visionResult = await this.convertFigmaDesignWithVision(imageUrl, designInfo);
+          return visionResult;
+        } catch (visionError) {
+          console.error('Vision-based approach failed, falling back to original method:', visionError);
+          // Continue with the original approach as fallback
+        }
+      }
+      
+      // Original approach continues below (as fallback)
       // STEP 1: Get detailed design data directly from Figma API
-      console.log('Fetching detailed design data from Figma API...');
+      console.log('Falling back to Figma API based approach');
       let figmaStyleData = null;
       let figmaError = null;
       
@@ -2358,6 +2371,161 @@ If you encounter any issues processing the image, use the exact Figma data I've 
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
       throw error;
+    }
+  }
+
+  // New method to directly convert Figma design to HTML/CSS using Claude's vision capabilities
+  async convertFigmaDesignWithVision(
+    imageUrl: string, 
+    designInfo: { 
+      width: number, 
+      height: number,
+      figmaFileKey: string, 
+      figmaNodeId: string 
+    }
+  ): Promise<{
+    htmlContent: string;
+    cssContent: string;
+    error?: string;
+  }> {
+    try {
+      console.log('Converting Figma design with Claude vision capabilities:', {
+        imageUrl: imageUrl.substring(0, 50) + '...',
+        width: designInfo.width,
+        height: designInfo.height,
+      });
+      
+      // Simple direct approach that works reliably
+      if (!imageUrl) {
+        throw new Error('Missing image URL for Figma design conversion');
+      }
+      
+      // System prompt focused on exact HTML/CSS conversion with detailed instructions
+      const systemPrompt = `You are an expert UI developer who specializes in converting designs into pixel-perfect HTML and CSS. 
+Your task is to convert the provided Figma design image into clean, semantic HTML and CSS code.
+
+REQUIREMENTS:
+1. Create semantic HTML with appropriate element hierarchy
+2. Write clean, well-structured CSS that matches the design exactly
+3. Ensure exact sizing, spacing, and layout of all elements
+4. Match fonts, colors, and visual styles precisely
+5. Organize CSS with clear class naming conventions
+6. Return the HTML and CSS as separate code blocks
+
+Your output must include:
+1. An HTML code block with the complete markup (inside \`\`\`html tags)
+2. A CSS code block with all necessary styles (inside \`\`\`css tags)`;
+
+      // User prompt with specific design details
+      const userPrompt = `Please convert this Figma design into HTML and CSS.
+
+Design Details:
+- Dimensions: ${designInfo.width}px × ${designInfo.height}px
+- Figma File: ${designInfo.figmaFileKey}
+- Node ID: ${designInfo.figmaNodeId}
+
+I need a clean, semantic HTML implementation with precise CSS that matches this design exactly. Please pay careful attention to:
+- Typography and text styling
+- Color values and gradients
+- Spacing and alignment
+- Component structure
+- Visual hierarchy
+
+Return the code as separate HTML and CSS blocks that I can directly use.`;
+
+      // Create the content array with text and image
+      const contentArray = [
+        {
+          type: "text",
+          text: userPrompt
+        },
+        {
+          type: "image",
+          source: {
+            type: "url",
+            url: imageUrl
+          }
+        }
+      ];
+      
+      // Implement retry logic for resilience
+      const maxRetries = 2;
+      let lastError = null;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`Attempt ${attempt + 1}/${maxRetries + 1} to convert design with Claude vision`);
+          
+          // Call Claude with timeout
+          const result = await Promise.race([
+            this.callAnthropicAPI(systemPrompt, contentArray, {
+              model: "claude-3-7-sonnet-20250219",
+              max_tokens: 4000,
+              temperature: 0.2,
+              useProxy: true
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timed out after 120 seconds')), 120000)
+            )
+          ]) as string;
+          
+          if (!result) {
+            throw new Error('Empty response from Claude API');
+          }
+          
+          // Extract HTML and CSS
+          const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
+          const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
+          
+          if (htmlMatch && cssMatch) {
+            console.log('Successfully extracted HTML and CSS from Claude response');
+            return {
+              htmlContent: htmlMatch[1].trim(),
+              cssContent: cssMatch[1].trim()
+            };
+          } else {
+            // Try alternative extraction if the standard pattern fails
+            const altHtmlMatch = result.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+            const altCssMatch = result.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+            
+            if (altHtmlMatch && altCssMatch) {
+              console.log('Extracted HTML/CSS using alternative patterns');
+              return {
+                htmlContent: `<html>${altHtmlMatch[1]}</html>`,
+                cssContent: altCssMatch[1].trim()
+              };
+            }
+            
+            throw new Error('Failed to extract HTML/CSS from Claude response');
+          }
+        } catch (error) {
+          console.error(`Attempt ${attempt + 1} failed:`, error);
+          lastError = error;
+          
+          if (attempt < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const backoffTime = Math.min(2000 * Math.pow(2, attempt), 10000);
+            console.log(`Retrying in ${backoffTime/1000} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          }
+        }
+      }
+      
+      // If all attempts fail, use a simple fallback
+      console.warn('All direct conversion attempts failed, using simplified fallback');
+      return this.generateSimplifiedHtmlCss(
+        designInfo, 
+        null, 
+        `Vision-based conversion failed: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`
+      );
+      
+    } catch (error) {
+      console.error('Error in vision-based Figma design conversion:', error);
+      return this.generateSimplifiedHtmlCss(
+        designInfo, 
+        null, 
+        `Vision conversion error: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 }
