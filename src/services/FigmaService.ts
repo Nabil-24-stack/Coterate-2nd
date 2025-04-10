@@ -456,7 +456,7 @@ class FigmaService {
     }
 
     // Remove duplicates from colors
-    styleData.colors = [...new Set(styleData.colors)];
+    styleData.colors = Array.from(new Set(styleData.colors));
 
     return styleData;
   }
