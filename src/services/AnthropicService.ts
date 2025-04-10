@@ -306,9 +306,9 @@ class AnthropicService {
       Based on your analysis, create an IMPROVED VERSION that:
       
       1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
-      2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
+      2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 90% of the original layout must remain unchanged
       3. Makes targeted improvements ONLY to:
-         - Visual hierarchy through component rearrangement where appropriate
+         - Visual hierarchy through subtle component rearrangement where appropriate
          - Component selection where a more appropriate component type serves the same function better
          - Spacing and alignment to improve clarity and flow
          - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
@@ -364,7 +364,9 @@ class AnthropicService {
       THIS IS VERY IMPORTANT: 
       - The improved version should look like an ITERATION of the original design, not a completely new design.
       - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
-      - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
+      - Maintain at least 90% of the original layout and visual structure.
+      - Only make targeted improvements to specific elements that need enhancement.
+      - You can improve the layout by making subtle adjustments to component placement or swapping components for more appropriate ones only when necessary (e.g., radio button to checkbox if multi-select is needed).
       - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
       
       Perform a detailed analysis focusing specifically on:
@@ -377,7 +379,7 @@ class AnthropicService {
       
       Then create an improved version that:
       - Uses the EXACT SAME colors, typography, and UI component styles as the original
-      - Maintains at least 85% of the original design's structure
+      - Maintains at least 90% of the original design's structure
       - Makes targeted improvements through better component arrangement or more appropriate component selection
       - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
       
@@ -1999,9 +2001,9 @@ footer {
     Based on your analysis, create an IMPROVED VERSION that:
     
     1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
-    2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
+    2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 90% of the original layout must remain unchanged
     3. Makes targeted improvements ONLY to:
-       - Visual hierarchy through component rearrangement where appropriate
+       - Visual hierarchy through subtle component rearrangement where appropriate
        - Component selection where a more appropriate component type serves the same function better
        - Spacing and alignment to improve clarity and flow
        - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
@@ -2057,7 +2059,9 @@ footer {
     THIS IS VERY IMPORTANT: 
     - The improved version should look like an ITERATION of the original design, not a completely new design.
     - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
-    - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
+    - Maintain at least 90% of the original layout and visual structure.
+    - Only make targeted improvements to specific elements that need enhancement.
+    - You can improve the layout by making subtle adjustments to component placement or swapping components for more appropriate ones only when necessary (e.g., radio button to checkbox if multi-select is needed).
     - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
     
     Perform a detailed analysis focusing specifically on:
@@ -2070,7 +2074,7 @@ footer {
     
     Then create an improved version that:
     - Uses the EXACT SAME colors, typography, and UI component styles as the original
-    - Maintains at least 85% of the original design's structure
+    - Maintains at least 90% of the original design's structure
     - Makes targeted improvements through better component arrangement or more appropriate component selection
     - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
     
