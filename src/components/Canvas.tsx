@@ -2288,6 +2288,24 @@ export const Canvas: React.FC = () => {
     loadCanvasPosition(currentPage.id);
   }, []); // Empty dependency array = only run once on mount
 
+  // Helper function to find a design by ID across all designs and iterations
+  const findDesignById = (designId: string): ExtendedDesign | ExtendedDesignIteration | undefined => {
+    // First, check if it's a top-level design
+    const foundDesign = designs.find(design => design.id === designId);
+    if (foundDesign) return foundDesign;
+    
+    // If not found, check iterations
+    for (const design of designs) {
+      if (design.iterations) {
+        const foundIteration = design.iterations.find(iteration => iteration.id === designId);
+        if (foundIteration) return foundIteration as ExtendedDesignIteration;
+      }
+    }
+    
+    // Not found in designs or iterations
+    return undefined;
+  };
+
   // Generate a design iteration - this implements PRD 2.4.2 and 2.4.4
   const generateDesignIteration = async (designId: string) => {
     try {
