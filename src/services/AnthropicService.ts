@@ -1671,7 +1671,7 @@ class AnthropicService {
     const result = { html: '', css: '' };
     
     // Extract HTML code between ```html and ``` tags
-    const htmlRegex = /```html\s*([\s\S]*?)```/;
+    const htmlRegex = /```html\s*([\s\S]*?)\s*```/i;
     const htmlMatch = responseText.match(htmlRegex);
     if (htmlMatch && htmlMatch[1]) {
       result.html = htmlMatch[1].trim();
@@ -1685,7 +1685,7 @@ class AnthropicService {
     }
     
     // Extract CSS code between ```css and ``` tags
-    const cssRegex = /```css\s*([\s\S]*?)```/;
+    const cssRegex = /```css\s*([\s\S]*?)\s*```/i;
     const cssMatch = responseText.match(cssRegex);
     if (cssMatch && cssMatch[1]) {
       result.css = cssMatch[1].trim();
@@ -1699,6 +1699,126 @@ class AnthropicService {
     }
     
     return result;
+  }
+
+  async convertFigmaDesignToHtmlCss(imageUrl: string, designInfo: { width: number, height: number, figmaFileKey: string, figmaNodeId: string }): Promise<{
+    htmlContent: string;
+    cssContent: string;
+    error?: string;
+  }> {
+    try {
+      console.log('Converting Figma design to HTML/CSS:', { imageUrl, ...designInfo });
+      
+      const systemPrompt = `You are a highly skilled UI developer specializing in pixel-perfect HTML/CSS recreation of designs.
+Your task is to convert a Figma design into precise HTML and CSS code.
+Focus solely on creating an exact replica with these requirements:
+
+1. Create semantic HTML5 structure
+2. Use clean, modern CSS (avoid unnecessary frameworks)
+3. Match visual details exactly: colors, spacing, typography, shadows, etc.
+4. Ensure the output is responsive where appropriate
+5. Separate HTML and CSS in your response
+6. Keep your code clean and maintainable
+
+Return your response in this format:
+1. First the complete HTML code 
+2. Then the complete CSS code
+
+This is purely a conversion task - maintain the original design exactly as shown.`;
+
+      const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
+
+Design Information:
+- Width: ${designInfo.width}px
+- Height: ${designInfo.height}px
+- Figma File Key: ${designInfo.figmaFileKey}
+- Figma Node ID: ${designInfo.figmaNodeId}
+
+Requirements:
+1. Create a pixel-perfect recreation of the design
+2. Use semantic HTML5 elements
+3. Use modern CSS (no unnecessary frameworks)
+4. Ensure exact matching of:
+   - Colors, gradients, and transparency
+   - Typography (fonts, sizes, weights, line heights)
+   - Spacing and positioning
+   - Borders, shadows, and effects
+5. Handle any visible text content exactly as shown
+6. For any icons, use appropriate HTML/CSS or Font Awesome equivalents
+7. For form elements, ensure they look identical to the design
+
+Provide the complete HTML and CSS code needed to recreate this design exactly.`;
+
+      const requestBody = {
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 4000,
+        temperature: 0.2,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user", 
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "url",
+                  url: imageUrl
+                }
+              },
+              {
+                type: "text",
+                text: userPrompt
+              }
+            ]
+          }
+        ]
+      };
+      
+      // Make API call to Anthropic for HTML/CSS generation
+      const response = await fetch('/api/anthropic-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        cache: 'no-cache'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Anthropic API error response:', errorData);
+        throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const generatedText = data.content?.[0]?.text || '';
+      
+      // Extract HTML and CSS from the response
+      const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
+      const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
+      
+      const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
+      const cssContent = cssMatch ? cssMatch[1].trim() : '';
+      
+      if (!htmlContent || !cssContent) {
+        console.error('Failed to extract HTML/CSS from Claude response:', generatedText.substring(0, 500) + '...');
+        return {
+          htmlContent: '<div>Error: Failed to generate HTML content</div>',
+          cssContent: 'body { font-family: sans-serif; color: red; }',
+          error: 'Failed to extract HTML/CSS from the generated response'
+        };
+      }
+      
+      return { htmlContent, cssContent };
+    } catch (error: any) {
+      console.error('Error converting Figma design to HTML/CSS:', error);
+      return {
+        htmlContent: '<div>Error: Failed to generate HTML content</div>',
+        cssContent: 'body { font-family: sans-serif; color: red; }',
+        error: error.message || 'Unknown error occurred'
+      };
+    }
   }
 }
 

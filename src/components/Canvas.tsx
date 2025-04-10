@@ -1050,15 +1050,16 @@ export const Canvas: React.FC = () => {
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DesignIteration | null>(null);
   
+  // Refs
   const canvasRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  // Update the designRefs type to correctly store the HtmlDesignRendererHandle
-  const designRefs = useRef<{ [key: string]: HtmlDesignRendererHandle | null }>({});
-  const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
-  
-  // Ref to track which iterations have been logged to avoid repeated console logs
+  const contentRef = useRef<HTMLDivElement>(null);
+  const lastCursorPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastActivePageIdRef = useRef<string | null>(null);
+  const userInteractingRef = useRef<boolean>(false);
+  const designRefs = useRef<Record<string, HtmlDesignRendererHandle>>({});
   const renderedIterationsRef = useRef<Set<string>>(new Set());
-
+  const renderedDesignsRef = useRef<Set<string>>(new Set());
+  
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -1872,6 +1873,14 @@ export const Canvas: React.FC = () => {
     };
   }, []);
   
+  // Function to update page designs in the page context
+  const updatePageDesigns = (pageId: string) => {
+    if (designs.length > 0 && updatePage) {
+      // Create a copy of the current designs to update in the page context
+      updatePage(pageId, { designs: [...designs] });
+    }
+  };
+  
   async function fetchFigmaNode(fileKey: string, nodeId: string) {
     try {
       console.log(`Fetching Figma node - File: ${fileKey}, Node: ${nodeId}`);
@@ -1905,53 +1914,96 @@ export const Canvas: React.FC = () => {
       // Generate a unique ID for this design
       const designId = crypto.randomUUID();
       
-      // Add a placeholder design while loading
-      const placeholderDesign: Design = {
+      // Add a placeholder design with loading state while processing
+      const placeholderDesign: ExtendedDesign = {
         id: designId,
         imageUrl: '/loading-placeholder.svg', // Use a loading placeholder
         position: { x: 100, y: 100 },
         isFromFigma: true,
         figmaFileKey: fileKey,
-        figmaNodeId: nodeId
+        figmaNodeId: nodeId,
+        isProcessing: true,
+        processingStep: 'analyzing' // Start with the analyzing step
       };
       
       setDesigns(prev => [...prev, placeholderDesign]);
       
       console.log('Added placeholder design, calling importFigmaDesign with:', {fileKey, nodeId});
       
-      // Use the importFigmaDesign method to get the image
+      // Use the importFigmaDesign method to get the image and metadata
       const importResult = await supabaseService.importFigmaDesign(fileKey, nodeId);
       
       console.log('Import result:', importResult);
       
-      if (!importResult || !importResult.imageUrl) {
-        console.error('Failed to import Figma design');
-        setFigmaAuthError('Failed to import Figma design. Please try again.');
-        
-        // Remove the placeholder design
-        setDesigns(prev => prev.filter(d => d.id !== designId));
-        return;
+      if (!importResult) {
+        throw new Error('Failed to import Figma design');
       }
       
-      console.log('Successfully imported Figma design:', importResult);
+      // Get image dimensions
+      const dimensions = await getImageDimensions(importResult.imageUrl);
+      console.log('Image dimensions:', dimensions);
       
-      // Update the placeholder design with the actual image in local state
-      setDesigns(prev => prev.map(design => 
-        design.id === designId
-          ? {
-              ...design,
+      // Update the design with the image URL and name
+      setDesigns(prev => {
+        return prev.map(d => {
+          if (d.id === designId) {
+            return {
+              ...d,
               imageUrl: importResult.imageUrl,
-              name: importResult.name,
-              dimensions: { width: 500, height: 400 } // Default dimensions
-            }
-          : design
-      ));
+              dimensions: dimensions,
+              processingStep: 'recreating', // Update to recreating step
+            };
+          }
+          return d;
+        });
+      });
       
-      // Clear pending link since we've processed it
+      // Now use Claude 3.7 Sonnet to convert the Figma design to HTML/CSS
+      console.log('Converting Figma design to HTML/CSS with Claude 3.7 Sonnet');
+      
+      const htmlCssResult = await anthropicService.convertFigmaDesignToHtmlCss(
+        importResult.imageUrl, 
+        {
+          width: dimensions.width,
+          height: dimensions.height,
+          figmaFileKey: fileKey,
+          figmaNodeId: nodeId
+        }
+      );
+      
+      console.log('HTML/CSS conversion result:', {
+        hasHtml: !!htmlCssResult.htmlContent,
+        hasCss: !!htmlCssResult.cssContent,
+        htmlLength: htmlCssResult.htmlContent?.length || 0,
+        cssLength: htmlCssResult.cssContent?.length || 0,
+        error: htmlCssResult.error
+      });
+      
+      // Update the design with the final HTML/CSS content
+      setDesigns(prev => {
+        return prev.map(d => {
+          if (d.id === designId) {
+            return {
+              ...d,
+              htmlContent: htmlCssResult.htmlContent,
+              cssContent: htmlCssResult.cssContent,
+              isProcessing: false,
+              processingStep: null, // Clear processing step
+              figmaSelectionLink: `https://www.figma.com/file/${fileKey}?node-id=${nodeId}`,
+              name: importResult.name || 'Figma Design'
+            };
+          }
+          return d;
+        });
+      });
+      
+      // Add this design to the current page
+      if (currentPage?.id) {
+        updatePageDesigns(currentPage.id);
+      }
+      
+      // Clear pending link
       setPendingFigmaLink(null);
-      
-      // We no longer need to store in Supabase database - only in local state
-      console.log('Design stored in local state only, skipping database operations');
       
     } catch (error: any) {
       console.error('Error fetching Figma node:', error);
@@ -1976,6 +2028,9 @@ export const Canvas: React.FC = () => {
         // Add the auth design to the canvas
         setDesigns(prev => [...prev, authDesign]);
         setPendingFigmaLink({ fileKey, nodeId, isValid: true });
+      } else {
+        // For other errors, remove the placeholder design
+        setDesigns(prev => prev.filter(d => !(d.figmaFileKey === fileKey && d.figmaNodeId === nodeId && d.isProcessing)));
       }
     }
   }
@@ -2086,44 +2141,62 @@ export const Canvas: React.FC = () => {
           onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
           style={{ position: 'relative' }}
         >
-          {design.imageUrl && (
-            <>
-              <DesignImage 
-                src={design.imageUrl}
-                alt="Design"
-                onLoad={() => debugImageLoad(design.imageUrl, true)}
-                onError={(e) => debugImageLoad(design.imageUrl, false, e.toString())}
-              />
-              <ProcessingOverlay 
-                visible={!!design.isProcessing} 
-                step={design.processingStep || null}
-              >
-                <Spinner />
-                <h3>
-                  {design.processingStep === 'analyzing' && 'Analyzing Design'}
-                  {design.processingStep === 'recreating' && 'Generating Improved Design'}
-                  {design.processingStep === 'rendering' && 'Finalizing Design'}
-                </h3>
-                <p>
-                  {design.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
-                  {design.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
-                  {design.processingStep === 'rendering' && 'Preparing to display your improved design...'}
-                </p>
-                <ProcessingSteps step={design.processingStep || null} />
-                <div className="progress-bar">
-                  <div className="progress"></div>
-                </div>
-                <div className="step-description">
-                  {design.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
-                  {design.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
-                  {design.processingStep === 'rendering' && 'Final touches and optimizations...'}
-                </div>
-              </ProcessingOverlay>
-            </>
+          {/* Render either the HTML/CSS content or the image */}
+          {design.htmlContent && design.cssContent ? (
+            <HtmlDesignRenderer
+              ref={(el: HtmlDesignRendererHandle | null) => {
+                if (el) {
+                  designRefs.current[design.id] = el as any;
+                }
+              }}
+              htmlContent={design.htmlContent}
+              cssContent={design.cssContent}
+              width={design.dimensions?.width}
+              height={design.dimensions?.height}
+              onRender={(success) => {
+                // Only log the first successful render to avoid console clutter
+                if (success && !renderedDesignsRef.current.has(design.id)) {
+                  console.log(`Design ${design.id} rendered successfully: ${success}`);
+                  renderedDesignsRef.current.add(design.id);
+                }
+              }}
+            />
+          ) : design.imageUrl && (
+            <DesignImage 
+              src={design.imageUrl}
+              alt="Design"
+              onLoad={() => debugImageLoad(design.imageUrl, true)}
+              onError={(e) => debugImageLoad(design.imageUrl, false, e.toString())}
+            />
           )}
+          <ProcessingOverlay 
+            visible={!!design.isProcessing} 
+            step={design.processingStep || null}
+          >
+            <Spinner />
+            <h3>
+              {design.processingStep === 'analyzing' && 'Analyzing Design'}
+              {design.processingStep === 'recreating' && 'Converting Design to HTML/CSS'}
+              {design.processingStep === 'rendering' && 'Finalizing Design'}
+            </h3>
+            <p>
+              {design.processingStep === 'analyzing' && 'Claude 3.7 Sonnet is analyzing your Figma design...'}
+              {design.processingStep === 'recreating' && 'Creating an HTML/CSS recreation of your design...'}
+              {design.processingStep === 'rendering' && 'Preparing to display your design...'}
+            </p>
+            <ProcessingSteps step={design.processingStep || null} />
+            <div className="progress-bar">
+              <div className="progress"></div>
+            </div>
+            <div className="step-description">
+              {design.processingStep === 'analyzing' && 'Inspecting visual elements and structure...'}
+              {design.processingStep === 'recreating' && 'Converting to precise HTML/CSS representation...'}
+              {design.processingStep === 'rendering' && 'Final touches and optimizations...'}
+            </div>
+          </ProcessingOverlay>
         </DesignCard>
         
-        {/* Show the iteration button on hover instead of on selection */}
+        {/* Show the iteration button on hover */}
         <IterationButton onClick={(e) => handleIterationClick(e, design.id)}>
           <PlusIcon />
         </IterationButton>
