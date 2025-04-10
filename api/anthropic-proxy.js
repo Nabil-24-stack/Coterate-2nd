@@ -191,9 +191,9 @@ function optimizeRequest(requestBody) {
     optimized.max_tokens = Math.max(optimized.max_tokens || 4000, 4000);
   }
   
-  // For large token requests, add chunking indicator to handle them better
-  if (optimized.max_tokens > 2500 && !optimized.stream) {
-    optimized.chunked = true;
+  // Remove the problematic chunked parameter - we'll handle large responses differently
+  if (optimized.chunked) {
+    delete optimized.chunked;
   }
   
   // Check if this is a design conversion with a large payload
@@ -263,6 +263,20 @@ function optimizeRequest(requestBody) {
   if (optimized.anthropic_beta && optimized.anthropic_beta.includes('max-tokens-boost-enabled')) {
     delete optimized.anthropic_beta;
   }
+
+  // Make sure no other custom properties are added
+  const validAnthropicParams = [
+    'model', 'max_tokens', 'metadata', 'stop_sequences',
+    'stream', 'system', 'temperature', 'top_k', 'top_p', 'messages'
+  ];
+  
+  // Remove any properties that aren't in the validAnthropicParams list
+  Object.keys(optimized).forEach(key => {
+    if (!validAnthropicParams.includes(key)) {
+      console.log(`Removing unsupported Anthropic API parameter: ${key}`);
+      delete optimized[key];
+    }
+  });
   
   return optimized;
 } 
