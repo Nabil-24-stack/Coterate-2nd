@@ -6,12 +6,19 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Get the API key from environment variables
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // Get the API key from environment variables - use the Create React App env variable
+    const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
     
     if (!apiKey) {
       console.error('Anthropic API key not configured');
-      return res.status(500).json({ message: 'Server configuration error: API key not found' });
+      return res.status(500).json({ 
+        message: 'Server configuration error: API key not found',
+        envInfo: {
+          hasReactAppKey: !!process.env.REACT_APP_ANTHROPIC_API_KEY,
+          hasRegularKey: !!process.env.ANTHROPIC_API_KEY,
+          nodeEnv: process.env.NODE_ENV,
+        }
+      });
     }
 
     // Forward the request to Anthropic API
