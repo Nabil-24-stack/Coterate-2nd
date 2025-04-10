@@ -57,6 +57,52 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request body' });
     }
     
+    // Extra validation for image data
+    try {
+      if (requestBody.messages && 
+          requestBody.messages[0] && 
+          requestBody.messages[0].content && 
+          Array.isArray(requestBody.messages[0].content)) {
+        
+        // Look for any image content
+        const imageContent = requestBody.messages[0].content.find(item => 
+          item.type === 'image' && item.source && item.source.type === 'base64'
+        );
+        
+        if (imageContent) {
+          console.log('Found image content in request, validating...');
+          
+          // Check if data looks like a base64 string
+          const data = imageContent.source.data;
+          const mediaType = imageContent.source.media_type || 'image/jpeg';
+          
+          if (!data || typeof data !== 'string') {
+            console.error('Image data is missing or not a string');
+            return res.status(400).json({ 
+              message: 'Invalid image data: missing or not a string',
+              type: 'error',
+              error: { type: 'invalid_request_error' }
+            });
+          }
+          
+          // Simple validation that it looks like base64
+          if (!/^[A-Za-z0-9+/=]+$/.test(data)) {
+            console.error('Image data contains invalid characters for base64');
+            return res.status(400).json({ 
+              message: 'Invalid image data: not a valid base64 string',
+              type: 'error',
+              error: { type: 'invalid_request_error' }
+            });
+          }
+          
+          console.log(`Validated image with media type ${mediaType}, data length: ${data.length}`);
+        }
+      }
+    } catch (validationError) {
+      console.error('Error validating image data:', validationError);
+      // Continue anyway, let Anthropic handle the validation
+    }
+    
     console.log('Forwarding request to Anthropic API...');
     
     // Forward the request to Anthropic API

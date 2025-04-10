@@ -351,6 +351,32 @@ class AnthropicService {
       The design dimensions are ${dimensions.width}px × ${dimensions.height}px.
       ${linkedInsights.length > 0 ? insightsPrompt : ''}`;
       
+      // Determine the correct media type based on the image data
+      let mediaType = 'image/jpeg';
+      let processedBase64Image = base64Image;
+      
+      // Check if it's a PNG by looking at the data
+      if (imageUrl.startsWith('data:image/png') || (imageUrl.startsWith('data:image') && base64Image.startsWith('iVBOR'))) {
+        mediaType = 'image/png';
+      }
+      
+      // Process the base64 data to ensure it doesn't contain any metadata or padding
+      if (processedBase64Image.includes(',')) {
+        processedBase64Image = processedBase64Image.split(',')[1];
+      }
+      
+      // Trim any whitespace and ensure it's a valid base64 string
+      processedBase64Image = processedBase64Image.trim();
+      
+      // Check if it's a valid base64 string
+      const isBase64 = /^[A-Za-z0-9+/=]+$/.test(processedBase64Image);
+      if (!isBase64) {
+        console.error('Invalid base64 image data');
+        throw new Error('Invalid image data format');
+      }
+      
+      console.log(`Using media type: ${mediaType} for image data length: ${processedBase64Image.length}`);
+      
       const analysisRequestBody = {
         model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
@@ -368,8 +394,8 @@ class AnthropicService {
                 type: "image",
                 source: {
                   type: "base64",
-                  media_type: "image/jpeg",
-                  data: base64Image
+                  media_type: mediaType,
+                  data: processedBase64Image
                 }
               }
             ]
@@ -1211,8 +1237,14 @@ class AnthropicService {
           
           // Some basic validation that it looks like base64
           if (!/^[A-Za-z0-9+/=]+$/.test(base64)) {
-            console.warn('Base64 string contains invalid characters, attempting to clean');
+            console.warn('Base64 string contains invalid characters, cleaning...');
             base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+            
+            if (base64.length === 0) {
+              console.error('Base64 string is empty after cleaning');
+              reject(new Error('Base64 string is empty after cleaning'));
+              return;
+            }
           }
           
           console.log('Successfully converted blob to base64, length:', base64.length);
