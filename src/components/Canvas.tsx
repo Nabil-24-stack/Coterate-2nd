@@ -1052,7 +1052,8 @@ export const Canvas: React.FC = () => {
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  // Update the designRefs type to correctly store the HtmlDesignRendererHandle
+  const designRefs = useRef<{ [key: string]: HtmlDesignRendererHandle | null }>({});
   const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
   
   // Ref to track which iterations have been logged to avoid repeated console logs
@@ -1163,8 +1164,8 @@ export const Canvas: React.FC = () => {
   const selectedDesign = designs.find(d => d.id === selectedDesignId);
   
   // Helper to get a specific design reference
-  const getDesignRef = (id: string) => {
-    return designRefs.current[id];
+  const getDesignRef = (id: string): HtmlDesignRendererHandle | null => {
+    return designRefs.current[id] || null;
   };
   
   // Handle wheel with mouse wheel
@@ -1219,13 +1220,11 @@ export const Canvas: React.FC = () => {
     // Start tracking user interaction
     userInteractingRef.current = true;
     
-    // Check if clicking on any design
+    // Check if clicking on any design - using a different approach to detect click targets
+    const target = e.target as Node;
     const clickedDesignId = designs.find(design => {
-      const designRef = getDesignRef(design.id);
-      if (!designRef) return false;
-      
-      // Check if clicking on the design or any of its children
-      return designRef.contains(e.target as Node);
+      const designElement = document.getElementById(`design-${design.id}`);
+      return designElement && designElement.contains(target);
     })?.id;
     
     if (clickedDesignId) {
@@ -2330,15 +2329,15 @@ export const Canvas: React.FC = () => {
       let sourceImageUrl = '';
       
       if (isIteration) {
-        // Using the HtmlDesignRenderer ref to convert to image
+        // Using the HtmlDesignRenderer component for conversion to image
         const iteration = designToIterate as DesignIteration;
         
         // Find the rendered component by its ID
         const rendererRef = getDesignRef(iteration.id);
-        if (rendererRef?.current) {
-          // Convert to image
+        if (rendererRef) {
+          // Convert to image using the renderer ref directly
           console.log('Converting iteration to image for analysis...');
-          const imageUrl = await rendererRef.current.convertToImage();
+          const imageUrl = await rendererRef.convertToImage();
           if (imageUrl) {
             sourceImageUrl = imageUrl;
             
@@ -2410,7 +2409,7 @@ export const Canvas: React.FC = () => {
       console.log('Starting design analysis with Anthropic service...');
       
       // Get any linked insights for this design from the current page
-      const linkedInsights = []; // In the future, get this from the insights tab
+      const linkedInsights: any[] = []; // In the future, get this from the insights tab
       
       let result;
       if (isIteration) {
