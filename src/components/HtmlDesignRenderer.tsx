@@ -82,6 +82,33 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
   
   // Process the CSS content
   const processedCssContent = preprocessCss(cssContent || '');
+  
+  // Add debug logging for empty content
+  useEffect(() => {
+    if (!htmlContent) {
+      console.warn('HtmlDesignRenderer: Empty HTML content received');
+    }
+    if (!cssContent) {
+      console.warn('HtmlDesignRenderer: Empty CSS content received');
+    }
+  }, [htmlContent, cssContent]);
+
+  // Fallback content if HTML is empty
+  const finalHtmlContent = processedHtmlContent || `
+    <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f8f9fa; color: #6c757d; font-family: system-ui, sans-serif; padding: 20px; text-align: center;">
+      <div style="margin-bottom: 20px; width: 50px; height: 50px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="9" y1="3" x2="9" y2="21"></line>
+          <line x1="15" y1="3" x2="15" y2="21"></line>
+          <line x1="3" y1="9" x2="21" y2="9"></line>
+          <line x1="3" y1="15" x2="21" y2="15"></line>
+        </svg>
+      </div>
+      <h3 style="margin: 0 0 10px; font-size: 20px; font-weight: 500;">Rendering Issue</h3>
+      <p style="margin: 0; font-size: 16px;">Unable to render the design. Please try again with a different image or check the console for more details.</p>
+    </div>
+  `;
 
   // Extract unique webfonts from CSS to preload
   const extractWebFonts = (css: string): string[] => {
@@ -310,7 +337,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
       </script>
     </head>
     <body>
-      ${processedHtmlContent}
+      ${finalHtmlContent}
     </body>
     </html>
   `;

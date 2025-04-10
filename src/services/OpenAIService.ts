@@ -497,145 +497,212 @@ class OpenAIService {
   private parseOpenAIResponse(response: string, hasUserInsights: boolean = false): DesignAnalysisResponse {
     console.log('Parsing OpenAI response...');
     
-    // Initialize result structure
-    const result: DesignAnalysisResponse = {
-      analysis: {
-        strengths: [],
-        weaknesses: [],
-        improvementAreas: [],
-        specificChanges: [],
-        visualHierarchy: {
-          issues: [],
-          improvements: []
+    try {
+      // Log the first 200 characters of the response to help with debugging
+      console.log('OpenAI response preview:', response.substring(0, 200) + '...');
+      
+      // Initialize result structure
+      const result: DesignAnalysisResponse = {
+        analysis: {
+          strengths: [],
+          weaknesses: [],
+          improvementAreas: [],
+          specificChanges: [],
+          visualHierarchy: {
+            issues: [],
+            improvements: []
+          },
+          colorContrast: {
+            issues: [],
+            improvements: []
+          },
+          componentSelection: {
+            issues: [],
+            improvements: []
+          },
+          textLegibility: {
+            issues: [],
+            improvements: []
+          },
+          usability: {
+            issues: [],
+            improvements: []
+          },
+          accessibility: {
+            issues: [],
+            improvements: []
+          },
+          designSystem: {
+            colorPalette: [],
+            typography: [],
+            components: []
+          }
         },
-        colorContrast: {
-          issues: [],
-          improvements: []
-        },
-        componentSelection: {
-          issues: [],
-          improvements: []
-        },
-        textLegibility: {
-          issues: [],
-          improvements: []
-        },
-        usability: {
-          issues: [],
-          improvements: []
-        },
-        accessibility: {
-          issues: [],
-          improvements: []
-        },
-        designSystem: {
-          colorPalette: [],
-          typography: [],
+        htmlCode: '',
+        cssCode: '',
+        metadata: {
+          colors: {
+            primary: [],
+            secondary: [],
+            background: [],
+            text: []
+          },
+          fonts: [],
           components: []
         }
-      },
-      htmlCode: '',
-      cssCode: '',
-      metadata: {
-        colors: {
-          primary: [],
-          secondary: [],
-          background: [],
-          text: []
-        },
-        fonts: [],
-        components: []
-      }
-    };
-    
-    // Extract HTML code between ```html and ``` tags
-    const htmlMatch = response.match(/```html\n([\s\S]*?)```/);
-    if (htmlMatch && htmlMatch[1]) {
-      result.htmlCode = htmlMatch[1].trim();
-    }
-    
-    // Extract CSS code between ```css and ``` tags
-    const cssMatch = response.match(/```css\n([\s\S]*?)```/);
-    if (cssMatch && cssMatch[1]) {
-      result.cssCode = cssMatch[1].trim();
-    }
-    
-    // Extract design system information
-    result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
-    result.analysis.designSystem.typography = this.extractListItems(response, 'Typography|Design System Extraction.*?Typography');
-    result.analysis.designSystem.components = this.extractListItems(response, 'UI Components|Design System Extraction.*?Components');
-    
-    // Extract general analysis sections
-    result.analysis.strengths = this.extractListItems(response, 'Strengths|General Strengths');
-    result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses|General Weaknesses');
-    result.analysis.improvementAreas = this.extractListItems(response, 'Improvements|Improvement Areas|Areas for Improvement');
-    result.analysis.specificChanges = this.extractListItems(response, 'Specific Changes|Changes Made|Implemented Changes');
-    
-    // Extract specific analysis categories
-    result.analysis.visualHierarchy.issues = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.visualHierarchy.improvements = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    result.analysis.colorContrast.issues = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.colorContrast.improvements = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    result.analysis.componentSelection.issues = this.extractListItems(response, 'Component Selection(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Component Placement(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.componentSelection.improvements = this.extractListItems(response, 'Component Selection(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Component Placement(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    result.analysis.textLegibility.issues = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.textLegibility.improvements = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    result.analysis.usability.issues = this.extractListItems(response, 'Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Overall Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.usability.improvements = this.extractListItems(response, 'Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Overall Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    result.analysis.accessibility.issues = this.extractListItems(response, 'Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility Considerations(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-    result.analysis.accessibility.improvements = this.extractListItems(response, 'Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility Considerations(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-    
-    // Extract colors
-    result.metadata.colors.primary = this.extractColors(response, 'Primary');
-    result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
-    result.metadata.colors.background = this.extractColors(response, 'Background');
-    result.metadata.colors.text = this.extractColors(response, 'Text');
-    
-    // Extract all colors from CSS as a fallback
-    if (result.cssCode) {
-      const allCssColors = result.cssCode.match(/#[0-9A-Fa-f]{3,6}|rgba?\([^)]+\)/g) || [];
+      };
       
-      // If we couldn't extract colors from the analysis, use the CSS colors
-      if (
-        result.metadata.colors.primary.length === 0 &&
-        result.metadata.colors.secondary.length === 0 &&
-        result.metadata.colors.background.length === 0 &&
-        result.metadata.colors.text.length === 0
-      ) {
-        // Add unique colors from CSS - using Array.from instead of spread to handle Set in TypeScript
-        const uniqueColors = Array.from(new Set(allCssColors));
-        result.metadata.colors.primary = uniqueColors.slice(0, 2);
-        result.metadata.colors.secondary = uniqueColors.slice(2, 4);
-        result.metadata.colors.background = uniqueColors.slice(4, 6);
-        result.metadata.colors.text = uniqueColors.slice(6, 8);
+      // Extract HTML code between ```html and ``` tags with more flexible pattern matching
+      const htmlRegexPatterns = [
+        /```html\n([\s\S]*?)```/,       // Standard format
+        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
+        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
+        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
+        /```([\s\S]*?)<\/html>\n```/    // Code block with HTML ending tag
+      ];
+      
+      let htmlContent = '';
+      for (const pattern of htmlRegexPatterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          htmlContent = match[1].trim();
+          break;
+        }
       }
+      
+      // If no match found but there's a <!DOCTYPE html> in the response, try to extract it
+      if (!htmlContent && response.includes('<!DOCTYPE html>')) {
+        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
+        const endIndex = response.indexOf('</html>', docTypeIndex);
+        if (endIndex > docTypeIndex) {
+          htmlContent = response.substring(docTypeIndex, endIndex + 7).trim();
+        }
+      }
+      
+      result.htmlCode = htmlContent || '';
+      
+      // Extract CSS code between ```css and ``` tags with more flexible pattern matching
+      const cssRegexPatterns = [
+        /```css\n([\s\S]*?)```/,       // Standard format
+        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
+        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
+        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
+      ];
+      
+      let cssContent = '';
+      for (const pattern of cssRegexPatterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          cssContent = match[1].trim();
+          break;
+        }
+      }
+      
+      // If no full match found but there are CSS properties in the response, try to extract style block
+      if (!cssContent && response.includes('style>')) {
+        const styleIndex = response.indexOf('<style>');
+        const endIndex = response.indexOf('</style>', styleIndex);
+        if (endIndex > styleIndex && styleIndex !== -1) {
+          cssContent = response.substring(styleIndex + 7, endIndex).trim();
+        }
+      }
+      
+      result.cssCode = cssContent || '';
+      
+      // Extract design system information
+      result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
+      result.analysis.designSystem.typography = this.extractListItems(response, 'Typography|Design System Extraction.*?Typography');
+      result.analysis.designSystem.components = this.extractListItems(response, 'UI Components|Design System Extraction.*?Components');
+      
+      // Extract general analysis sections
+      result.analysis.strengths = this.extractListItems(response, 'Strengths|General Strengths');
+      result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses|General Weaknesses');
+      result.analysis.improvementAreas = this.extractListItems(response, 'Improvements|Improvement Areas|Areas for Improvement');
+      result.analysis.specificChanges = this.extractListItems(response, 'Specific Changes|Changes Made|Implemented Changes');
+      
+      // Extract specific analysis categories
+      result.analysis.visualHierarchy.issues = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.visualHierarchy.improvements = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      result.analysis.colorContrast.issues = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.colorContrast.improvements = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      result.analysis.componentSelection.issues = this.extractListItems(response, 'Component Selection(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Component Placement(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.componentSelection.improvements = this.extractListItems(response, 'Component Selection(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Component Placement(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      result.analysis.textLegibility.issues = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.textLegibility.improvements = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      result.analysis.usability.issues = this.extractListItems(response, 'Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Overall Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.usability.improvements = this.extractListItems(response, 'Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Overall Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      result.analysis.accessibility.issues = this.extractListItems(response, 'Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility Considerations(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
+      result.analysis.accessibility.improvements = this.extractListItems(response, 'Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility Considerations(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
+      
+      // Extract colors
+      result.metadata.colors.primary = this.extractColors(response, 'Primary');
+      result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
+      result.metadata.colors.background = this.extractColors(response, 'Background');
+      result.metadata.colors.text = this.extractColors(response, 'Text');
+      
+      // Extract all colors from CSS as a fallback
+      if (result.cssCode) {
+        const allCssColors = result.cssCode.match(/#[0-9A-Fa-f]{3,6}|rgba?\([^)]+\)/g) || [];
+        
+        // If we couldn't extract colors from the analysis, use the CSS colors
+        if (
+          result.metadata.colors.primary.length === 0 &&
+          result.metadata.colors.secondary.length === 0 &&
+          result.metadata.colors.background.length === 0 &&
+          result.metadata.colors.text.length === 0
+        ) {
+          // Add unique colors from CSS - using Array.from instead of spread to handle Set in TypeScript
+          const uniqueColors = Array.from(new Set(allCssColors));
+          result.metadata.colors.primary = uniqueColors.slice(0, 2);
+          result.metadata.colors.secondary = uniqueColors.slice(2, 4);
+          result.metadata.colors.background = uniqueColors.slice(4, 6);
+          result.metadata.colors.text = uniqueColors.slice(6, 8);
+        }
+      }
+      
+      // Extract fonts from CSS as a fallback
+      if (result.cssCode && result.metadata.fonts.length === 0) {
+        const fontFamilies = result.cssCode.match(/font-family:\s*([^;]+)/g) || [];
+        result.metadata.fonts = fontFamilies
+          .map(f => f.replace('font-family:', '').trim())
+          .filter((f, i, self) => self.indexOf(f) === i); // Unique values only
+      }
+      
+      // Extract fonts
+      result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
+      
+      // Extract components
+      result.metadata.components = this.extractListItems(response, 'Components|UI Components');
+      
+      // Extract user insights applied if relevant
+      if (hasUserInsights) {
+        result.userInsightsApplied = this.extractListItems(response, 'User Insights Applied|User Insights|User Research Applied');
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('Error parsing OpenAI response:', error);
+      
+      // In production, never use fallback
+      if (this.isProductionEnvironment()) {
+        throw new Error(`Failed to parse OpenAI response: ${error.message}`);
+      }
+      
+      // Only use fallback in development
+      if (this.isDevEnvironment()) {
+        console.log('Development environment detected, using fallback response');
+        // Use default dimensions since we don't have access to imageUrl here
+        return this.getFallbackAnalysisResponse({ width: 800, height: 600 });
+      }
+      
+      // Default behavior
+      throw new Error(`Failed to parse OpenAI response: ${error.message}`);
     }
-    
-    // Extract fonts from CSS as a fallback
-    if (result.cssCode && result.metadata.fonts.length === 0) {
-      const fontFamilies = result.cssCode.match(/font-family:\s*([^;]+)/g) || [];
-      result.metadata.fonts = fontFamilies
-        .map(f => f.replace('font-family:', '').trim())
-        .filter((f, i, self) => self.indexOf(f) === i); // Unique values only
-    }
-    
-    // Extract fonts
-    result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
-    
-    // Extract components
-    result.metadata.components = this.extractListItems(response, 'Components|UI Components');
-    
-    // Extract user insights applied if relevant
-    if (hasUserInsights) {
-      result.userInsightsApplied = this.extractListItems(response, 'User Insights Applied|User Insights|User Research Applied');
-    }
-    
-    return result;
   }
   
   // Helper to extract list items from a section
@@ -1268,34 +1335,34 @@ footer {
           Perform a comprehensive analysis of the design focusing on:
           
           1. Visual hierarchy:
-            - Analyze how effectively the design guides the user's attention
-            - Identify elements that compete for attention or are not properly emphasized
-            - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
+             - Analyze how effectively the design guides the user's attention
+             - Identify elements that compete for attention or are not properly emphasized
+             - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
           
           2. Color contrast and accessibility:
-            - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
-            - Analyze color combinations that may cause visibility or accessibility issues
-            - Evaluate overall color harmony and effective use of color to convey information
+             - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
+             - Analyze color combinations that may cause visibility or accessibility issues
+             - Evaluate overall color harmony and effective use of color to convey information
           
           3. Component selection and placement:
-            - Evaluate the appropriateness of UI components for their intended functions
-            - Identify issues with component placement, grouping, or organization
-            - Assess consistency in component usage throughout the design
+             - Evaluate the appropriateness of UI components for their intended functions
+             - Identify issues with component placement, grouping, or organization
+             - Assess consistency in component usage throughout the design
           
           4. Text legibility:
-            - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
-            - Evaluate line length, line height, letter spacing, and overall readability
-            - Assess font choices for appropriateness to the content and brand
+             - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
+             - Evaluate line length, line height, letter spacing, and overall readability
+             - Assess font choices for appropriateness to the content and brand
           
           5. Overall usability:
-            - Analyze the intuitiveness of interactions and flows
-            - Identify potential points of confusion or friction
-            - Evaluate spacing, alignment, and overall layout effectiveness
+             - Analyze the intuitiveness of interactions and flows
+             - Identify potential points of confusion or friction
+             - Evaluate spacing, alignment, and overall layout effectiveness
           
           6. Accessibility considerations:
-            - Identify potential issues for users with disabilities
-            - Assess keyboard navigability, screen reader compatibility, and semantic structure
-            - Evaluate compliance with WCAG guidelines
+             - Identify potential issues for users with disabilities
+             - Assess keyboard navigability, screen reader compatibility, and semantic structure
+             - Evaluate compliance with WCAG guidelines
           
           IMPROVEMENT REQUIREMENTS:
           Based on your analysis, create an IMPROVED VERSION that:
