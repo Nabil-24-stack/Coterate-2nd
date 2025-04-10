@@ -116,7 +116,7 @@ class AnthropicService {
   
   // Main method to analyze design image and generate improved version
   async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
-    if (!this.apiKey) {
+    if (!this.apiKey && !this.isProductionEnvironment()) {
       console.error('Anthropic API key not configured, cannot generate design iteration');
       throw new Error('Anthropic API key not configured. Please set it in your environment variables.');
     }
@@ -225,9 +225,7 @@ class AnthropicService {
         throw new Error('Invalid image data');
       }
       
-      // This is a two-step process:
-      // STEP 1: Analyze the original design to extract the design system and identify issues
-      
+      // STEP 1: Analyze the original design with error handling and retries
       console.log('STEP 1: Analyzing original design...');
       
       const analysisSystemPrompt = `You are a UI/UX design expert tasked with thoroughly analyzing a user interface design. 
@@ -308,19 +306,56 @@ class AnthropicService {
         ]
       };
       
-      // Make API call to Anthropic for analysis
-      const analysisResponse = await fetch('/api/anthropic-proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(analysisRequestBody)
-      });
+      // First try the proxy endpoint, with fallback to direct call if allowed
+      let analysisResponse;
+      let analysisError = null;
       
-      if (!analysisResponse.ok) {
-        const errorData = await analysisResponse.text();
-        console.error('Anthropic API error response (analysis):', errorData);
-        throw new Error(`Design analysis failed: ${analysisResponse.status} ${analysisResponse.statusText}`);
+      try {
+        // Try using our server proxy first
+        console.log('Trying server proxy for Anthropic API analysis...');
+        analysisResponse = await fetch('/api/anthropic-proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(analysisRequestBody)
+        });
+        
+        if (!analysisResponse.ok) {
+          const errorText = await analysisResponse.text();
+          console.error('Server proxy error response:', analysisResponse.status, errorText);
+          throw new Error(`Server proxy returned: ${analysisResponse.status} ${analysisResponse.statusText}`);
+        }
+      } catch (error: any) {
+        const proxyError = error;
+        // If we're not in production and have an API key, try direct call as fallback
+        if (!this.isProductionEnvironment() && this.apiKey) {
+          console.log('Server proxy failed, attempting direct API call:', proxyError.message);
+          
+          try {
+            // Direct call to Anthropic API as fallback
+            analysisResponse = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': `${this.apiKey}`,
+                'anthropic-version': '2023-06-01'
+              },
+              body: JSON.stringify(analysisRequestBody)
+            });
+            
+            if (!analysisResponse.ok) {
+              throw new Error(`Direct API call also failed: ${analysisResponse.status}`);
+            }
+          } catch (fallbackError: any) {
+            // If both failed, throw a combined error
+            analysisError = new Error(`Server proxy failed: ${proxyError.message}. Direct API call failed: ${fallbackError.message}`);
+            throw analysisError;
+          }
+        } else {
+          // In production, we only try the proxy, so just throw the proxy error
+          throw proxyError;
+        }
       }
       
       const analysisData = await analysisResponse.json();
