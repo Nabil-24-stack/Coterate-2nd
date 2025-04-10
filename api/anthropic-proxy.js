@@ -143,8 +143,7 @@ module.exports = async (req, res) => {
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-beta': 'max-tokens-boost-enabled' // Enable higher token limit for responses
+            'anthropic-version': '2023-06-01'
           },
           body: JSON.stringify(enhancedRequestBody),
           signal: controller.signal

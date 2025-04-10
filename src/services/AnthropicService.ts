@@ -1,4 +1,5 @@
 import supabaseService from './SupabaseService';
+import figmaService from './FigmaService';
 
 interface DesignAnalysisResponse {
   analysis: {
@@ -1714,7 +1715,24 @@ class AnthropicService {
         figmaNodeId: designInfo.figmaNodeId 
       });
       
-      // STEP 1: Image validation and preparation
+      // STEP 1: Get detailed design data directly from Figma API
+      console.log('Fetching detailed design data from Figma API...');
+      let figmaStyleData = null;
+      let figmaError = null;
+      
+      try {
+        figmaStyleData = await figmaService.getStructuredNodeData(
+          designInfo.figmaFileKey, 
+          designInfo.figmaNodeId
+        );
+        console.log('Successfully retrieved Figma design data');
+      } catch (error) {
+        console.warn('Error fetching Figma design data:', error);
+        figmaError = error;
+        // We'll continue with image-based approach as fallback
+      }
+      
+      // STEP 2: Image preparation (as fallback or additional reference)
       let validImageUrl = imageUrl;
       let imageOptimized = false;
       
@@ -1785,18 +1803,20 @@ class AnthropicService {
         validImageUrl = ''; // Will be handled by fallback approach
       }
       
-      // STEP 2: Create a comprehensive design description for Claude
+      // STEP 3: Create detailed Figma design description with actual data
+      const figmaDataDescription = figmaStyleData ? this.createFigmaDataDescription(figmaStyleData) : '';
+      
+      // Create a comprehensive design description
       const designDescription = `
         Figma Design Component Information:
         - Type: UI Component from Figma
         - Dimensions: ${designInfo.width}px × ${designInfo.height}px
         - Figma File: ${designInfo.figmaFileKey}
         - Node ID: ${designInfo.figmaNodeId}
-        - Component Style: Modern UI with clean layout
-        - Context: This is a UI element that needs to be converted to precise HTML/CSS
+        ${figmaDataDescription}
       `;
       
-      // STEP 3: Prepare the system prompt with detailed instructions
+      // STEP 4: Prepare system prompt with detailed instructions
       const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
 Your task is to convert a Figma design into precise HTML and CSS code.
 
@@ -1817,16 +1837,17 @@ FORMATTING REQUIREMENTS:
 
 You're a UI conversion expert - maintain the original design exactly as shown.`;
 
-      // STEP 4: Prepare the user prompt with fallback instructions in case image processing fails
+      // STEP 5: Prepare user prompt with detailed Figma data
       const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
 
-Design Information:
+${figmaStyleData ? 'I am providing you with the exact design data extracted directly from Figma API:' : 'Design Information:'}
 - Width: ${designInfo.width}px
 - Height: ${designInfo.height}px
 - Figma File Key: ${designInfo.figmaFileKey}
 - Figma Node ID: ${designInfo.figmaNodeId}
 
-Requirements:
+${figmaStyleData ? 'USE THESE EXACT VALUES FROM FIGMA:' : 'Requirements:'}
+${figmaStyleData ? this.formatFigmaDataForPrompt(figmaStyleData) : `
 1. Create a pixel-perfect recreation of the design
 2. Use semantic HTML5 elements
 3. Use modern CSS (no unnecessary frameworks)
@@ -1837,11 +1858,11 @@ Requirements:
    - Spacing and positioning
    - Borders, shadows, and effects
 6. Handle any visible text content exactly as shown
-7. For any icons, use appropriate HTML/CSS or Font Awesome equivalents
+7. For any icons, use appropriate HTML/CSS or Font Awesome equivalents`}
 
-If you encounter any issues processing the image, please create a reasonable UI component based on the dimensions and context provided.`;
+If you encounter any issues processing the image, use the exact Figma data I've provided to create an accurate implementation.`;
 
-      // STEP 5: Prepare message content array with a structured approach
+      // STEP 6: Prepare message content array
       const contentArray = [];
       
       // Always include the design description text first
@@ -1867,7 +1888,7 @@ If you encounter any issues processing the image, please create a reasonable UI 
         
         console.log('Added image to request', imageOptimized ? '(optimized)' : '(original)');
       } else {
-        console.log('No valid image available, using text-only approach');
+        console.log('No valid image available, using Figma data only approach');
       }
       
       // Always add the main user prompt
@@ -1876,7 +1897,7 @@ If you encounter any issues processing the image, please create a reasonable UI 
         text: userPrompt
       });
 
-      // STEP 6: Make the API request with enhanced error handling and timeouts
+      // STEP 7: Make the API request with enhanced error handling
       // Prepare request body with our processed content
       const requestBody = {
         model: "claude-3-7-sonnet-20250219",
@@ -1920,7 +1941,7 @@ If you encounter any issues processing the image, please create a reasonable UI 
           // Handle timeout specifically
           if (response.status === 504) {
             console.warn('API request timed out, falling back to simplified approach');
-            return this.generateSimplifiedHtmlCss(designInfo);
+            return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
           }
           
           throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
@@ -1963,7 +1984,7 @@ If you encounter any issues processing the image, please create a reasonable UI 
           }
           
           console.error('Failed to extract HTML/CSS from Claude response, falling back to simplified approach');
-          return this.generateSimplifiedHtmlCss(designInfo);
+          return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
         }
         
         console.log('Successfully extracted HTML/CSS from Claude response');
@@ -1974,23 +1995,128 @@ If you encounter any issues processing the image, please create a reasonable UI 
         // Handle AbortController timeout
         if (fetchError.name === 'AbortError') {
           console.warn('Request timed out, falling back to simplified approach');
-          return this.generateSimplifiedHtmlCss(designInfo);
+          return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
         }
         
         // For other errors, attempt fallback
         console.error('Error during API request:', fetchError);
-        return this.generateSimplifiedHtmlCss(designInfo);
+        return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
       }
     } catch (error: any) {
       console.error('Error converting Figma design to HTML/CSS:', error);
-      return this.generateSimplifiedHtmlCss(designInfo, error.message);
+      return this.generateSimplifiedHtmlCss(designInfo, null, error.message);
     }
+  }
+
+  // Create a detailed description of Figma data
+  private createFigmaDataDescription(figmaData: any): string {
+    if (!figmaData) return '';
+    
+    const { styleData, designSystem } = figmaData;
+    
+    return `
+    - Component Name: ${styleData.name}
+    - Component Type: ${styleData.type}
+    - Color Palette: ${styleData.colors.join(', ')}
+    - Typography: ${designSystem.typography.families.join(', ')}
+    - Text Content: ${styleData.typography.map((t: any) => t.text).filter(Boolean).join(' | ')}
+    `;
+  }
+
+  // Format Figma data for the prompt
+  private formatFigmaDataForPrompt(figmaData: any): string {
+    if (!figmaData) return '';
+    
+    const { styleData, designSystem } = figmaData;
+    let promptData = '';
+    
+    // Add colors section
+    promptData += '\nCOLORS:\n';
+    if (designSystem.colors.primary.length > 0) {
+      promptData += `- Primary Colors: ${designSystem.colors.primary.join(', ')}\n`;
+    }
+    if (designSystem.colors.secondary.length > 0) {
+      promptData += `- Secondary Colors: ${designSystem.colors.secondary.join(', ')}\n`;
+    }
+    if (designSystem.colors.background.length > 0) {
+      promptData += `- Background Colors: ${designSystem.colors.background.join(', ')}\n`;
+    }
+    if (designSystem.colors.text.length > 0) {
+      promptData += `- Text Colors: ${designSystem.colors.text.join(', ')}\n`;
+    }
+    
+    // Add all colors as fallback
+    if (styleData.colors.length > 0) {
+      promptData += `- All Colors: ${styleData.colors.join(', ')}\n`;
+    }
+    
+    // Add typography section
+    promptData += '\nTYPOGRAPHY:\n';
+    
+    if (designSystem.typography.families.length > 0) {
+      promptData += `- Font Families: ${designSystem.typography.families.join(', ')}\n`;
+    }
+    
+    if (designSystem.typography.sizes.length > 0) {
+      promptData += `- Font Sizes: ${designSystem.typography.sizes.join(', ')}px\n`;
+    }
+    
+    if (designSystem.typography.weights.length > 0) {
+      promptData += `- Font Weights: ${designSystem.typography.weights.join(', ')}\n`;
+    }
+    
+    // Add detailed typography styles
+    if (styleData.typography.length > 0) {
+      promptData += '- Text Styles:\n';
+      styleData.typography.forEach((style: any, index: number) => {
+        if (style.text && style.fontFamily) {
+          promptData += `  ${index+1}. "${style.text}" - ${style.fontFamily}, ${style.fontSize}px, weight: ${style.fontWeight}\n`;
+        }
+      });
+    }
+    
+    // Add shadows/effects
+    if (styleData.effects.length > 0) {
+      promptData += '\nEFFECTS:\n';
+      styleData.effects.forEach((effect: any, index: number) => {
+        promptData += `- ${effect.type}: radius ${effect.radius}px, color: ${effect.color}\n`;
+      });
+    }
+    
+    // Add components
+    if (styleData.components.length > 0) {
+      promptData += '\nCOMPONENTS:\n';
+      styleData.components.forEach((component: any, index: number) => {
+        promptData += `- ${component.name} (${component.type})\n`;
+      });
+    }
+    
+    // Add structure information
+    promptData += '\nStructure contains the following elements:\n';
+    this.addChildStructure(styleData, promptData, 0);
+    
+    return promptData;
+  }
+
+  // Helper to recursively add child structure
+  private addChildStructure(node: any, promptData: string, level: number): string {
+    const indent = '  '.repeat(level);
+    promptData += `${indent}- ${node.name} (${node.type})\n`;
+    
+    if (node.childrenData && node.childrenData.length > 0) {
+      node.childrenData.forEach((child: any) => {
+        this.addChildStructure(child, promptData, level + 1);
+      });
+    }
+    
+    return promptData;
   }
 
   // Helper method to generate a simplified but useful HTML/CSS component
   // This is used as a fallback when the main conversion process fails
   private generateSimplifiedHtmlCss(
     designInfo: { width: number, height: number, figmaFileKey: string, figmaNodeId: string },
+    figmaData: any = null,
     errorMessage?: string
   ): Promise<{ htmlContent: string, cssContent: string, error?: string }> {
     return new Promise(resolve => {
@@ -2000,11 +2126,48 @@ If you encounter any issues processing the image, please create a reasonable UI 
       const componentName = designInfo.figmaNodeId.split(':').pop() || 'component';
       const containerClass = `figma-component-${componentName}`;
       
-      // Generate HTML with reasonable semantic structure
+      // Use actual Figma colors if available
+      let backgroundColor = '#f5f5f5';
+      let textColor = '#333333';
+      let borderColor = '#e0e0e0';
+      let headerColor = '#f0f0f0';
+      let fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+      
+      if (figmaData) {
+        // Use background color from Figma
+        if (figmaData.designSystem.colors.background.length > 0) {
+          backgroundColor = figmaData.designSystem.colors.background[0];
+        }
+        
+        // Use text color from Figma
+        if (figmaData.designSystem.colors.text.length > 0) {
+          textColor = figmaData.designSystem.colors.text[0];
+        }
+        
+        // Use border color - try to find a light gray
+        if (figmaData.styleData.colors.length > 0) {
+          // Find a light gray for borders
+          const grayColor = figmaData.styleData.colors.find((color: string) => 
+            color.toLowerCase().startsWith('#e') || 
+            color.toLowerCase().startsWith('#d') ||
+            color.toLowerCase().startsWith('#c')
+          );
+          if (grayColor) {
+            borderColor = grayColor;
+          }
+        }
+        
+        // Use font family from Figma
+        if (figmaData.designSystem.typography.families.length > 0) {
+          fontFamily = figmaData.designSystem.typography.families.join(', ');
+        }
+      }
+      
+      // Generate HTML with reasonable semantic structure and actual Figma data if available
       const htmlContent = `<div class="${containerClass}-wrapper">
   <div class="${containerClass}" role="region" aria-label="Figma Component">
     <header class="${containerClass}-header">
-      <h2 class="${containerClass}-title">Figma Component</h2>
+      <h2 class="${containerClass}-title">${figmaData?.styleData?.name || 'Figma Component'}</h2>
       ${errorMessage ? `<p class="${containerClass}-error">Error: ${errorMessage}</p>` : ''}
     </header>
     <div class="${containerClass}-content">
@@ -2012,25 +2175,28 @@ If you encounter any issues processing the image, please create a reasonable UI 
         <p>Figma Design: ${designInfo.figmaFileKey}</p>
         <p>Node ID: ${designInfo.figmaNodeId}</p>
         <p>Dimensions: ${designInfo.width}px × ${designInfo.height}px</p>
+        ${figmaData?.styleData?.typography?.map((t: any) => 
+          t.text ? `<p class="${containerClass}-text" style="font-family: ${t.fontFamily || fontFamily}; font-size: ${t.fontSize || 14}px; font-weight: ${t.fontWeight || 400};">${t.text}</p>` : ''
+        ).join('\n        ') || ''}
       </div>
     </div>
   </div>
 </div>`;
 
-      // Generate CSS with reasonable styling
+      // Generate CSS with reasonable styling using actual Figma data
       const cssContent = `.${containerClass}-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: ${fontFamily};
 }
 
 .${containerClass} {
   width: ${designInfo.width}px;
   height: ${designInfo.height}px;
-  background-color: #f5f5f5;
-  border: 1px solid #e0e0e0;
+  background-color: ${backgroundColor};
+  border: 1px solid ${borderColor};
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   overflow: hidden;
@@ -2039,16 +2205,16 @@ If you encounter any issues processing the image, please create a reasonable UI 
 }
 
 .${containerClass}-header {
-  background-color: #f0f0f0;
+  background-color: ${headerColor};
   padding: 12px 16px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid ${borderColor};
 }
 
 .${containerClass}-title {
   margin: 0;
   font-size: 16px;
   font-weight: 500;
-  color: #333;
+  color: ${textColor};
 }
 
 .${containerClass}-error {
@@ -2067,13 +2233,17 @@ If you encounter any issues processing the image, please create a reasonable UI 
 
 .${containerClass}-placeholder {
   text-align: center;
-  color: #666;
+  color: ${textColor};
   font-size: 14px;
   line-height: 1.5;
 }
 
 .${containerClass}-placeholder p {
   margin: 4px 0;
+}
+
+.${containerClass}-text {
+  margin: 8px 0;
 }
 
 @media (max-width: ${designInfo.width + 32}px) {
@@ -2087,7 +2257,7 @@ If you encounter any issues processing the image, please create a reasonable UI 
       resolve({
         htmlContent,
         cssContent,
-        error: errorMessage || 'Used simplified fallback due to processing limitations'
+        error: errorMessage || 'Used simplified fallback with Figma data'
       });
     });
   }

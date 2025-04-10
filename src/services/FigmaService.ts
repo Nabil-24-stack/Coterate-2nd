@@ -299,6 +299,297 @@ class FigmaService {
     
     return result;
   }
+
+  // Add new method to extract detailed style information from a Figma node
+  async getNodeStyleData(fileKey: string, nodeId: string): Promise<any> {
+    if (!this.accessToken) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      console.log(`Getting detailed style data for node ${nodeId} in file ${fileKey}`);
+      
+      // First, get the full node data from Figma API
+      const response = await fetch(
+        `${FIGMA_API_BASE}/files/${fileKey}/nodes?ids=${nodeId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch node data: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Extract the node from the response
+      const node = data.nodes[nodeId]?.document;
+      if (!node) {
+        throw new Error('Node not found in response');
+      }
+      
+      // Extract style information
+      const styleData = this.extractStyleInformation(node);
+      
+      // Get image URL if needed for reference
+      const imageUrls = await this.getImageUrls(fileKey, [nodeId]);
+      const imageUrl = imageUrls[nodeId];
+      
+      return {
+        node,
+        styleData,
+        imageUrl
+      };
+    } catch (error) {
+      console.error('Error fetching node style data:', error);
+      throw error;
+    }
+  }
+
+  // Extract detailed style information from a node and its children
+  private extractStyleInformation(node: any): any {
+    if (!node) return null;
+
+    // Initialize the style data structure
+    const styleData = {
+      name: node.name || 'Unnamed Node',
+      type: node.type || 'UNKNOWN',
+      width: node.absoluteBoundingBox?.width || 0,
+      height: node.absoluteBoundingBox?.height || 0,
+      colors: [] as string[],
+      typography: [] as any[],
+      effects: [] as any[],
+      components: [] as any[],
+      childrenData: [] as any[]
+    };
+
+    // Process fills to extract colors
+    if (node.fills && Array.isArray(node.fills)) {
+      node.fills.forEach((fill: any) => {
+        if (fill.type === 'SOLID' && fill.visible !== false) {
+          const { r, g, b, a = 1 } = fill.color || {};
+          if (r !== undefined && g !== undefined && b !== undefined) {
+            // Convert RGB to hex
+            const hexColor = this.rgbToHex(r, g, b, a);
+            styleData.colors.push(hexColor);
+          }
+        } else if (fill.type === 'GRADIENT_LINEAR' || fill.type === 'GRADIENT_RADIAL') {
+          // Extract colors from gradients
+          fill.gradientStops?.forEach((stop: any) => {
+            const { r, g, b, a = 1 } = stop.color || {};
+            if (r !== undefined && g !== undefined && b !== undefined) {
+              const hexColor = this.rgbToHex(r, g, b, a);
+              styleData.colors.push(hexColor);
+            }
+          });
+        }
+      });
+    }
+
+    // Process strokes to extract border colors
+    if (node.strokes && Array.isArray(node.strokes)) {
+      node.strokes.forEach((stroke: any) => {
+        if (stroke.type === 'SOLID' && stroke.visible !== false) {
+          const { r, g, b, a = 1 } = stroke.color || {};
+          if (r !== undefined && g !== undefined && b !== undefined) {
+            const hexColor = this.rgbToHex(r, g, b, a);
+            styleData.colors.push(hexColor);
+          }
+        }
+      });
+    }
+
+    // Extract typography information
+    if (node.style) {
+      styleData.typography.push({
+        fontFamily: node.style.fontFamily,
+        fontSize: node.style.fontSize,
+        fontWeight: node.style.fontWeight,
+        lineHeight: node.style.lineHeightPx || node.style.lineHeightPercent,
+        letterSpacing: node.style.letterSpacing,
+        textAlignHorizontal: node.style.textAlignHorizontal,
+        textAlignVertical: node.style.textAlignVertical,
+        textCase: node.style.textCase,
+        textDecoration: node.style.textDecoration,
+        text: node.characters || ''
+      });
+    }
+
+    // Extract effects (shadows, blurs)
+    if (node.effects && Array.isArray(node.effects)) {
+      node.effects.forEach((effect: any) => {
+        if (effect.visible !== false) {
+          styleData.effects.push({
+            type: effect.type,
+            radius: effect.radius,
+            color: effect.color ? this.rgbToHex(effect.color.r, effect.color.g, effect.color.b, effect.color.a) : undefined,
+            offset: effect.offset,
+            spread: effect.spread
+          });
+        }
+      });
+    }
+
+    // Process children recursively
+    if (node.children && Array.isArray(node.children)) {
+      node.children.forEach((child: any) => {
+        const childData = this.extractStyleInformation(child);
+        styleData.childrenData.push(childData);
+        
+        // Merge colors and typography from children
+        styleData.colors = [...styleData.colors, ...childData.colors];
+        styleData.typography = [...styleData.typography, ...childData.typography];
+        styleData.effects = [...styleData.effects, ...childData.effects];
+        
+        // If this is a component, add it to components list
+        if (child.type === 'COMPONENT' || child.type === 'INSTANCE') {
+          styleData.components.push({
+            name: child.name,
+            type: child.type,
+            id: child.id
+          });
+        }
+      });
+    }
+
+    // Remove duplicates from colors
+    styleData.colors = [...new Set(styleData.colors)];
+
+    return styleData;
+  }
+
+  // Helper to convert RGB values (0-1) to hex color
+  private rgbToHex(r: number, g: number, b: number, a: number = 1): string {
+    // Convert 0-1 values to 0-255
+    const rInt = Math.round(r * 255);
+    const gInt = Math.round(g * 255);
+    const bInt = Math.round(b * 255);
+    
+    // Create hex strings
+    const rHex = rInt.toString(16).padStart(2, '0');
+    const gHex = gInt.toString(16).padStart(2, '0');
+    const bHex = bInt.toString(16).padStart(2, '0');
+    
+    // Return with alpha if not 1
+    if (a !== 1) {
+      const aInt = Math.round(a * 255);
+      const aHex = aInt.toString(16).padStart(2, '0');
+      return `#${rHex}${gHex}${bHex}${aHex}`;
+    }
+    
+    return `#${rHex}${gHex}${bHex}`;
+  }
+
+  // Get a comprehensive structure representation
+  async getStructuredNodeData(fileKey: string, nodeId: string): Promise<any> {
+    const styleData = await this.getNodeStyleData(fileKey, nodeId);
+    
+    // Process the data into a comprehensive design system structure
+    const designSystem = this.processIntoDesignSystem(styleData);
+    
+    return {
+      ...styleData,
+      designSystem
+    };
+  }
+
+  // Process style data into a design system representation
+  private processIntoDesignSystem(styleData: any): any {
+    // Create a standardized design system from the extracted style data
+    const designSystem = {
+      colors: {
+        primary: [] as string[],
+        secondary: [] as string[],
+        background: [] as string[],
+        text: [] as string[]
+      },
+      typography: {
+        families: [] as string[],
+        sizes: [] as number[],
+        weights: [] as number[],
+        styles: [] as any[]
+      },
+      spacing: {
+        values: [] as number[]
+      },
+      borderRadius: {
+        values: [] as number[]
+      },
+      shadows: [] as any[],
+      components: [] as any[]
+    };
+
+    // Extract unique font families
+    const fontFamiliesSet = new Set<string>();
+    styleData.styleData.typography.forEach((t: any) => {
+      if (t.fontFamily) fontFamiliesSet.add(t.fontFamily);
+    });
+    designSystem.typography.families = Array.from(fontFamiliesSet);
+
+    // Extract unique font sizes
+    const fontSizesSet = new Set<number>();
+    styleData.styleData.typography.forEach((t: any) => {
+      if (t.fontSize) fontSizesSet.add(t.fontSize);
+    });
+    designSystem.typography.sizes = Array.from(fontSizesSet).sort((a, b) => a - b);
+
+    // Extract unique font weights
+    const fontWeightsSet = new Set<number>();
+    styleData.styleData.typography.forEach((t: any) => {
+      if (t.fontWeight) fontWeightsSet.add(t.fontWeight);
+    });
+    designSystem.typography.weights = Array.from(fontWeightsSet).sort((a, b) => a - b);
+
+    // Categorize colors (simple heuristic - could be improved)
+    const colors = styleData.styleData.colors;
+    if (colors.length > 0) {
+      // Assign primary color (first colors, usually brand colors)
+      designSystem.colors.primary = colors.slice(0, Math.max(1, Math.floor(colors.length * 0.2)));
+      
+      // Assign background colors (usually light colors, whites, grays)
+      const backgroundColors = colors.filter((c: string) => {
+        // Light colors are likely backgrounds
+        const isLight = c.toLowerCase() === '#ffffff' || 
+                        c.toLowerCase() === '#f8f8f8' || 
+                        c.toLowerCase() === '#f0f0f0' ||
+                        c.toLowerCase().startsWith('#e') ||
+                        c.toLowerCase().startsWith('#f');
+        return isLight;
+      });
+      designSystem.colors.background = backgroundColors;
+      
+      // Assign text colors (usually dark colors, blacks, dark grays)
+      const textColors = colors.filter((c: string) => {
+        // Dark colors are likely text
+        const isDark = c.toLowerCase() === '#000000' || 
+                       c.toLowerCase() === '#333333' || 
+                       c.toLowerCase() === '#222222' ||
+                       c.toLowerCase().startsWith('#0') ||
+                       c.toLowerCase().startsWith('#1') ||
+                       c.toLowerCase().startsWith('#2') ||
+                       c.toLowerCase().startsWith('#3');
+        return isDark;
+      });
+      designSystem.colors.text = textColors;
+      
+      // Remaining colors are secondary
+      const usedColors = [...designSystem.colors.primary, ...designSystem.colors.background, ...designSystem.colors.text];
+      designSystem.colors.secondary = colors.filter((c: string) => !usedColors.includes(c));
+    }
+
+    // Add all effects as shadows
+    designSystem.shadows = styleData.styleData.effects.filter((e: any) => 
+      e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW'
+    );
+
+    // Add components
+    designSystem.components = styleData.styleData.components;
+
+    return designSystem;
+  }
 }
 
 // Create a named instance
