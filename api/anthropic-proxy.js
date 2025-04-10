@@ -12,7 +12,6 @@ module.exports = async (req, res) => {
   
   // Debug the incoming request
   console.log(`Anthropic proxy received request with method: ${req.method}`);
-  console.log('Request headers:', JSON.stringify(req.headers, null, 2));
   
   // Only allow POST requests
   if (req.method !== 'POST') {
@@ -28,34 +27,27 @@ module.exports = async (req, res) => {
     // Log request details for debugging
     console.log(`API proxy request received: ${new Date().toISOString()}`);
     
-    // Get the API key from environment variables - try multiple possible locations
-    // Vercel specific environment variables start with VERCEL_ or without REACT_APP_ prefix
-    const apiKey = process.env.ANTHROPIC_API_KEY || 
-                   process.env.VERCEL_ANTHROPIC_API_KEY || 
-                   process.env.REACT_APP_ANTHROPIC_API_KEY;
+    // In Vercel, environment variables are directly accessible without REACT_APP_ prefix
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     
-    // Log which API key variables are available (not the actual keys)
-    const envDebug = {
-      hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
-      hasVercelAnthropicKey: !!process.env.VERCEL_ANTHROPIC_API_KEY,
-      hasReactAppKey: !!process.env.REACT_APP_ANTHROPIC_API_KEY,
+    // Log environment info for debugging (without exposing the key)
+    console.log('Environment: ', {
+      hasApiKey: !!apiKey,
       nodeEnv: process.env.NODE_ENV,
       vercelEnv: process.env.VERCEL_ENV
-    };
-    
-    console.log('Environment variable debug:', JSON.stringify(envDebug, null, 2));
+    });
     
     if (!apiKey) {
       console.error('Anthropic API key not configured');
       return res.status(500).json({ 
-        message: 'Server configuration error: API key not found',
-        envInfo: envDebug
+        message: 'Server configuration error: API key not found. Please add ANTHROPIC_API_KEY in your Vercel project settings.',
+        envInfo: {
+          hasApiKey: !!apiKey,
+          nodeEnv: process.env.NODE_ENV || 'not set'
+        }
       });
     }
 
-    // Forward the request to Anthropic API
-    const anthropicUrl = 'https://api.anthropic.com/v1/messages';
-    
     // Get request body from the client
     const requestBody = req.body;
     
@@ -68,6 +60,7 @@ module.exports = async (req, res) => {
     console.log('Forwarding request to Anthropic API...');
     
     // Forward the request to Anthropic API
+    const anthropicUrl = 'https://api.anthropic.com/v1/messages';
     const response = await fetch(anthropicUrl, {
       method: 'POST',
       headers: {
@@ -89,8 +82,7 @@ module.exports = async (req, res) => {
     console.error('Server error during Anthropic API call:', error);
     return res.status(500).json({ 
       message: 'Server error during API call', 
-      error: error.message,
-      stack: error.stack
+      error: error.message
     });
   }
 }; 
