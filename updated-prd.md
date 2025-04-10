@@ -102,7 +102,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 
 #### 2.4.2 AI Analysis of Designs
 - Upon clicking the "+" button, trigger an AI analysis of the selected design
-- Use OpenAI's GPT-4o to analyze the design for improvements in:
+- Use Anthropic's Claude 3.7 Sonnet to analyze the design for improvements in:
   - Visual hierarchy
   - Color contrast and accessibility
   - Component selection and placement
@@ -110,7 +110,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
   - Overall usability
   - Alignment with design best practices
 - Integrate linked user insights from the Insights tab into the analysis
-- Provide GPT-4o with context about UI/UX best practices to inform its analysis
+- Provide Claude 3.7 Sonnet with context about UI/UX best practices to inform its analysis
 - Store analysis results for reference
 
 #### 2.4.3 Optional User Prompting
@@ -224,7 +224,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 ### 3.1 Frontend
 
 #### 3.1.1 Technology Stack
-- **Framework**: Next.js with React 18+
+- **Framework**: Create React App with React 18+
 - **Styling**: Styled Components
 - **State Management**: React Context API for global state
 
@@ -240,9 +240,9 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 ### 3.2 Backend
 
 #### 3.2.1 API Layer
-- **Framework**: Next.js API routes (deployed on Vercel)
+- **Framework**: Separate API service or serverless functions
 - **Authentication**: Supabase Auth with JWT
-- **Serverless Functions**: Vercel serverless functions for API endpoints
+- **Serverless Functions**: Vercel or Netlify Functions for API endpoints
 - **Endpoints**:
   - User management (leveraging Supabase Auth)
   - Design storage and retrieval
@@ -266,8 +266,8 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 
 ### 3.3 AI Integration
 
-#### 3.3.1 OpenAI Integration
-- Implement secure API communication with OpenAI
+#### 3.3.1 Anthropic API Integration
+- Implement secure API communication with Anthropic
 - Create structured prompts for design analysis and user insight processing
 - Process and structure AI responses for use in generation
 
@@ -281,7 +281,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 #### 3.3.3 Design Analysis and Generation Pipeline
 1. **Retrieval**: Fetch the Figma design data via API
 2. **Insights Integration**: Compile relevant user insights from linked folders
-3. **Combined Analysis**: Send design and insights to GPT-4o for holistic evaluation
+3. **Combined Analysis**: Send design and insights to Claude 3.7 Sonnet for holistic evaluation
 4. **Suggestions**: Generate actionable design modifications informed by both design principles and user feedback
 5. **Generation**: Create new design version that addresses both visual improvement needs and user pain points
 6. **Rendering**: Render the modified design on the canvas
@@ -307,7 +307,7 @@ The core functionality is already partially implemented with the following featu
 #### 4.2.1 Dual-Tab Interface
 1. Design and implement the top-level navigation between Iteration and Insights tabs
 2. Create container components for each tab
-3. Implement state management for tab switching
+3. Implement state management for tab switching using React Router
 4. Develop visual indicators for active tab and linked insights
 
 ### 4.3 Figma Authentication Integration
@@ -326,7 +326,7 @@ The core functionality is already partially implemented with the following featu
 
 #### 4.4.2 Design Iteration Features
 1. Create the "+" button UI and interaction
-2. Implement AI analysis with OpenAI integration
+2. Implement AI analysis with Anthropic's Claude 3.7 Sonnet integration
 3. Build the iteration generation workflow
 4. Develop side-by-side comparison views
 5. Implement prompt input for user-guided iterations
@@ -354,7 +354,7 @@ The core functionality is already partially implemented with the following featu
 4. Build navigation components between related content
 
 #### 4.6.2 AI-Powered Design Iteration with Insights
-1. Enhance the OpenAI prompts to incorporate user research
+1. Enhance the Claude prompts to incorporate user research
 2. Develop insight extraction and formatting pipeline
 3. Create combined analysis system that evaluates both design and user feedback
 4. Implement iteration algorithm that addresses both visual improvements and user needs
@@ -382,7 +382,7 @@ The core functionality is already partially implemented with the following featu
 4. **Design Import**: User copies a selection link from Figma and pastes it into Coterate
 5. **Linking Insights**: User optionally links relevant user research from the Insights tab
 6. **Iteration**: User clicks the "+" button, optionally adds a prompt
-7. **AI Analysis**: GPT-4o analyzes the design along with any linked user insights
+7. **AI Analysis**: Claude 3.7 Sonnet analyzes the design along with any linked user insights
 8. **Review**: User reviews the suggested iteration alongside the original
 9. **Refinement**: User provides feedback or triggers additional iterations
 10. **Export**: User exports the final design back to Figma
@@ -477,7 +477,8 @@ The core functionality is already partially implemented with the following featu
 
 ### 9.2 References
 - Figma API Documentation: https://www.figma.com/developers/api
-- OpenAI API Documentation: https://platform.openai.com/docs/
+- Anthropic API Documentation: https://docs.anthropic.com/
 - Vercel Documentation: https://vercel.com/docs
 - Supabase Documentation: https://supabase.com/docs
-- Next.js Documentation: https://nextjs.org/docs
+- Create React App Documentation: https://create-react-app.dev/docs/getting-started
+- React Documentation: https://reactjs.org/docs
