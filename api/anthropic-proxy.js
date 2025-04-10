@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
   // Debug the incoming request
   console.log(`Anthropic proxy received request with method: ${req.method}`);
   
-  // Only allow POST requests
+  // Only allow POST requests with appropriate error response
   if (req.method !== 'POST') {
     console.error(`Method not allowed: ${req.method}`);
     return res.status(405).json({ 

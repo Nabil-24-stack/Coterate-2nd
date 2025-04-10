@@ -154,7 +154,7 @@ class AnthropicService {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          model: "claude-3-7-sonnet",
+          model: "claude-3-7-sonnet-20250219",
           max_tokens: 10,
           temperature: 0.2,
           system: "You are a helpful assistant.",
@@ -352,7 +352,7 @@ class AnthropicService {
       ${linkedInsights.length > 0 ? insightsPrompt : ''}`;
       
       const analysisRequestBody = {
-        model: "claude-3-7-sonnet",
+        model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
         temperature: 0.2,
         system: analysisSystemPrompt,
@@ -502,7 +502,7 @@ class AnthropicService {
       Your HTML/CSS must look like a subtle iteration of the original design, not a new design.`;
       
       const iterationRequestBody = {
-        model: "claude-3-7-sonnet",
+        model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
         temperature: 0.2,
         system: iterationSystemPrompt,

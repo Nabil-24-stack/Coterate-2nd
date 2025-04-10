@@ -16,8 +16,8 @@
   "routes": [
     {
       "src": "/api/anthropic-proxy",
-      "methods": ["POST", "OPTIONS"],
-      "dest": "/api/anthropic-proxy.js"
+      "methods": ["OPTIONS", "POST"],
+      "dest": "api/anthropic-proxy.js"
     },
     {
       "src": "/api/(.*)",
