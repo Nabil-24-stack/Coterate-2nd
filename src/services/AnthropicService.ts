@@ -1859,6 +1859,92 @@ class AnthropicService {
         console.log(`Attempting HTML/CSS conversion with strategy: ${attempt.name} (${attempt.description})`);
         
         try {
+          // For complex designs, try a direct approach without images first
+          if (attempt.name === 'complete' && !attempt.simplifyFigmaData) {
+            try {
+              console.log('Trying direct Figma ID based conversion first (no image)');
+              
+              // Create a direct prompt that uses only the Figma file and node IDs
+              const directPrompt = `Please convert this Figma design into precise HTML and CSS code.
+This is a direct conversion request with the exact Figma IDs:
+
+Figma File Key: ${designInfo.figmaFileKey}
+Figma Node ID: ${designInfo.figmaNodeId}
+Dimensions: ${designInfo.width}px × ${designInfo.height}px
+
+Create a pixel-perfect recreation with valid HTML5 and clean CSS.
+Use these specifications:
+1. Use semantic HTML structure with appropriate tags
+2. Match the exact dimensions and layout
+3. Handle responsive behavior appropriately
+4. Maintain visual fidelity to the original design
+
+Return the code in two separate blocks: one for HTML and one for CSS.`;
+
+              // Make a focused call without images for faster processing
+              const directRequestBody = {
+                model: "claude-3-7-sonnet-20250219",
+                max_tokens: 4000,
+                temperature: 0.2,
+                system: "You are a UI development expert who creates perfect HTML/CSS from Figma designs. Focus on accurately representing the design with clean, semantic HTML and CSS.",
+                messages: [
+                  {
+                    role: "user", 
+                    content: [{ type: "text", text: directPrompt }]
+                  }
+                ]
+              };
+              
+              // Set a shorter timeout for this attempt
+              const directController = new AbortController();
+              const directTimeoutId = setTimeout(() => directController.abort(), 30000);
+              
+              try {
+                console.log('Sending direct ID-based conversion request');
+                
+                const directResponse = await fetch('/api/anthropic-proxy', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  body: JSON.stringify(directRequestBody),
+                  cache: 'no-cache',
+                  signal: directController.signal
+                });
+                
+                clearTimeout(directTimeoutId);
+                
+                if (directResponse.ok) {
+                  const data = await directResponse.json();
+                  const generatedText = data.content?.[0]?.text || '';
+                  
+                  // Extract HTML and CSS
+                  const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
+                  const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
+                  
+                  if (htmlMatch && cssMatch) {
+                    console.log('Successfully extracted HTML/CSS from direct ID-based approach');
+                    return { 
+                      htmlContent: htmlMatch[1].trim(), 
+                      cssContent: cssMatch[1].trim() 
+                    };
+                  }
+                }
+                
+                // If direct approach fails, continue with normal strategies
+                console.log('Direct ID-based approach failed, continuing with normal strategies');
+              } catch (directError) {
+                clearTimeout(directTimeoutId);
+                console.log('Direct ID-based approach failed with error:', directError);
+                // Continue with normal flow
+              }
+            } catch (directAttemptError) {
+              console.log('Error in direct approach:', directAttemptError);
+              // Continue with normal flow
+            }
+          }
+          
           // Prepare data based on the current attempt strategy
           const figmaDataDescription = (attempt.includeFigmaData && figmaStyleData) 
             ? this.createFigmaDataDescription(figmaStyleData, attempt.simplifyFigmaData) 
@@ -1972,8 +2058,11 @@ If you encounter any issues processing the image, use the exact Figma data I've 
           };
           
           // Set up timeout handling with AbortController
-          // Give less time for fallback attempts
-          const timeoutMs = attempt.name === 'fallback' ? 20000 : 45000;
+          // Give appropriate time for each attempt type
+          const timeoutMs = attempt.name === 'fallback' ? 25000 : 
+                            attempt.name === 'simplifiedFigma' ? 35000 :
+                            attempt.name === 'figmaOnly' ? 40000 : 45000;
+          
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
           

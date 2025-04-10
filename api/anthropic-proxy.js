@@ -142,9 +142,6 @@ function optimizeRequest(requestBody) {
     optimized.model = 'claude-3-7-sonnet-20250219'; // Use the Sonnet model which is faster
   }
   
-  // Add retry parameters
-  optimized.max_retries = 3;
-  
   // Process images if present to ensure they're not too large
   if (optimized.messages && optimized.messages.length > 0) {
     for (const message of optimized.messages) {
