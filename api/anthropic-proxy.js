@@ -57,7 +57,9 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request body' });
     }
     
-    // Extra validation for image data
+    // Check for image content to determine if this will be a heavy request
+    let hasImageContent = false;
+    let imageSize = 0;
     try {
       if (requestBody.messages && 
           requestBody.messages[0] && 
@@ -65,65 +67,79 @@ module.exports = async (req, res) => {
           Array.isArray(requestBody.messages[0].content)) {
         
         // Look for any image content
-        const imageContent = requestBody.messages[0].content.find(item => 
-          item.type === 'image' && item.source && item.source.type === 'base64'
+        const imageItem = requestBody.messages[0].content.find(item => 
+          item.type === 'image' && item.source
         );
         
-        if (imageContent) {
-          console.log('Found image content in request, validating...');
+        if (imageItem) {
+          hasImageContent = true;
+          console.log('Request contains image data, this may take longer to process');
           
-          // Check if data looks like a base64 string
-          const data = imageContent.source.data;
-          const mediaType = imageContent.source.media_type || 'image/jpeg';
-          
-          if (!data || typeof data !== 'string') {
-            console.error('Image data is missing or not a string');
-            return res.status(400).json({ 
-              message: 'Invalid image data: missing or not a string',
-              type: 'error',
-              error: { type: 'invalid_request_error' }
-            });
+          // If it's base64, measure its size
+          if (imageItem.source.type === 'base64' && imageItem.source.data) {
+            imageSize = imageItem.source.data.length;
+            console.log(`Image data size: approximately ${Math.round(imageSize / 1024)}KB`);
+          } else if (imageItem.source.type === 'url') {
+            console.log('Image is provided via URL:', imageItem.source.url.substring(0, 50) + '...');
           }
-          
-          // Simple validation that it looks like base64
-          if (!/^[A-Za-z0-9+/=]+$/.test(data)) {
-            console.error('Image data contains invalid characters for base64');
-            return res.status(400).json({ 
-              message: 'Invalid image data: not a valid base64 string',
-              type: 'error',
-              error: { type: 'invalid_request_error' }
-            });
-          }
-          
-          console.log(`Validated image with media type ${mediaType}, data length: ${data.length}`);
         }
       }
     } catch (validationError) {
-      console.error('Error validating image data:', validationError);
+      console.error('Error checking for image content:', validationError);
       // Continue anyway, let Anthropic handle the validation
     }
     
     console.log('Forwarding request to Anthropic API...');
     
-    // Forward the request to Anthropic API
-    const anthropicUrl = 'https://api.anthropic.com/v1/messages';
-    const response = await fetch(anthropicUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify(requestBody)
-    });
+    // Create a fetch controller to implement timeout
+    const controller = new AbortController();
+    const timeoutMs = hasImageContent ? 55000 : 30000; // 55 seconds for image requests, 30 for others
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
-    console.log(`Anthropic API response status: ${response.status}`);
-    
-    // Get the response data
-    const responseData = await response.json();
-    
-    // Return the response from Anthropic API
-    return res.status(response.status).json(responseData);
+    try {
+      // Forward the request to Anthropic API with timeout
+      const anthropicUrl = 'https://api.anthropic.com/v1/messages';
+      const response = await fetch(anthropicUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+        // Add high timeout values
+        timeout: timeoutMs - 1000, // 1 second less than our abort controller
+        size: 50 * 1024 * 1024, // Allow up to 50MB response size
+      });
+      
+      // Clear the timeout since we got a response
+      clearTimeout(timeoutId);
+      
+      console.log(`Anthropic API response status: ${response.status}`);
+      
+      // Get the response data
+      const responseData = await response.json();
+      
+      // Return the response from Anthropic API
+      return res.status(response.status).json(responseData);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // Special handling for timeout errors
+      if (fetchError.name === 'AbortError') {
+        console.error('Request to Anthropic API timed out');
+        return res.status(504).json({
+          error: {
+            type: 'timeout_error',
+            message: 'Request to Anthropic API timed out. The processing may be too complex or the API is experiencing high load.'
+          }
+        });
+      }
+      
+      // Rethrow other errors
+      throw fetchError;
+    }
   } catch (error) {
     console.error('Server error during Anthropic API call:', error);
     return res.status(500).json({ 

@@ -1707,7 +1707,27 @@ class AnthropicService {
     error?: string;
   }> {
     try {
-      console.log('Converting Figma design to HTML/CSS:', { imageUrl, ...designInfo });
+      console.log('Converting Figma design to HTML/CSS:', { 
+        imageUrl: imageUrl.substring(0, 50) + '...',  // Only log part of the URL for privacy
+        width: designInfo.width,
+        height: designInfo.height,
+        figmaFileKey: designInfo.figmaFileKey,
+        figmaNodeId: designInfo.figmaNodeId 
+      });
+      
+      // First, ensure the image URL is accessible (some Figma URLs have short expiration times)
+      let validImageUrl = imageUrl;
+      try {
+        // Test if the image URL is still valid with a HEAD request
+        const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
+        if (!imageResponse.ok) {
+          console.warn('Image URL may have expired, will use a placeholder description instead');
+          validImageUrl = ''; // We'll handle this case with a fallback approach
+        }
+      } catch (imageError) {
+        console.warn('Error validating image URL:', imageError);
+        validImageUrl = ''; // We'll handle this case with a fallback approach
+      }
       
       const systemPrompt = `You are a highly skilled UI developer specializing in pixel-perfect HTML/CSS recreation of designs.
 Your task is to convert a Figma design into precise HTML and CSS code.
@@ -1747,7 +1767,34 @@ Requirements:
 6. For any icons, use appropriate HTML/CSS or Font Awesome equivalents
 7. For form elements, ensure they look identical to the design
 
-Provide the complete HTML and CSS code needed to recreate this design exactly.`;
+Provide the complete HTML and CSS code needed to recreate this design exactly.
+
+If you encounter any issues processing the image, please create a minimal responsive layout based on the dimensions provided.`;
+
+      // Prepare the content array with or without the image
+      const contentArray = [];
+      
+      if (validImageUrl) {
+        contentArray.push({
+          type: "image",
+          source: {
+            type: "url",
+            url: validImageUrl
+          }
+        });
+      } else {
+        // Add a text-only description of the design if the image is not available
+        contentArray.push({
+          type: "text",
+          text: `[Image description: The design is a UI component with dimensions ${designInfo.width}px × ${designInfo.height}px from Figma file ${designInfo.figmaFileKey}, node ${designInfo.figmaNodeId}]`
+        });
+      }
+      
+      // Always add the text prompt
+      contentArray.push({
+        type: "text",
+        text: userPrompt
+      });
 
       const requestBody = {
         model: "claude-3-7-sonnet-20250219",
@@ -1757,65 +1804,126 @@ Provide the complete HTML and CSS code needed to recreate this design exactly.`;
         messages: [
           {
             role: "user", 
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "url",
-                  url: imageUrl
-                }
-              },
-              {
-                type: "text",
-                text: userPrompt
-              }
-            ]
+            content: contentArray
           }
         ]
       };
       
-      // Make API call to Anthropic for HTML/CSS generation
-      const response = await fetch('/api/anthropic-proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody),
-        cache: 'no-cache'
-      });
+      // Add timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout
       
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Anthropic API error response:', errorData);
-        throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
+      try {
+        // Make API call to Anthropic for HTML/CSS generation
+        const response = await fetch('/api/anthropic-proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(requestBody),
+          cache: 'no-cache',
+          signal: controller.signal
+        });
+        
+        // Clear the timeout since we got a response
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error('Anthropic API error response:', errorData);
+          
+          // Handle timeout specifically
+          if (response.status === 504) {
+            throw new Error('API request timed out. The Figma design might be too complex for processing.');
+          }
+          
+          throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const generatedText = data.content?.[0]?.text || '';
+        
+        // Extract HTML and CSS from the response
+        const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
+        const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
+        
+        const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
+        const cssContent = cssMatch ? cssMatch[1].trim() : '';
+        
+        if (!htmlContent || !cssContent) {
+          console.error('Failed to extract HTML/CSS from Claude response:', generatedText.substring(0, 500) + '...');
+          
+          // Generate a simple fallback HTML/CSS if extraction fails
+          return {
+            htmlContent: `<div class="figma-design">
+  <div class="figma-component" style="width: ${designInfo.width}px; height: ${designInfo.height}px;">
+    <p>Failed to extract HTML content from AI response.</p>
+  </div>
+</div>`,
+            cssContent: `.figma-design {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+.figma-component {
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: sans-serif;
+  color: #333;
+  text-align: center;
+  padding: 20px;
+  box-sizing: border-box;
+}`,
+            error: 'Failed to extract HTML/CSS from the generated response'
+          };
+        }
+        
+        return { htmlContent, cssContent };
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        // Handle AbortController timeout
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. The Figma design might be too complex to process.');
+        }
+        
+        throw fetchError;
       }
-      
-      const data = await response.json();
-      const generatedText = data.content?.[0]?.text || '';
-      
-      // Extract HTML and CSS from the response
-      const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
-      const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
-      
-      const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
-      const cssContent = cssMatch ? cssMatch[1].trim() : '';
-      
-      if (!htmlContent || !cssContent) {
-        console.error('Failed to extract HTML/CSS from Claude response:', generatedText.substring(0, 500) + '...');
-        return {
-          htmlContent: '<div>Error: Failed to generate HTML content</div>',
-          cssContent: 'body { font-family: sans-serif; color: red; }',
-          error: 'Failed to extract HTML/CSS from the generated response'
-        };
-      }
-      
-      return { htmlContent, cssContent };
     } catch (error: any) {
       console.error('Error converting Figma design to HTML/CSS:', error);
+      
+      // Return a minimal valid HTML/CSS as fallback
       return {
-        htmlContent: '<div>Error: Failed to generate HTML content</div>',
-        cssContent: 'body { font-family: sans-serif; color: red; }',
+        htmlContent: `<div class="figma-design">
+  <div class="figma-component" style="width: ${designInfo.width}px; height: ${designInfo.height}px;">
+    <p>Error: ${error.message || 'Failed to generate HTML content'}</p>
+  </div>
+</div>`,
+        cssContent: `.figma-design {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+.figma-component {
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: sans-serif;
+  color: #333;
+  text-align: center;
+  padding: 20px;
+  box-sizing: border-box;
+}`,
         error: error.message || 'Unknown error occurred'
       };
     }
