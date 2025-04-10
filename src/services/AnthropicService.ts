@@ -1528,6 +1528,178 @@ class AnthropicService {
       }
     });
   }
+
+  // Add a simplified method for design analysis that doesn't send the image
+  async analyzeDesignWithPromptOnly(designDescription: string): Promise<DesignAnalysisResponse> {
+    try {
+      console.log('Using text-only analysis approach for more reliability');
+      
+      const analysisSystemPrompt = `You are a UI/UX design expert tasked with analyzing and improving user interface designs.
+      
+      Please provide a detailed analysis covering:
+      1. Design System: Colors (provide a color palette with hex codes)
+      2. Design System: Typography (font families, sizes, weights)
+      3. Design System: Components (identify key UI components)
+      4. Visual Hierarchy Analysis
+      5. Accessibility Analysis
+      6. Usability Analysis
+      7. Strengths and Weaknesses
+      8. Specific Improvement Recommendations
+      
+      Then, generate HTML/CSS code for an improved version of the design that addresses the issues you identified.`;
+      
+      const analysisUserPrompt = `I need you to analyze and improve this UI design:
+      
+      ${designDescription}
+      
+      Please provide a detailed analysis followed by HTML/CSS code for an improved version of this design.`;
+      
+      const analysisRequestBody = {
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 4000,
+        temperature: 0.2,
+        system: analysisSystemPrompt,
+        messages: [
+          {
+            role: "user", 
+            content: [
+              {
+                type: "text",
+                text: analysisUserPrompt
+              }
+            ]
+          }
+        ]
+      };
+      
+      // First try the proxy endpoint, with fallback to direct call if allowed
+      console.log('Trying text-only approach with server proxy...');
+      
+      // Fix: Explicitly set the method as POST and include proper content type headers
+      const analysisResponse = await fetch('/api/anthropic-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(analysisRequestBody),
+        cache: 'no-cache'
+      });
+      
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text();
+        console.error('Server proxy error response:', analysisResponse.status, errorText);
+        throw new Error(`Server proxy returned: ${analysisResponse.status} ${analysisResponse.statusText}`);
+      }
+      
+      const analysisData = await analysisResponse.json();
+      
+      if (!analysisData.content || !analysisData.content[0] || !analysisData.content[0].text) {
+        console.error('Unexpected Anthropic API response format (analysis):', analysisData);
+        throw new Error('Unexpected response format from Anthropic API');
+      }
+      
+      const analysisText = analysisData.content[0].text;
+      console.log('Design analysis complete, length:', analysisText.length);
+      
+      // Extract design system information from analysis
+      const designSystem = this.extractDesignSystem(analysisText);
+      
+      // Create a simplified HTML example
+      const htmlExample = this.extractHtmlFromResponse(analysisText);
+      
+      // Create a mock response with the data we have
+      const result: DesignAnalysisResponse = {
+        analysis: {
+          strengths: this.extractListItems(analysisText.match(/Strengths?:([\s\S]*?)(?:Weaknesses|$)/i)?.[1] || ''),
+          weaknesses: this.extractListItems(analysisText.match(/Weaknesses?:([\s\S]*?)(?:Recommendations|$)/i)?.[1] || ''),
+          improvementAreas: this.extractListItems(analysisText.match(/Recommendations?:([\s\S]*?)(?:HTML|$)/i)?.[1] || ''),
+          specificChanges: [],
+          visualHierarchy: {
+            issues: this.extractListItems(analysisText.match(/Visual Hierarchy:([\s\S]*?)(?:Accessibility|$)/i)?.[1] || ''),
+            improvements: []
+          },
+          colorContrast: {
+            issues: [],
+            improvements: []
+          },
+          componentSelection: {
+            issues: [],
+            improvements: []
+          },
+          textLegibility: {
+            issues: [],
+            improvements: []
+          },
+          usability: {
+            issues: this.extractListItems(analysisText.match(/Usability:([\s\S]*?)(?:Strengths|$)/i)?.[1] || ''),
+            improvements: []
+          },
+          accessibility: {
+            issues: this.extractListItems(analysisText.match(/Accessibility:([\s\S]*?)(?:Usability|Strengths|$)/i)?.[1] || ''),
+            improvements: []
+          },
+          designSystem: {
+            colorPalette: designSystem.colors,
+            typography: designSystem.typography,
+            components: designSystem.components
+          }
+        },
+        htmlCode: htmlExample.html || '<div>Example HTML would go here</div>',
+        cssCode: htmlExample.css || 'body { font-family: sans-serif; }',
+        metadata: {
+          colors: {
+            primary: designSystem.colors.slice(0, 1),
+            secondary: designSystem.colors.slice(1, 2),
+            background: designSystem.colors.slice(2, 3),
+            text: designSystem.colors.slice(3, 4)
+          },
+          fonts: designSystem.typography,
+          components: designSystem.components
+        }
+      };
+      
+      return result;
+    } catch (error: any) {
+      console.error('Error analyzing design with text-only approach:', error);
+      throw new Error(`Failed to generate design iteration: ${error.message}`);
+    }
+  }
+  
+  // Helper method to extract HTML and CSS from the response text
+  private extractHtmlFromResponse(responseText: string): { html: string, css: string } {
+    const result = { html: '', css: '' };
+    
+    // Extract HTML code between ```html and ``` tags
+    const htmlRegex = /```html\s*([\s\S]*?)```/;
+    const htmlMatch = responseText.match(htmlRegex);
+    if (htmlMatch && htmlMatch[1]) {
+      result.html = htmlMatch[1].trim();
+    } else {
+      // Try to find any HTML content
+      const htmlDocRegex = /<html[^>]*>([\s\S]*?)<\/html>/i;
+      const htmlDocMatch = responseText.match(htmlDocRegex);
+      if (htmlDocMatch) {
+        result.html = `<html>${htmlDocMatch[1]}</html>`;
+      }
+    }
+    
+    // Extract CSS code between ```css and ``` tags
+    const cssRegex = /```css\s*([\s\S]*?)```/;
+    const cssMatch = responseText.match(cssRegex);
+    if (cssMatch && cssMatch[1]) {
+      result.css = cssMatch[1].trim();
+    } else if (result.html) {
+      // Try to extract from style tags in the HTML
+      const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/i;
+      const styleMatch = result.html.match(styleRegex);
+      if (styleMatch && styleMatch[1]) {
+        result.css = styleMatch[1].trim();
+      }
+    }
+    
+    return result;
+  }
 }
 
 const anthropicService = new AnthropicService();

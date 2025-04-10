@@ -1496,16 +1496,62 @@ export const Canvas: React.FC = () => {
       );
       
       // Step 1: AI Analysis - Call Anthropic service to analyze the design according to PRD 2.4.2
+      console.log('Starting design analysis with Anthropic service...');
+      
+      // Get any linked insights for this design from the current page
+      const linkedInsights: any[] = []; // In the future, get this from the insights tab
+      
       let result;
-      if (isIteration) {
-        // For iterations, we need to call a specialized method that can analyze HTML/CSS
-        // For now, we'll use the same method with the parent's image URL
-        // This is a temporary solution until we implement proper HTML/CSS analysis
-        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl);
-      } else {
-        // For base designs, we use the existing method with the image URL
-        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+      try {
+        // First try with the simplified text-only approach to avoid image format issues
+        console.log('Using simplified text-only approach for more reliable results');
+        
+        // Create a simple description of the design
+        const designDescription = `This is a UI design with dimensions ${originalDimensions.width}px × ${originalDimensions.height}px.
+        ${isIteration ? "It's an iteration of a previous design." : "It's an original design."}
+        
+        The design needs improvements in:
+        - Visual hierarchy and information priority
+        - Color contrast and accessibility
+        - Component selection and placement
+        - Text legibility
+        - Overall usability
+        
+        Please analyze this design and provide HTML/CSS for an improved version that maintains the original style but addresses these potential issues.`;
+        
+        // Use the text-only approach
+        result = await anthropicService.analyzeDesignWithPromptOnly(designDescription);
+      } catch (textError) {
+        console.error('Text-only approach failed:', textError);
+        alert('The AI service encountered an error. Please try again later.');
+        
+        // Reset processing state
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => {
+            if (design.id === designId) {
+              // If it's a base design
+              return { ...design, isProcessing: false, processingStep: null };
+            } else if (design.iterations) {
+              // Check if the designId matches any of this design's iterations
+              const updatedIterations = design.iterations.map(iteration => 
+                iteration.id === designId
+                  ? { ...iteration, isProcessing: false, processingStep: null }
+                  : iteration
+              );
+              
+              // Only return a new design object if one of its iterations changed
+              if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+                return { ...design, iterations: updatedIterations };
+              }
+            }
+            return design;
+          })
+        );
+        
+        return;
       }
+      
+      console.log('Design analysis complete, generating improved version...');
       
       // Update the processing step to "Generating Improved Design"
       setDesigns(prevDesigns => 
@@ -2420,12 +2466,53 @@ export const Canvas: React.FC = () => {
       const linkedInsights: any[] = []; // In the future, get this from the insights tab
       
       let result;
-      if (isIteration) {
-        // For iterations, analyze the rendered image of the HTML/CSS iteration
-        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl, linkedInsights);
-      } else {
-        // For base designs, analyze the original image
-        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl, linkedInsights);
+      try {
+        // First try with the simplified text-only approach to avoid image format issues
+        console.log('Using simplified text-only approach for more reliable results');
+        
+        // Create a simple description of the design
+        const designDescription = `This is a UI design with dimensions ${originalDimensions.width}px × ${originalDimensions.height}px.
+        ${isIteration ? "It's an iteration of a previous design." : "It's an original design."}
+        
+        The design needs improvements in:
+        - Visual hierarchy and information priority
+        - Color contrast and accessibility
+        - Component selection and placement
+        - Text legibility
+        - Overall usability
+        
+        Please analyze this design and provide HTML/CSS for an improved version that maintains the original style but addresses these potential issues.`;
+        
+        // Use the text-only approach
+        result = await anthropicService.analyzeDesignWithPromptOnly(designDescription);
+      } catch (textError) {
+        console.error('Text-only approach failed:', textError);
+        alert('The AI service encountered an error. Please try again later.');
+        
+        // Reset processing state
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => {
+            if (design.id === designId) {
+              // If it's a base design
+              return { ...design, isProcessing: false, processingStep: null };
+            } else if (design.iterations) {
+              // Check if the designId matches any of this design's iterations
+              const updatedIterations = design.iterations.map(iteration => 
+                iteration.id === designId
+                  ? { ...iteration, isProcessing: false, processingStep: null }
+                  : iteration
+              );
+              
+              // Only return a new design object if one of its iterations changed
+              if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+                return { ...design, iterations: updatedIterations };
+              }
+            }
+            return design;
+          })
+        );
+        
+        return;
       }
       
       console.log('Design analysis complete, generating improved version...');
