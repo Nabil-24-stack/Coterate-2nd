@@ -436,6 +436,32 @@ class AnthropicService {
     }
   }
   
+  // Helper to extract list items from a section
+  private extractListItems(text: string): string[] {
+    const result: string[] = [];
+    
+    // Check for bullet points with various markers
+    const bulletPointPattern = /(?:^|\n)\s*(?:[-*•]|\d+\.)\s+(.*?)(?=\n\s*(?:[-*•]|\d+\.)\s+|\n\n|$)/g;
+    let match;
+    
+    while ((match = bulletPointPattern.exec(text)) !== null) {
+      if (match[1] && match[1].trim()) {
+        result.push(match[1].trim());
+      }
+    }
+    
+    // If no bullet points found, try to split by newlines
+    if (result.length === 0) {
+      const lines = text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'));
+      
+      result.push(...lines);
+    }
+    
+    return result;
+  }
+  
   // Helper to extract design system from analysis text
   private extractDesignSystem(analysisText: string): {
     colors: string[];
@@ -456,7 +482,10 @@ class AnthropicService {
       const hexRegex = /#[0-9A-Fa-f]{3,6}/g;
       const hexMatches = colorsMatch[1].match(hexRegex);
       if (hexMatches) {
-        designSystem.colors = [...new Set(hexMatches)];
+        // Create a new array with unique values instead of using Set
+        designSystem.colors = hexMatches.filter((value, index, self) => 
+          self.indexOf(value) === index
+        );
       }
     }
     
@@ -464,33 +493,39 @@ class AnthropicService {
     const typographyRegex = /Design System: Typography:([\s\S]*?)(?:Design System: Components|Components|##)/i;
     const typographyMatch = analysisText.match(typographyRegex);
     if (typographyMatch && typographyMatch[1]) {
-      // Extract font families
+      // Extract font families using exec instead of matchAll
       const fontRegex = /(?:font-family|font family|fonts?):\s*([^,\.;\n]+)/gi;
-      const fontMatches = [...typographyMatch[1].matchAll(fontRegex)];
+      let fontMatch;
+      const fontNames: string[] = [];
       
-      for (const match of fontMatches) {
-        if (match[1]) {
-          const fontName = match[1].trim().replace(/['"`]/g, '');
-          if (fontName.length > 0 && !designSystem.typography.includes(fontName)) {
-            designSystem.typography.push(fontName);
+      while ((fontMatch = fontRegex.exec(typographyMatch[1])) !== null) {
+        if (fontMatch[1]) {
+          const fontName = fontMatch[1].trim().replace(/['"`]/g, '');
+          if (fontName.length > 0 && !fontNames.includes(fontName)) {
+            fontNames.push(fontName);
           }
         }
       }
+      
+      designSystem.typography = fontNames;
     }
     
     // Extract components
     const componentsRegex = /Design System: Components:([\s\S]*?)(?:Design System: Layout|Layout|Visual Hierarchy|##)/i;
     const componentsMatch = analysisText.match(componentsRegex);
     if (componentsMatch && componentsMatch[1]) {
-      // Extract component names from bullet points
+      // Extract component names from bullet points using exec instead of matchAll
       const componentRegex = /(?:^|\n)[-*•]\s*([A-Z][^:]+):/gm;
-      const matches = [...componentsMatch[1].matchAll(componentRegex)];
+      let componentMatch;
+      const componentNames: string[] = [];
       
-      for (const match of matches) {
-        if (match[1] && match[1].trim().length > 0) {
-          designSystem.components.push(match[1].trim());
+      while ((componentMatch = componentRegex.exec(componentsMatch[1])) !== null) {
+        if (componentMatch[1] && componentMatch[1].trim().length > 0) {
+          componentNames.push(componentMatch[1].trim());
         }
       }
+      
+      designSystem.components = componentNames;
     }
     
     return designSystem;
@@ -588,7 +623,7 @@ class AnthropicService {
       }
       
       // If no specific changes found, check for a summary section
-      if (result.analysis.specificChanges.length === 0) {
+      if (result.analysis.specificChanges && result.analysis.specificChanges.length === 0) {
         const summaryRegex = /(?:Summary|Overview|Implementation Summary):([\s\S]*?)(?:##|\n\n\n|```|$)/i;
         const summaryMatch = iterationText.match(summaryRegex);
         if (summaryMatch && summaryMatch[1]) {
@@ -801,13 +836,6 @@ class AnthropicService {
     }
   }
   
-  // Helper to extract hex color codes from text
-  private extractHexCodes(text: string): string[] {
-    const hexRegex = /#[0-9A-Fa-f]{3,6}/g;
-    const matches = text.match(hexRegex);
-    return matches ? [...new Set(matches)] : [];
-  }
-  
   // Helper to extract font families from typography text
   private extractFontFamilies(text: string): string[] {
     // Common font patterns
@@ -821,20 +849,20 @@ class AnthropicService {
     
     // Try each pattern
     for (const pattern of fontPatterns) {
-      const matches = [...text.matchAll(pattern)];
-      for (const match of matches) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
         if (match[1]) {
           // Clean up font names
           const fonts = match[1].split(',')
-            .map(font => font.trim().replace(/['"`]/g, ''))
-            .filter(font => font.length > 0 && !font.startsWith('#'));
-          fontMatches.push(...fonts);
+            .map((font: string) => font.trim().replace(/['"`]/g, ''))
+            .filter((font: string) => font.length > 0 && !font.startsWith('#'));
+          fontMatches = fontMatches.concat(fonts);
         }
       }
     }
     
-    // Deduplicate
-    return [...new Set(fontMatches)];
+    // Deduplicate using filter instead of Set
+    return fontMatches.filter((value, index, self) => self.indexOf(value) === index);
   }
   
   // Helper to extract component types from components text
@@ -859,15 +887,25 @@ class AnthropicService {
     
     // Also extract component names from bullet points
     const bulletPointsRegex = /(?:^|\n)[-*•]\s*([A-Z][^:]+):/gm;
-    const matches = [...text.matchAll(bulletPointsRegex)];
-    for (const match of matches) {
+    let match;
+    while ((match = bulletPointsRegex.exec(text)) !== null) {
       if (match[1] && /button|input|element|component/i.test(match[1])) {
         componentMatches.push(match[1].trim());
       }
     }
     
-    // Deduplicate
-    return [...new Set(componentMatches)];
+    // Deduplicate using filter instead of Set
+    return componentMatches.filter((value, index, self) => self.indexOf(value) === index);
+  }
+
+  // Helper to extract hex color codes from text
+  private extractHexCodes(text: string): string[] {
+    const hexRegex = /#[0-9A-Fa-f]{3,6}/g;
+    const matches = text.match(hexRegex);
+    if (!matches) return [];
+    
+    // Deduplicate using filter instead of Set
+    return matches.filter((value, index, self) => self.indexOf(value) === index);
   }
   
   // Helper method to create a fallback image from a blob
@@ -1135,6 +1173,208 @@ class AnthropicService {
           width: img.naturalWidth || 800,
           height: img.naturalHeight || 600
         });
+      }
+    });
+  }
+
+  // Add this method to create a data URL from an image
+  private async createDataUrlFromFigmaImage(imageUrl: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      console.log('Creating data URL from image:', imageUrl);
+      
+      // Special handling for Figma URLs
+      let processedUrl = imageUrl;
+      if (imageUrl.includes('figma.com') || imageUrl.includes('figma-alpha')) {
+        // Add cache busting parameter for Figma URLs
+        const cacheBuster = Date.now();
+        processedUrl = imageUrl.includes('?') 
+          ? `${imageUrl}&t=${cacheBuster}` 
+          : `${imageUrl}?t=${cacheBuster}`;
+        console.log('Processing Figma URL with cache busting:', processedUrl);
+      }
+      
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      // Set a timeout to avoid hanging
+      const timeoutId = setTimeout(() => {
+        console.log('Image load timed out, trying to create pixel data manually');
+        // Create a fallback image with dimensions from the current screen dimensions
+        try {
+          const width = window.innerWidth || 1200;
+          const height = window.innerHeight || 800;
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Fill with a light color
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add text indicating this is a fallback
+            ctx.fillStyle = '#495057';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Original Design (Generated Placeholder)', width / 2, height / 2);
+            
+            // Get data URL
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            console.log('Created fallback dataURL after timeout');
+            resolve(dataUrl);
+            return;
+          }
+        } catch (e) {
+          console.error('Error creating fallback image after timeout:', e);
+        }
+        
+        resolve(null);
+      }, 8000); // Increased timeout for slower connections
+      
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        try {
+          console.log('Image loaded successfully, dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+          
+          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+            console.warn('Image loaded but has zero dimensions, creating fallback');
+            const fallbackDataUrl = this.createPlaceholderImage(
+              {width: 800, height: 600}, 
+              'Original Design'
+            );
+            resolve(fallbackDataUrl);
+            return;
+          }
+          
+          // Create a canvas element to draw the image
+          const canvas = document.createElement('canvas');
+          
+          // Calculate safe dimensions
+          const maxWidth = Math.min(img.naturalWidth, 4000);
+          const maxHeight = Math.min(img.naturalHeight, 4000);
+          
+          // Set canvas dimensions
+          canvas.width = maxWidth;
+          canvas.height = maxHeight;
+          
+          // Get the context and draw the image
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            console.error('Could not get canvas context');
+            resolve(null);
+            return;
+          }
+          
+          // Fill with white background first
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, maxWidth, maxHeight);
+          
+          // Draw the image
+          ctx.drawImage(img, 0, 0, maxWidth, maxHeight);
+          
+          try {
+            // First try with high quality
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            
+            // Validate the data URL
+            if (dataUrl && dataUrl.length > 100) {
+              console.log('Created high quality data URL, length:', dataUrl.length);
+              resolve(dataUrl);
+              return;
+            }
+            
+            // If that fails, try with lower quality
+            console.log('High quality conversion failed, trying lower quality');
+            const lowQualityDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            
+            if (lowQualityDataUrl && lowQualityDataUrl.length > 100) {
+              console.log('Created low quality data URL, length:', lowQualityDataUrl.length);
+              resolve(lowQualityDataUrl);
+              return;
+            }
+            
+            // If that also fails, try PNG format
+            console.log('JPEG conversion failed, trying PNG format');
+            const pngDataUrl = canvas.toDataURL('image/png');
+            
+            if (pngDataUrl && pngDataUrl.length > 100) {
+              console.log('Created PNG data URL, length:', pngDataUrl.length);
+              resolve(pngDataUrl);
+              return;
+            }
+          } catch (canvasError) {
+            console.error('Error creating data URL from canvas:', canvasError);
+          }
+          
+          // Last resort - create a simple placeholder with same dimensions
+          console.log('All canvas conversion attempts failed, creating placeholder');
+          const fallbackDataUrl = this.createPlaceholderImage(
+            {width: maxWidth, height: maxHeight},
+            'Original Design'
+          );
+          resolve(fallbackDataUrl);
+        } catch (error) {
+          console.error('Error in image onload handler:', error);
+          resolve(null);
+        }
+      };
+      
+      img.onerror = (error) => {
+        clearTimeout(timeoutId);
+        console.error('Error loading image for data URL creation:', error);
+        
+        // Try to determine dimensions for fallback
+        if (typeof window !== 'undefined') {
+          const fallbackWidth = window.innerWidth || 800;
+          const fallbackHeight = window.innerHeight || 600;
+          
+          const fallbackDataUrl = this.createPlaceholderImage(
+            {width: fallbackWidth, height: fallbackHeight},
+            'Original Design'
+          );
+          resolve(fallbackDataUrl);
+        } else {
+          resolve(null);
+        }
+      };
+      
+      // Add more robust error handling
+      img.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        console.log('Image loading aborted');
+        resolve(null);
+      });
+      
+      // Set the source to trigger loading
+      img.src = processedUrl;
+      
+      // For browsers that may have the image cached
+      if (img.complete) {
+        clearTimeout(timeoutId);
+        console.log('Image already complete - might be cached');
+        
+        try {
+          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+            console.warn('Cached image has invalid dimensions, retrying with cache buster');
+            
+            // Force reload with cache busting
+            const newCacheBuster = Date.now() + 1;
+            const forcedUrl = processedUrl.includes('?') 
+              ? `${processedUrl}&cb=${newCacheBuster}` 
+              : `${processedUrl}?cb=${newCacheBuster}`;
+            
+            img.src = forcedUrl;
+          } else {
+            // Process the complete image
+            img.onload?.call(img, new Event('synthetic-load'));
+          }
+        } catch (e) {
+          console.error('Error handling already complete image:', e);
+          resolve(null);
+        }
       }
     });
   }
