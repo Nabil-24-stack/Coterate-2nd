@@ -218,6 +218,7 @@ const UserInfo = styled.div`
 const UserName = styled.div`
   font-weight: 600;
   font-size: 14px;
+  color: #333;
 `;
 
 const UserEmail = styled.div`
