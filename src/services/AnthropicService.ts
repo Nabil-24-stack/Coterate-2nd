@@ -131,6 +131,49 @@ class AnthropicService {
     return false;
   }
   
+  // Add a method to test the API connection
+  async testApiConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('Testing API connection to Anthropic proxy...');
+      
+      // Simple test request
+      const testResponse = await fetch('/api/anthropic-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "claude-3-7-sonnet",
+          max_tokens: 10,
+          temperature: 0.2,
+          system: "You are a helpful assistant.",
+          messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
+        })
+      });
+      
+      console.log(`Test response status: ${testResponse.status}`);
+      
+      // If not OK, throw an error
+      if (!testResponse.ok) {
+        const errorText = await testResponse.text();
+        throw new Error(`API test failed with status ${testResponse.status}: ${errorText}`);
+      }
+      
+      const responseData = await testResponse.json();
+      return { 
+        success: true, 
+        message: 'API connection successful' 
+      };
+    } catch (error: any) {
+      console.error('API connection test failed:', error);
+      return { 
+        success: false, 
+        message: `API connection test failed: ${error.message}` 
+      };
+    }
+  }
+  
   // Main method to analyze design image and generate improved version
   async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
     if (!this.apiKey && !this.isProductionEnvironment()) {

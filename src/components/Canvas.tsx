@@ -1418,30 +1418,38 @@ export const Canvas: React.FC = () => {
       return;
     }
     
-    // Set processing state for this specific design or iteration
-    setDesigns(prevDesigns => 
-      prevDesigns.map(design => {
-        if (design.id === designId) {
-          // If it's a base design
-          return { ...design, isProcessing: true, processingStep: 'analyzing' };
-        } else if (design.iterations) {
-          // Check if the designId matches any of this design's iterations
-          const updatedIterations = design.iterations.map(iteration => 
-            iteration.id === designId
-              ? { ...iteration, isProcessing: true, processingStep: 'analyzing' }
-              : iteration
-          );
-          
-          // Only return a new design object if one of its iterations changed
-          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
-            return { ...design, iterations: updatedIterations };
-          }
-        }
-        return design;
-      })
-    );
+    // First, test API connection to identify any issues
+    const testResult = await anthropicService.testApiConnection();
+    if (!testResult.success) {
+      console.error('API connection test failed:', testResult.message);
+      alert(`There was an issue connecting to the AI service: ${testResult.message}`);
+      return;
+    }
     
     try {
+      // Set processing state for this specific design or iteration
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id === designId) {
+            // If it's a base design
+            return { ...design, isProcessing: true, processingStep: 'analyzing' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, isProcessing: true, processingStep: 'analyzing' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+          }
+          return design;
+        })
+      );
+      
       // Get the original dimensions depending on whether we have an original or iteration
       let originalDimensions;
       let sourceImageUrl: string;
