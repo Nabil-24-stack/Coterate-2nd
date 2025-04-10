@@ -3,7 +3,7 @@ import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { Design, DesignIteration, Page } from '../types';
 import supabaseService from '../services/SupabaseService';
-import openAIService from '../services/OpenAIService';
+import anthropicService from '../services/AnthropicService';
 import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
 import { isFigmaSelectionLink, parseFigmaSelectionLink, FigmaLinkData } from '../utils/figmaLinkParser';
 
@@ -1413,9 +1413,9 @@ export const Canvas: React.FC = () => {
       return;
     }
     
-    // Check if OpenAI API key is available
-    if (!openAIService.hasApiKey()) {
-      alert('OpenAI API key is not configured. Please set it in your environment variables.');
+    // Check if Anthropic API key is available
+    if (!anthropicService.hasApiKey()) {
+      alert('Anthropic API key is not configured. Please set it in your environment variables.');
       return;
     }
     
@@ -1488,16 +1488,16 @@ export const Canvas: React.FC = () => {
         })
       );
       
-      // Step 1: AI Analysis - Call OpenAI service to analyze the design according to PRD 2.4.2
+      // Step 1: AI Analysis - Call Anthropic service to analyze the design according to PRD 2.4.2
       let result;
       if (isIteration) {
         // For iterations, we need to call a specialized method that can analyze HTML/CSS
         // For now, we'll use the same method with the parent's image URL
         // This is a temporary solution until we implement proper HTML/CSS analysis
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl);
       } else {
         // For base designs, we use the existing method with the image URL
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl);
       }
       
       // Update the processing step to "Generating Improved Design"
