@@ -181,6 +181,9 @@ module.exports = async (req, res) => {
             // Decode the chunk
             const chunk = textDecoder.decode(value, { stream: true });
             
+            // For troubleshooting
+            // console.log('Received chunk:', chunk.substring(0, 100) + '...');
+            
             // Split the chunk by lines and process each line
             const lines = chunk.split('\n');
             for (const line of lines) {
@@ -227,15 +230,45 @@ module.exports = async (req, res) => {
         } catch (streamError) {
           console.error('Error processing stream:', streamError);
           
-          // If we encounter an error during streaming, send an error event
-          const errorEvent = {
-            type: 'error',
-            error: {
-              message: `Streaming error: ${streamError.message}`
-            }
-          };
+          // If we have an error during streaming but have accumulated some content,
+          // try to salvage what we have
+          if (accumulatedContent.length > 0) {
+            console.log('Stream error occurred, but returning accumulated content:', 
+                       accumulatedContent.length, 'characters');
+            
+            const errorEvent = {
+              type: 'error',
+              error: {
+                message: `Streaming error: ${streamError.message}`
+              }
+            };
+            
+            res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+            
+            // Also send a final event with the accumulated content
+            const completeEvent = {
+              type: 'message_complete',
+              message: {
+                id: 'msg_salvaged',
+                content: [{ type: 'text', text: accumulatedContent }],
+                model: optimizedRequest.model,
+                role: 'assistant'
+              }
+            };
+            
+            res.write(`data: ${JSON.stringify(completeEvent)}\n\n`);
+          } else {
+            // If we don't have any accumulated content, just send an error
+            const errorEvent = {
+              type: 'error',
+              error: {
+                message: `Streaming error: ${streamError.message}`
+              }
+            };
+            
+            res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+          }
           
-          res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
           res.write('data: [DONE]\n\n');
           res.end();
         }
@@ -293,8 +326,8 @@ function optimizeRequest(requestBody) {
     optimized.max_tokens = Math.max(optimized.max_tokens || 4000, 4000);
   }
   
-  // Remove the problematic chunked parameter - we'll handle large responses differently
-  if (optimized.chunked) {
+  // Remove the problematic chunked parameter completely - it's causing the "Extra inputs are not permitted" error
+  if ('chunked' in optimized) {
     delete optimized.chunked;
   }
   
@@ -366,7 +399,7 @@ function optimizeRequest(requestBody) {
     delete optimized.anthropic_beta;
   }
 
-  // Make sure no other custom properties are added
+  // Make sure no other custom properties are added (including chunked)
   const validAnthropicParams = [
     'model', 'max_tokens', 'metadata', 'stop_sequences',
     'stream', 'system', 'temperature', 'top_k', 'top_p', 'messages'

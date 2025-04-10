@@ -2210,6 +2210,9 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
       ? userContent 
       : [{ type: "text", text: userContent }];
     
+    // Check if content includes images
+    const hasImages = content.some(item => item.type === 'image');
+    
     // Prepare request body - only include valid Anthropic API parameters
     const requestBody = {
       model: options.model,
@@ -2222,17 +2225,15 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
           content
         }
       ],
-      stream: options.stream === true
+      // Only enable streaming if explicitly requested AND there are no images
+      // or if explicitly requested AND the image is provided as a URL (not base64)
+      stream: options.stream === true && (!hasImages || content.every(item => 
+        item.type !== 'image' || (item.type === 'image' && item.source?.type === 'url')
+      ))
     };
     
     // Ensure we're not sending any problematic properties
     const requestBodyCopy = JSON.parse(JSON.stringify(requestBody));
-    
-    // If streaming is not explicitly requested but there are images in the content,
-    // disable streaming as it may cause issues with image processing
-    if (options.stream !== true && content.some(item => item.type === 'image')) {
-      requestBodyCopy.stream = false;
-    }
     
     // Check if we need to use streaming
     const useStreaming = requestBodyCopy.stream === true;
@@ -2248,45 +2249,81 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
         headers['X-Request-Size'] = 'large';
       }
       
-      // Make the API call
-      const response = await fetch('/api/anthropic-proxy', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBodyCopy),
-        cache: 'no-cache'
-      });
+      // Add retry logic for robustness
+      const maxRetries = 2;
+      let lastError = null;
       
-      if (!response.ok) {
-        const errorData = await response.text();
-        // Parse the error if possible to provide more details
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const parsedError = JSON.parse(errorData);
-          if (parsedError.error && typeof parsedError.error === 'object') {
-            if (parsedError.error.message) {
-              errorMessage += ` - ${parsedError.error.message}`;
-            }
-            // Check for invalid parameter error
-            if (parsedError.error.type === 'invalid_request_error') {
-              console.error('Invalid request parameter detected:', parsedError.error.message);
-            }
+          // Log attempt information for debugging
+          if (attempt > 0) {
+            console.log(`Retry ${attempt}/${maxRetries} for Anthropic API call`);
           }
-        } catch (e) {
-          // If we can't parse the error as JSON, just include the raw text
-          errorMessage += ` - ${errorData}`;
+          
+          // Make the API call
+          const response = await fetch('/api/anthropic-proxy', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(requestBodyCopy),
+            cache: 'no-cache'
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.text();
+            // Parse the error if possible to provide more details
+            let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+            try {
+              const parsedError = JSON.parse(errorData);
+              if (parsedError.error && typeof parsedError.error === 'object') {
+                if (parsedError.error.message) {
+                  errorMessage += ` - ${parsedError.error.message}`;
+                }
+                // Check for invalid parameter error
+                if (parsedError.error.type === 'invalid_request_error') {
+                  console.error('Invalid request parameter detected:', parsedError.error.message);
+                  
+                  // If the error is about chunked parameter, try again without streaming
+                  if (parsedError.error.message.includes('chunked') && useStreaming) {
+                    console.log('Detected chunked parameter error, retrying without streaming');
+                    requestBodyCopy.stream = false;
+                    continue;
+                  }
+                }
+              }
+            } catch (e) {
+              // If we can't parse the error as JSON, just include the raw text
+              errorMessage += ` - ${errorData}`;
+            }
+            throw new Error(errorMessage);
+          }
+          
+          // If streaming is enabled, process the response as a stream
+          if (useStreaming) {
+            console.log('Processing streaming response from Anthropic');
+            return this.processAnthropicStream(response, options.onProgress);
+          } else {
+            // For non-streaming responses, parse the JSON as before
+            const data = await response.json();
+            return data.content?.[0]?.text || '';
+          }
+        } catch (error: any) {
+          lastError = error;
+          
+          // Only retry if not the final attempt
+          if (attempt < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const backoffTime = Math.min(1000 * Math.pow(2, attempt), 5000);
+            console.log(`Retrying in ${backoffTime/1000} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          } else {
+            // On final attempt, throw the error
+            throw error;
+          }
         }
-        throw new Error(errorMessage);
       }
       
-      // If streaming is enabled, process the response as a stream
-      if (useStreaming) {
-        console.log('Processing streaming response from Anthropic');
-        return this.processAnthropicStream(response, options.onProgress);
-      } else {
-        // For non-streaming responses, parse the JSON as before
-        const data = await response.json();
-        return data.content?.[0]?.text || '';
-      }
+      // This should never be reached due to the for loop logic
+      throw new Error('Unexpected error in retry logic');
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
       throw error;
@@ -2715,8 +2752,18 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
     console.log('Using two-stage approach for complex design');
 
     try {
-      // STAGE 1: Analyze the design and extract structure, colors, and typography
-      const analysisPrompt = `You are a UI design expert. Analyze this Figma design and extract ONLY the following information:
+      // For very large designs, add an additional split to make the processing more manageable
+      const isExtremelyLargeDesign = designInfo.width * designInfo.height > 4000000; // > 4 million pixels
+      
+      // For extremely large designs, use a more focused analysis approach
+      const analysisPrompt = isExtremelyLargeDesign 
+        ? `You are a UI design expert. Analyze this Figma design and extract ONLY the key information:
+           1. Key colors (just the main 3-5 hex codes)
+           2. Main font family and sizes
+           3. Brief layout description (1-2 sentences)
+           4. Critical UI components (3-5 main components)
+           Be extremely concise. This is for a large design that needs simplification.`
+        : `You are a UI design expert. Analyze this Figma design and extract ONLY the following information:
 
 1. Color palette (exact hex codes)
 2. Typography (font families, sizes, weights)
@@ -2753,7 +2800,7 @@ DO NOT generate any code in this stage.`;
         // First attempt with a simpler prompt, using streaming for reliability
         analysisResult = await this.callAnthropicAPI(analysisPrompt, analysisContentArray, {
           model: "claude-3-7-sonnet-20250219",
-          max_tokens: 1500,
+          max_tokens: isExtremelyLargeDesign ? 800 : 1500, // Reduced for extremely large designs
           temperature: 0.2,
           useProxy: true,
           stream: true,
@@ -2771,20 +2818,53 @@ DO NOT generate any code in this stage.`;
         } else {
           // If the full analysis fails, try again with a more focused prompt
           try {
-            console.log('Trying simpler analysis prompt...');
+            console.log('Trying simpler analysis prompt without streaming...');
             const simplifiedPrompt = `Analyze this UI design and list only:
 1. Main colors (hex codes)
 2. Fonts used
 3. Basic layout description
 Keep it very brief.`;
             
-            analysisResult = await this.callAnthropicAPI(simplifiedPrompt, analysisContentArray, {
-              model: "claude-3-7-sonnet-20250219",
-              max_tokens: 800,
-              temperature: 0.1,
-              useProxy: true,
-              stream: true
-            });
+            // For extremely large designs, use a more direct request
+            if (isExtremelyLargeDesign) {
+              // Try without streaming for more reliability with large images
+              const simplifiedResponse = await fetch('/api/anthropic-proxy', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                  model: "claude-3-7-sonnet-20250219",
+                  max_tokens: 800,
+                  temperature: 0.1,
+                  system: simplifiedPrompt,
+                  messages: [
+                    {
+                      role: "user",
+                      content: analysisContentArray
+                    }
+                  ]
+                }),
+                cache: 'no-cache'
+              });
+              
+              if (!simplifiedResponse.ok) {
+                throw new Error(`Simplified analysis failed: ${simplifiedResponse.status}`);
+              }
+              
+              const simplifiedData = await simplifiedResponse.json();
+              analysisResult = simplifiedData.content?.[0]?.text || '';
+            } else {
+              // For normal designs, try streaming with the simplified prompt
+              analysisResult = await this.callAnthropicAPI(simplifiedPrompt, analysisContentArray, {
+                model: "claude-3-7-sonnet-20250219",
+                max_tokens: 800,
+                temperature: 0.1,
+                useProxy: true,
+                stream: true
+              });
+            }
             
             console.log('Simplified design analysis completed');
           } catch (retryError) {
@@ -2812,9 +2892,6 @@ COMPONENTS:
         }
       }
 
-      // STAGE 2: Use the analysis to generate the HTML/CSS implementation
-      // Break it into two substeps for better reliability
-      
       // STAGE 2A: Generate HTML structure
       console.log('STAGE 2A: Generating HTML structure based on analysis');
       
@@ -2855,7 +2932,7 @@ Focus ONLY on HTML structure in this step.`;
           }
         ], {
           model: "claude-3-7-sonnet-20250219",
-          max_tokens: 2000,
+          max_tokens: isExtremelyLargeDesign ? 1500 : 2000, // Reduced for extremely large designs
           temperature: 0.2,
           useProxy: true,
           stream: true,
@@ -2904,7 +2981,24 @@ Focus ONLY on HTML structure in this step.`;
       // STAGE 2B: Generate CSS for the HTML
       console.log('STAGE 2B: Generating CSS for the HTML structure');
       
-      const cssPrompt = `You are an expert UI developer. Create CSS for this HTML structure based on the design analysis:
+      // For extremely large designs, simplify the CSS prompt
+      const cssPrompt = isExtremelyLargeDesign
+        ? `You are an expert UI developer. Create essential CSS for this HTML structure:
+
+HTML STRUCTURE:
+\`\`\`html
+${htmlContent}
+\`\`\`
+
+DESIGN INFO:
+${analysisResult}
+
+Requirements:
+- Create only the necessary CSS to match the basic design
+- Keep the code clean and minimal
+- Focus on layout, colors, and typography
+- Only provide the CSS in a \`\`\`css code block`
+        : `You are an expert UI developer. Create CSS for this HTML structure based on the design analysis:
 
 DESIGN ANALYSIS:
 ${analysisResult}
@@ -2936,19 +3030,18 @@ Make sure your CSS works with the provided HTML structure.`;
 
       let cssContent = '';
       try {
+        // For extremely large designs, don't send the image again to reduce payload size
+        const cssContentArray = isExtremelyLargeDesign
+          ? [{ type: "text", text: `Create CSS for this HTML structure (${designInfo.width}px × ${designInfo.height}px)` }]
+          : [
+              { type: "text", text: `Create CSS for this HTML structure to match the design (${designInfo.width}px × ${designInfo.height}px)` },
+              { type: "image", source: { type: "url", url: imageUrl } }
+            ];
+        
         // Try to generate just the CSS, with streaming
-        const cssResult = await this.callAnthropicAPI(cssPrompt, [
-          { 
-            type: "text", 
-            text: `Create CSS for this HTML structure to match the design (${designInfo.width}px × ${designInfo.height}px)` 
-          },
-          { 
-            type: "image", 
-            source: { type: "url", url: imageUrl }
-          }
-        ], {
+        const cssResult = await this.callAnthropicAPI(cssPrompt, cssContentArray, {
           model: "claude-3-7-sonnet-20250219",
-          max_tokens: 2500,
+          max_tokens: isExtremelyLargeDesign ? 2000 : 2500,
           temperature: 0.2,
           useProxy: true,
           stream: true,
