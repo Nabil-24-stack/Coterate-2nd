@@ -137,61 +137,55 @@ class AnthropicService {
       if (imageUrl.startsWith('data:image')) {
         // Already a data URL, extract the base64 part
         base64Image = imageUrl.split(',')[1];
+        console.log('Image is already a data URL, extracted base64 part, length:', base64Image.length);
       } else {
         try {
           // Get image dimensions first - we need these regardless of fetch method
           const dimensions = await this.getImageDimensions(imageUrl);
+          console.log(`Got image dimensions: ${dimensions.width}x${dimensions.height}`);
           
-          // Try to handle CORS issues with Figma images
-          let fetchResponse;
+          // Try multiple fetch approaches to handle various image sources
           try {
-            // First attempt: direct fetch
-            fetchResponse = await fetch(imageUrl, { mode: 'cors' });
-          } catch (directFetchError) {
-            console.log('Direct fetch failed, trying with proxy or CORS mode: no-cors');
-            try {
-              // Second attempt: try with no-cors mode
-              fetchResponse = await fetch(imageUrl, { mode: 'no-cors' });
-            } catch (corsError) {
-              // If both failed, try with a proxy if we have one, otherwise rethrow
-              console.error('Both fetch attempts failed:', corsError);
-              // If the image URL is a Figma URL, try to create a placeholder or use a cached version
-              if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
-                // For Figma images that fail with CORS, use a hardcoded data URL as fallback
-                console.log('Figma image detected, using data URL fallback');
-                // Convert the design to a basic data URL by drawing it on a canvas
-                const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-                if (dataUrl) {
-                  base64Image = dataUrl.split(',')[1];
-                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
-                }
-              }
-              throw corsError;
+            console.log('Attempting direct fetch with cors mode');
+            const fetchResponse = await fetch(imageUrl, { 
+              method: 'GET',
+              mode: 'cors',
+              cache: 'no-cache'
+            });
+            
+            if (!fetchResponse.ok) {
+              throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
             }
-          }
-          
-          if (!fetchResponse.ok) {
-            throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
-          }
-          
-          const blob = await fetchResponse.blob();
-          base64Image = await this.blobToBase64(blob);
-        } catch (error: any) {
-          console.error('Error fetching image:', error);
-          
-          // Try to create a data URL from the image as a last resort
-          try {
+            
+            const blob = await fetchResponse.blob();
+            console.log('Successfully fetched image, size:', blob.size);
+            base64Image = await this.blobToBase64(blob);
+            console.log('Converted blob to base64, length:', base64Image.length);
+          } catch (fetchError) {
+            console.error('Direct fetch failed:', fetchError);
+            
+            // Try with createDataUrlFromFigmaImage as a reliable fallback
             console.log('Attempting to create data URL from image as fallback');
-            const dimensions = await this.getImageDimensions(imageUrl);
             const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
+            
             if (dataUrl) {
+              console.log('Successfully created data URL from image');
               base64Image = dataUrl.split(',')[1];
-              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
+              console.log('Extracted base64 from data URL, length:', base64Image.length);
+            } else {
+              throw new Error('Failed to create data URL from image');
             }
-          } catch (fallbackError) {
-            console.error('Fallback attempt also failed:', fallbackError);
           }
           
+          // Verify we have a valid base64 string
+          if (!base64Image || base64Image.length < 100) {
+            console.error('Invalid or empty base64 string from image, length:', base64Image.length);
+            throw new Error('Failed to convert image to valid base64 format');
+          }
+          
+          console.log('Successfully processed image, final base64 length:', base64Image.length);
+        } catch (error: any) {
+          console.error('Error processing image:', error);
           throw new Error(`Failed to process image: ${error.message}`);
         }
       }
@@ -353,6 +347,12 @@ class AnthropicService {
       Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented, with special attention to how you preserved the original design system.
       ${linkedInsights.length > 0 ? insightsPrompt : ''}`;
       
+      // Verify base64Image is valid before sending
+      if (!base64Image || base64Image.length < 100) {
+        console.error('Invalid base64 image before API call');
+        throw new Error('Invalid image data');
+      }
+      
       // Anthropic API request body
       const requestBody = {
         model: "claude-3-7-sonnet",
@@ -395,8 +395,56 @@ class AnthropicService {
           },
           body: JSON.stringify(requestBody)
         });
+        
+        console.log('Received response from Anthropic API, status:', anthropicResponse.status);
+        
+        if (!anthropicResponse.ok) {
+          const errorData = await anthropicResponse.text();
+          console.error('Anthropic API error response:', errorData);
+          
+          // Parse the error data if possible
+          let errorMessage = `Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}`;
+          try {
+            const parsedError = JSON.parse(errorData);
+            if (parsedError.error && parsedError.error.message) {
+              errorMessage += `. ${parsedError.error.message}`;
+            }
+          } catch (e) {
+            // If parsing fails, use the raw error text
+            errorMessage += `. ${errorData}`;
+          }
+          
+          // In production, never use fallback
+          if (this.isProductionEnvironment()) {
+            throw new Error(errorMessage);
+          }
+          
+          // Only use fallback in development
+          if (this.isDevEnvironment()) {
+            console.log('Development environment detected, using fallback response for testing');
+            return this.getFallbackAnalysisResponse(dimensions);
+          }
+          
+          // Default behavior
+          throw new Error(errorMessage);
+        }
+        
+        const data = await anthropicResponse.json();
+        console.log('Successfully parsed Anthropic API response');
+        
+        // Extract the response content from Anthropic's response structure
+        if (!data.content || !data.content[0] || !data.content[0].text) {
+          console.error('Unexpected Anthropic API response format:', data);
+          throw new Error('Unexpected response format from Anthropic API');
+        }
+        
+        const responseContent = data.content[0].text;
+        console.log('Response content length:', responseContent.length);
+        
+        // Parse the response to extract HTML, CSS, and analysis
+        return this.parseAnthropicResponse(responseContent, linkedInsights.length > 0);
       } catch (error: any) {
-        console.error('Direct Anthropic API call failed, error details:', error);
+        console.error('Error calling Anthropic API:', error);
         
         // In production, never use fallback
         if (this.isProductionEnvironment()) {
@@ -412,33 +460,6 @@ class AnthropicService {
         // Default behavior for unknown environments - throw the error
         throw new Error(`Anthropic API call failed: ${error.message}. Please check your API key and try again.`);
       }
-      
-      if (!anthropicResponse.ok) {
-        const errorText = await anthropicResponse.text();
-        console.error('Anthropic API error response:', errorText);
-        
-        // In production, never use fallback
-        if (this.isProductionEnvironment()) {
-          throw new Error(`Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}. ${errorText}`);
-        }
-        
-        // Only use fallback in development
-        if (this.isDevEnvironment()) {
-          console.log('Development environment detected, using fallback response for testing');
-          return this.getFallbackAnalysisResponse(dimensions);
-        }
-        
-        // Default behavior
-        throw new Error(`Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}. ${errorText}`);
-      }
-      
-      const data = await anthropicResponse.json();
-      
-      // Extract the response content from Anthropic's response structure
-      const responseContent = data.content[0].text;
-      
-      // Parse the response to extract HTML, CSS, and analysis
-      return this.parseAnthropicResponse(responseContent, linkedInsights.length > 0);
     } catch (error: any) {
       console.error('Error analyzing design:', error);
       
@@ -460,39 +481,141 @@ class AnthropicService {
   
   // Helper method to convert Blob to base64
   private blobToBase64(blob: Blob): Promise<string> {
+    console.log('Converting blob to base64, size:', blob.size, 'bytes, type:', blob.type);
+    
     return new Promise((resolve, reject) => {
+      // Check if the blob is valid and has content
+      if (!blob || blob.size === 0) {
+        console.error('Empty or invalid blob provided for conversion');
+        reject(new Error('Cannot convert empty blob to base64'));
+        return;
+      }
+      
+      // Create a new FileReader to read the blob
       const reader = new FileReader();
+      
+      // Set up a timeout to avoid hanging
+      const timeoutId = setTimeout(() => {
+        console.error('Blob to base64 conversion timed out');
+        reject(new Error('Blob to base64 conversion timed out'));
+      }, 10000); // 10 seconds timeout
+      
+      // Success callback
       reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix if present
-        const base64 = base64String.includes(',') 
-          ? base64String.split(',')[1] 
-          : base64String;
-        resolve(base64);
+        clearTimeout(timeoutId);
+        try {
+          // Get the result as a string
+          const base64String = reader.result as string;
+          
+          // Validate that we have data
+          if (!base64String) {
+            console.error('FileReader returned empty result');
+            reject(new Error('FileReader returned empty result'));
+            return;
+          }
+          
+          // Remove the data URL prefix if present
+          let base64;
+          if (base64String.includes(',')) {
+            // Data URL format: data:image/jpeg;base64,ACTUAL_BASE64_DATA
+            base64 = base64String.split(',')[1];
+            console.log('Extracted base64 from data URL, length:', base64.length);
+          } else {
+            // Already without prefix
+            base64 = base64String;
+            console.log('Using raw base64 string, length:', base64.length);
+          }
+          
+          // Check if the resulting base64 string is valid
+          if (!base64 || base64.length === 0) {
+            console.error('Invalid base64 string produced');
+            reject(new Error('Invalid base64 string produced'));
+            return;
+          }
+          
+          // Some basic validation that it looks like base64
+          if (!/^[A-Za-z0-9+/=]+$/.test(base64)) {
+            console.warn('Base64 string contains invalid characters, attempting to clean');
+            base64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+          }
+          
+          console.log('Successfully converted blob to base64, length:', base64.length);
+          resolve(base64);
+        } catch (error) {
+          console.error('Error processing blob to base64:', error);
+          reject(error);
+        }
       };
-      reader.onerror = reject;
+      
+      // Error callback
+      reader.onerror = (error) => {
+        clearTimeout(timeoutId);
+        console.error('FileReader error during blob to base64 conversion:', error);
+        reject(error || new Error('FileReader error during conversion'));
+      };
+      
+      // Start reading the blob as a data URL
       reader.readAsDataURL(blob);
     });
   }
   
   // Helper function to get image dimensions
   private async getImageDimensions(src: string): Promise<{width: number, height: number}> {
+    console.log('Getting image dimensions for:', src.substring(0, 100) + '...');
+    
     return new Promise((resolve, reject) => {
+      // For data URLs, extract dimensions right away if possible
+      if (src.startsWith('data:image')) {
+        console.log('Getting dimensions for data URL');
+      }
+      
       const img = new Image();
-      img.onload = () => {
+      
+      // Set a timeout to avoid hanging
+      const timeoutId = setTimeout(() => {
+        console.log('Image load timeout for dimensions, using defaults');
         resolve({
-          width: img.naturalWidth,
-          height: img.naturalHeight
+          width: 800,
+          height: 600
         });
+      }, 5000);
+      
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        
+        const dimensions = {
+          width: img.naturalWidth || 800,
+          height: img.naturalHeight || 600
+        };
+        
+        console.log(`Image dimensions: ${dimensions.width}x${dimensions.height}`);
+        resolve(dimensions);
       };
-      img.onerror = () => {
-        // Default dimensions if we can't get the actual ones
+      
+      img.onerror = (error) => {
+        clearTimeout(timeoutId);
+        console.warn('Error loading image for dimensions, using defaults:', error);
         resolve({
           width: 800,
           height: 600
         });
       };
-      img.src = src;
+      
+      // Add cache-busting parameter
+      const cacheBuster = Date.now();
+      img.src = src.includes('?') 
+        ? `${src}&cb=${cacheBuster}` 
+        : `${src}?cb=${cacheBuster}`;
+        
+      // Immediately start loading
+      if (img.complete) {
+        clearTimeout(timeoutId);
+        console.log('Image already loaded, dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+        resolve({
+          width: img.naturalWidth || 800,
+          height: img.naturalHeight || 600
+        });
+      }
     });
   }
   
@@ -1250,6 +1373,7 @@ footer {
   // Add this helper method to create a data URL from an image
   private async createDataUrlFromFigmaImage(imageUrl: string): Promise<string | null> {
     return new Promise((resolve) => {
+      console.log('Creating data URL from image:', imageUrl);
       const img = new Image();
       img.crossOrigin = 'anonymous';
       
@@ -1262,36 +1386,108 @@ footer {
       img.onload = () => {
         clearTimeout(timeoutId);
         try {
+          console.log('Image loaded successfully, dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+          
+          // Create a canvas element to draw the image
           const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth || 800;
-          canvas.height = img.naturalHeight || 600;
+          
+          // Check if dimensions are valid
+          const width = img.naturalWidth || 800;
+          const height = img.naturalHeight || 600;
+          
+          // Set canvas dimensions to match image
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Get the context and draw the image
           const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            resolve(dataUrl);
-          } else {
+          if (!ctx) {
+            console.error('Could not get canvas context');
             resolve(null);
+            return;
           }
+          
+          // Fill with white background first (in case of transparent images)
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          
+          // Draw the image
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to data URL
+          const quality = 0.8; // Adjust quality to manage file size
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          console.log('Created data URL, length:', dataUrl.length);
+          
+          resolve(dataUrl);
         } catch (error) {
           console.error('Error creating data URL:', error);
           resolve(null);
         }
       };
       
-      img.onerror = () => {
+      img.onerror = (error) => {
         clearTimeout(timeoutId);
-        console.error('Error loading image for data URL creation');
+        console.error('Error loading image for data URL creation:', error);
+        
+        // Try a fallback approach for Figma URLs
+        if (imageUrl.includes('figma.com') || imageUrl.includes('figma-alpha-api.s3')) {
+          console.log('Attempting fallback for Figma image...');
+          
+          // Create a simple colored placeholder - better than nothing
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 600;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              // Create a simple gradient background
+              const gradient = ctx.createLinearGradient(0, 0, 800, 600);
+              gradient.addColorStop(0, '#f5f5f5');
+              gradient.addColorStop(1, '#e0e0e0');
+              ctx.fillStyle = gradient;
+              ctx.fillRect(0, 0, 800, 600);
+              
+              // Add text to indicate this is a placeholder
+              ctx.fillStyle = '#666666';
+              ctx.font = '24px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText('Figma Image Placeholder', 400, 300);
+              
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+              console.log('Created fallback placeholder, length:', dataUrl.length);
+              resolve(dataUrl);
+              return;
+            }
+          } catch (fallbackError) {
+            console.error('Fallback creation failed:', fallbackError);
+          }
+        }
+        
         resolve(null);
       };
       
-      // Add a random query parameter to bypass cache
-      img.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      // Try to bypass caching
+      const cacheBuster = Date.now();
+      const urlWithCacheBuster = imageUrl.includes('?') 
+        ? `${imageUrl}&cb=${cacheBuster}` 
+        : `${imageUrl}?cb=${cacheBuster}`;
+      
+      // Set the source to trigger loading
+      img.src = urlWithCacheBuster;
     });
   }
 
   // Add this method to continue with the Anthropic analysis once we have the base64 image
   private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[]): Promise<DesignAnalysisResponse> {
+    console.log('Continuing with analysis using base64 image, length:', base64Image.length);
+    
+    // Verify base64 image is valid
+    if (!base64Image || base64Image.length < 100) {
+      console.error('Invalid base64 image in continueWithAnalysis, length:', base64Image.length);
+      throw new Error('Invalid image data for analysis');
+    }
+    
     // Process linked insights if available
     let insightsPrompt = '';
     if (linkedInsights && linkedInsights.length > 0) {
@@ -1488,8 +1684,56 @@ footer {
         },
         body: JSON.stringify(requestBody)
       });
+      
+      console.log('Received response from Anthropic API, status:', anthropicResponse.status);
+      
+      if (!anthropicResponse.ok) {
+        const errorData = await anthropicResponse.text();
+        console.error('Anthropic API error response:', errorData);
+        
+        // Parse the error data if possible
+        let errorMessage = `Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}`;
+        try {
+          const parsedError = JSON.parse(errorData);
+          if (parsedError.error && parsedError.error.message) {
+            errorMessage += `. ${parsedError.error.message}`;
+          }
+        } catch (e) {
+          // If parsing fails, use the raw error text
+          errorMessage += `. ${errorData}`;
+        }
+        
+        // In production, never use fallback
+        if (this.isProductionEnvironment()) {
+          throw new Error(errorMessage);
+        }
+        
+        // Only use fallback in development
+        if (this.isDevEnvironment()) {
+          console.log('Development environment detected, using fallback response for testing');
+          return this.getFallbackAnalysisResponse(dimensions);
+        }
+        
+        // Default behavior
+        throw new Error(errorMessage);
+      }
+      
+      const data = await anthropicResponse.json();
+      console.log('Successfully parsed Anthropic API response');
+      
+      // Extract the response content from Anthropic's response structure
+      if (!data.content || !data.content[0] || !data.content[0].text) {
+        console.error('Unexpected Anthropic API response format:', data);
+        throw new Error('Unexpected response format from Anthropic API');
+      }
+      
+      const responseContent = data.content[0].text;
+      console.log('Response content length:', responseContent.length);
+      
+      // Parse the response to extract HTML, CSS, and analysis
+      return this.parseAnthropicResponse(responseContent, linkedInsights.length > 0);
     } catch (error: any) {
-      console.error('Direct Anthropic API call failed, error details:', error);
+      console.error('Error calling Anthropic API:', error);
       
       // In production, never use fallback
       if (this.isProductionEnvironment()) {
@@ -1505,33 +1749,6 @@ footer {
       // Default behavior for unknown environments - throw the error
       throw new Error(`Anthropic API call failed: ${error.message}. Please check your API key and try again.`);
     }
-    
-    if (!anthropicResponse.ok) {
-      const errorText = await anthropicResponse.text();
-      console.error('Anthropic API error response:', errorText);
-      
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
-        throw new Error(`Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}. ${errorText}`);
-      }
-      
-      // Only use fallback in development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response for testing');
-        return this.getFallbackAnalysisResponse(dimensions);
-      }
-      
-      // Default behavior
-      throw new Error(`Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}. ${errorText}`);
-    }
-    
-    const data = await anthropicResponse.json();
-    
-    // Extract the response content from Anthropic's response structure
-    const responseContent = data.content[0].text;
-    
-    // Parse the response to extract HTML, CSS, and analysis
-    return this.parseAnthropicResponse(responseContent, linkedInsights.length > 0);
   }
 }
 
