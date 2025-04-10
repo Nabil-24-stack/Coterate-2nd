@@ -1768,7 +1768,7 @@ class AnthropicService {
               
               // Calculate new dimensions (keeping aspect ratio)
               const aspectRatio = img.naturalWidth / img.naturalHeight;
-              const maxDimension = 1000; // Max dimension for Claude processing
+              const maxDimension = 800; // Reduced from 1000 to better handle complex designs
               
               let newWidth, newHeight;
               if (img.naturalWidth > img.naturalHeight) {
@@ -1787,8 +1787,8 @@ class AnthropicService {
               if (ctx) {
                 ctx.drawImage(img, 0, 0, newWidth, newHeight);
                 
-                // Convert to JPEG data URL with reduced quality
-                validImageUrl = canvas.toDataURL('image/jpeg', 0.85);
+                // Convert to JPEG data URL with reduced quality to decrease size
+                validImageUrl = canvas.toDataURL('image/jpeg', 0.75);
                 imageOptimized = true;
                 console.log('Image optimized to', Math.round(newWidth), 'x', Math.round(newHeight), 'pixels');
               }
@@ -1803,21 +1803,79 @@ class AnthropicService {
         validImageUrl = ''; // Will be handled by fallback approach
       }
       
-      // STEP 3: Create detailed Figma design description with actual data
-      const figmaDataDescription = figmaStyleData ? this.createFigmaDataDescription(figmaStyleData) : '';
+      // STEP 3: Prepare for multiple attempts with progressive simplification
+      const attempts = [
+        {
+          name: 'complete',
+          description: 'Full Figma data with optimized image',
+          includeFigmaData: true,
+          includeImage: !!validImageUrl,
+          simplifyFigmaData: false
+        },
+        {
+          name: 'figmaOnly',
+          description: 'Figma data only without image',
+          includeFigmaData: true,
+          includeImage: false,
+          simplifyFigmaData: false
+        },
+        {
+          name: 'simplifiedFigma',
+          description: 'Simplified Figma data without image',
+          includeFigmaData: true,
+          includeImage: false,
+          simplifyFigmaData: true
+        },
+        {
+          name: 'fallback',
+          description: 'Fallback with minimal data',
+          includeFigmaData: false,
+          includeImage: false,
+          simplifyFigmaData: true
+        }
+      ];
       
-      // Create a comprehensive design description
-      const designDescription = `
-        Figma Design Component Information:
-        - Type: UI Component from Figma
-        - Dimensions: ${designInfo.width}px × ${designInfo.height}px
-        - Figma File: ${designInfo.figmaFileKey}
-        - Node ID: ${designInfo.figmaNodeId}
-        ${figmaDataDescription}
-      `;
+      // If we have no valid Figma data, adjust our attempts
+      if (!figmaStyleData) {
+        if (validImageUrl) {
+          // If we only have image but no Figma data
+          attempts.splice(0, 2, {
+            name: 'imageOnly',
+            description: 'Image only without Figma data',
+            includeFigmaData: false,
+            includeImage: true,
+            simplifyFigmaData: false
+          });
+        } else {
+          // If we have neither Figma data nor image
+          attempts.splice(0, 3);
+        }
+      }
       
-      // STEP 4: Prepare system prompt with detailed instructions
-      const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
+      // STEP 4: Try each approach in sequence
+      let lastError = null;
+      
+      for (const attempt of attempts) {
+        console.log(`Attempting HTML/CSS conversion with strategy: ${attempt.name} (${attempt.description})`);
+        
+        try {
+          // Prepare data based on the current attempt strategy
+          const figmaDataDescription = (attempt.includeFigmaData && figmaStyleData) 
+            ? this.createFigmaDataDescription(figmaStyleData, attempt.simplifyFigmaData) 
+            : '';
+          
+          // Create a comprehensive design description
+          const designDescription = `
+            Figma Design Component Information:
+            - Type: UI Component from Figma
+            - Dimensions: ${designInfo.width}px × ${designInfo.height}px
+            - Figma File: ${designInfo.figmaFileKey}
+            - Node ID: ${designInfo.figmaNodeId}
+            ${figmaDataDescription}
+          `;
+          
+          // Prepare system prompt with detailed instructions
+          const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
 Your task is to convert a Figma design into precise HTML and CSS code.
 
 INSTRUCTIONS:
@@ -1837,17 +1895,19 @@ FORMATTING REQUIREMENTS:
 
 You're a UI conversion expert - maintain the original design exactly as shown.`;
 
-      // STEP 5: Prepare user prompt with detailed Figma data
-      const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
+          // Prepare user prompt with Figma data appropriate to the current attempt
+          const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
 
-${figmaStyleData ? 'I am providing you with the exact design data extracted directly from Figma API:' : 'Design Information:'}
+${(attempt.includeFigmaData && figmaStyleData) ? 'I am providing you with the exact design data extracted directly from Figma API:' : 'Design Information:'}
 - Width: ${designInfo.width}px
 - Height: ${designInfo.height}px
 - Figma File Key: ${designInfo.figmaFileKey}
 - Figma Node ID: ${designInfo.figmaNodeId}
 
-${figmaStyleData ? 'USE THESE EXACT VALUES FROM FIGMA:' : 'Requirements:'}
-${figmaStyleData ? this.formatFigmaDataForPrompt(figmaStyleData) : `
+${(attempt.includeFigmaData && figmaStyleData) ? 'USE THESE EXACT VALUES FROM FIGMA:' : 'Requirements:'}
+${(attempt.includeFigmaData && figmaStyleData) 
+  ? this.formatFigmaDataForPrompt(figmaStyleData, attempt.simplifyFigmaData) 
+  : `
 1. Create a pixel-perfect recreation of the design
 2. Use semantic HTML5 elements
 3. Use modern CSS (no unnecessary frameworks)
@@ -1862,146 +1922,157 @@ ${figmaStyleData ? this.formatFigmaDataForPrompt(figmaStyleData) : `
 
 If you encounter any issues processing the image, use the exact Figma data I've provided to create an accurate implementation.`;
 
-      // STEP 6: Prepare message content array
-      const contentArray = [];
-      
-      // Always include the design description text first
-      contentArray.push({
-        type: "text",
-        text: designDescription
-      });
-      
-      // Add the image if available (optimized or original)
-      if (validImageUrl) {
-        contentArray.push({
-          type: "image",
-          source: {
-            type: validImageUrl.startsWith('data:') ? "base64" : "url",
-            ...(validImageUrl.startsWith('data:') 
-              ? { 
-                  data: validImageUrl.split(',')[1],
-                  media_type: "image/jpeg"
-                } 
-              : { url: validImageUrl })
+          // Prepare message content array based on attempt strategy
+          const contentArray = [];
+          
+          // Always include the design description text first
+          contentArray.push({
+            type: "text",
+            text: designDescription
+          });
+          
+          // Add the image if the current attempt includes images
+          if (attempt.includeImage && validImageUrl) {
+            contentArray.push({
+              type: "image",
+              source: {
+                type: validImageUrl.startsWith('data:') ? "base64" : "url",
+                ...(validImageUrl.startsWith('data:') 
+                  ? { 
+                      data: validImageUrl.split(',')[1],
+                      media_type: "image/jpeg"
+                    } 
+                  : { url: validImageUrl })
+              }
+            });
+            
+            console.log('Added image to request', imageOptimized ? '(optimized)' : '(original)');
+          } else {
+            console.log('No valid image available, using Figma data only approach');
           }
-        });
-        
-        console.log('Added image to request', imageOptimized ? '(optimized)' : '(original)');
-      } else {
-        console.log('No valid image available, using Figma data only approach');
-      }
-      
-      // Always add the main user prompt
-      contentArray.push({
-        type: "text",
-        text: userPrompt
-      });
+          
+          // Always add the main user prompt
+          contentArray.push({
+            type: "text",
+            text: userPrompt
+          });
 
-      // STEP 7: Make the API request with enhanced error handling
-      // Prepare request body with our processed content
-      const requestBody = {
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 4000,
-        temperature: 0.2,
-        system: systemPrompt,
-        messages: [
-          {
-            role: "user", 
-            content: contentArray
-          }
-        ]
-      };
-      
-      // Set up timeout handling with AbortController
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout
-      
-      try {
-        console.log('Sending request to Anthropic API via proxy...');
-        
-        // Make API call to Anthropic for HTML/CSS generation
-        const response = await fetch('/api/anthropic-proxy', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(requestBody),
-          cache: 'no-cache',
-          signal: controller.signal
-        });
-        
-        // Clear the timeout since we got a response
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error('Anthropic API error response:', errorData);
+          // Prepare request body with our processed content
+          const requestBody = {
+            model: "claude-3-7-sonnet-20250219", // Explicitly use Sonnet which is faster
+            max_tokens: 4000,
+            temperature: 0.2,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user", 
+                content: contentArray
+              }
+            ]
+          };
           
-          // Handle timeout specifically
-          if (response.status === 504) {
-            console.warn('API request timed out, falling back to simplified approach');
-            return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
-          }
+          // Set up timeout handling with AbortController
+          // Give less time for fallback attempts
+          const timeoutMs = attempt.name === 'fallback' ? 20000 : 45000;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
           
-          throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
+          try {
+            console.log(`Sending request to Anthropic API via proxy (strategy: ${attempt.name})...`);
+            
+            // Make API call to Anthropic for HTML/CSS generation
+            const response = await fetch('/api/anthropic-proxy', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify(requestBody),
+              cache: 'no-cache',
+              signal: controller.signal
+            });
+            
+            // Clear the timeout since we got a response
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              const errorData = await response.text();
+              console.error(`Anthropic API error response (${attempt.name}):`, errorData);
+              
+              // Store the error and continue to the next attempt
+              lastError = new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
+              continue;
+            }
+            
+            const data = await response.json();
+            const generatedText = data.content?.[0]?.text || '';
+            
+            // Extract HTML and CSS from the response
+            const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
+            const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
+            
+            const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
+            const cssContent = cssMatch ? cssMatch[1].trim() : '';
+            
+            // If extraction failed, try alternative extraction patterns
+            if (!htmlContent || !cssContent) {
+              console.warn(`Failed to extract HTML/CSS with primary patterns in ${attempt.name} attempt, trying alternatives...`);
+              
+              // Alternative HTML extraction
+              let altHtmlContent = '';
+              let altCssContent = '';
+              
+              // Try to extract HTML content between <html> and </html> tags
+              const htmlDocMatch = generatedText.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+              if (htmlDocMatch && htmlDocMatch[1]) {
+                altHtmlContent = `<html>${htmlDocMatch[1]}</html>`;
+              }
+              
+              // Try to extract CSS from <style> tags
+              const styleMatch = generatedText.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+              if (styleMatch && styleMatch[1]) {
+                altCssContent = styleMatch[1].trim();
+              }
+              
+              // If we found content with alternative patterns, use it
+              if (altHtmlContent && altCssContent) {
+                console.log(`Successfully extracted HTML/CSS using alternative patterns in ${attempt.name} attempt`);
+                return { htmlContent: altHtmlContent, cssContent: altCssContent };
+              }
+              
+              // If no content extracted, continue to next attempt
+              console.error(`Failed to extract HTML/CSS from Claude response in ${attempt.name} attempt`);
+              lastError = new Error('Failed to extract HTML/CSS content from response');
+              continue;
+            }
+            
+            console.log(`Successfully extracted HTML/CSS from Claude response in ${attempt.name} attempt`);
+            return { htmlContent, cssContent };
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            
+            // Handle AbortController timeout
+            if (fetchError.name === 'AbortError') {
+              console.warn(`Request timed out for ${attempt.name} attempt, trying next approach...`);
+              lastError = new Error(`Request timed out for ${attempt.name} approach`);
+              continue;
+            }
+            
+            // For other errors, try next attempt
+            console.error(`Error during API request (${attempt.name}):`, fetchError);
+            lastError = fetchError;
+            continue;
+          }
+        } catch (attemptError: any) {
+          console.error(`Error during ${attempt.name} attempt:`, attemptError);
+          lastError = attemptError;
+          continue;
         }
-        
-        const data = await response.json();
-        const generatedText = data.content?.[0]?.text || '';
-        
-        // Extract HTML and CSS from the response
-        const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
-        const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
-        
-        const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
-        const cssContent = cssMatch ? cssMatch[1].trim() : '';
-        
-        // If extraction failed, try alternative extraction patterns
-        if (!htmlContent || !cssContent) {
-          console.warn('Failed to extract HTML/CSS with primary patterns, trying alternatives...');
-          
-          // Alternative HTML extraction
-          let altHtmlContent = '';
-          let altCssContent = '';
-          
-          // Try to extract HTML content between <html> and </html> tags
-          const htmlDocMatch = generatedText.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
-          if (htmlDocMatch && htmlDocMatch[1]) {
-            altHtmlContent = `<html>${htmlDocMatch[1]}</html>`;
-          }
-          
-          // Try to extract CSS from <style> tags
-          const styleMatch = generatedText.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-          if (styleMatch && styleMatch[1]) {
-            altCssContent = styleMatch[1].trim();
-          }
-          
-          // If we found content with alternative patterns, use it
-          if (altHtmlContent && altCssContent) {
-            console.log('Successfully extracted HTML/CSS using alternative patterns');
-            return { htmlContent: altHtmlContent, cssContent: altCssContent };
-          }
-          
-          console.error('Failed to extract HTML/CSS from Claude response, falling back to simplified approach');
-          return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
-        }
-        
-        console.log('Successfully extracted HTML/CSS from Claude response');
-        return { htmlContent, cssContent };
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        
-        // Handle AbortController timeout
-        if (fetchError.name === 'AbortError') {
-          console.warn('Request timed out, falling back to simplified approach');
-          return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
-        }
-        
-        // For other errors, attempt fallback
-        console.error('Error during API request:', fetchError);
-        return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData);
       }
+      
+      // If we've tried all approaches and none worked, use our fallback
+      console.warn('All HTML/CSS conversion attempts failed, using built-in fallback');
+      return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, lastError?.message || 'All conversion attempts failed');
     } catch (error: any) {
       console.error('Error converting Figma design to HTML/CSS:', error);
       return this.generateSimplifiedHtmlCss(designInfo, null, error.message);
@@ -2009,10 +2080,21 @@ If you encounter any issues processing the image, use the exact Figma data I've 
   }
 
   // Create a detailed description of Figma data
-  private createFigmaDataDescription(figmaData: any): string {
+  private createFigmaDataDescription(figmaData: any, simplified = false): string {
     if (!figmaData) return '';
     
     const { styleData, designSystem } = figmaData;
+    
+    if (simplified) {
+      // Return a simplified version with fewer details
+      return `
+      - Component Name: ${styleData.name}
+      - Component Type: ${styleData.type}
+      - Primary Colors: ${designSystem.colors.primary.slice(0, 3).join(', ')}
+      - Text Colors: ${designSystem.colors.text.slice(0, 2).join(', ')}
+      - Typography: ${designSystem.typography.families.slice(0, 2).join(', ')}
+      `;
+    }
     
     return `
     - Component Name: ${styleData.name}
@@ -2024,29 +2106,29 @@ If you encounter any issues processing the image, use the exact Figma data I've 
   }
 
   // Format Figma data for the prompt
-  private formatFigmaDataForPrompt(figmaData: any): string {
+  private formatFigmaDataForPrompt(figmaData: any, simplified = false): string {
     if (!figmaData) return '';
     
     const { styleData, designSystem } = figmaData;
     let promptData = '';
     
-    // Add colors section
+    // Add colors section (simplified if requested)
     promptData += '\nCOLORS:\n';
     if (designSystem.colors.primary.length > 0) {
-      promptData += `- Primary Colors: ${designSystem.colors.primary.join(', ')}\n`;
+      promptData += `- Primary Colors: ${designSystem.colors.primary.slice(0, simplified ? 3 : undefined).join(', ')}\n`;
     }
-    if (designSystem.colors.secondary.length > 0) {
-      promptData += `- Secondary Colors: ${designSystem.colors.secondary.join(', ')}\n`;
+    if (!simplified && designSystem.colors.secondary.length > 0) {
+      promptData += `- Secondary Colors: ${designSystem.colors.secondary.slice(0, simplified ? 3 : undefined).join(', ')}\n`;
     }
     if (designSystem.colors.background.length > 0) {
-      promptData += `- Background Colors: ${designSystem.colors.background.join(', ')}\n`;
+      promptData += `- Background Colors: ${designSystem.colors.background.slice(0, simplified ? 2 : undefined).join(', ')}\n`;
     }
     if (designSystem.colors.text.length > 0) {
-      promptData += `- Text Colors: ${designSystem.colors.text.join(', ')}\n`;
+      promptData += `- Text Colors: ${designSystem.colors.text.slice(0, simplified ? 2 : undefined).join(', ')}\n`;
     }
     
-    // Add all colors as fallback
-    if (styleData.colors.length > 0) {
+    // Add all colors as fallback (only if not simplified)
+    if (!simplified && styleData.colors.length > 0) {
       promptData += `- All Colors: ${styleData.colors.join(', ')}\n`;
     }
     
@@ -2058,42 +2140,73 @@ If you encounter any issues processing the image, use the exact Figma data I've 
     }
     
     if (designSystem.typography.sizes.length > 0) {
-      promptData += `- Font Sizes: ${designSystem.typography.sizes.join(', ')}px\n`;
+      promptData += `- Font Sizes: ${designSystem.typography.sizes.slice(0, simplified ? 4 : undefined).join(', ')}px\n`;
     }
     
     if (designSystem.typography.weights.length > 0) {
       promptData += `- Font Weights: ${designSystem.typography.weights.join(', ')}\n`;
     }
     
-    // Add detailed typography styles
+    // Add detailed typography styles (limit if simplified)
     if (styleData.typography.length > 0) {
       promptData += '- Text Styles:\n';
-      styleData.typography.forEach((style: any, index: number) => {
+      const typesToShow = simplified ? Math.min(3, styleData.typography.length) : styleData.typography.length;
+      
+      for (let i = 0; i < typesToShow; i++) {
+        const style = styleData.typography[i];
         if (style.text && style.fontFamily) {
-          promptData += `  ${index+1}. "${style.text}" - ${style.fontFamily}, ${style.fontSize}px, weight: ${style.fontWeight}\n`;
+          promptData += `  ${i+1}. "${style.text}" - ${style.fontFamily}, ${style.fontSize}px, weight: ${style.fontWeight}\n`;
         }
-      });
+      }
     }
     
-    // Add shadows/effects
-    if (styleData.effects.length > 0) {
-      promptData += '\nEFFECTS:\n';
-      styleData.effects.forEach((effect: any, index: number) => {
-        promptData += `- ${effect.type}: radius ${effect.radius}px, color: ${effect.color}\n`;
-      });
+    // Add shadows/effects (only if not simplified or if there are few)
+    if (!simplified || styleData.effects.length <= 2) {
+      if (styleData.effects.length > 0) {
+        promptData += '\nEFFECTS:\n';
+        const effectsToShow = simplified ? Math.min(2, styleData.effects.length) : styleData.effects.length;
+        
+        for (let i = 0; i < effectsToShow; i++) {
+          const effect = styleData.effects[i];
+          promptData += `- ${effect.type}: radius ${effect.radius}px, color: ${effect.color}\n`;
+        }
+      }
     }
     
-    // Add components
-    if (styleData.components.length > 0) {
-      promptData += '\nCOMPONENTS:\n';
-      styleData.components.forEach((component: any, index: number) => {
-        promptData += `- ${component.name} (${component.type})\n`;
-      });
+    // Add components (only if not simplified or if there are few)
+    if (!simplified || styleData.components.length <= 3) {
+      if (styleData.components.length > 0) {
+        promptData += '\nCOMPONENTS:\n';
+        const componentsToShow = simplified ? Math.min(3, styleData.components.length) : styleData.components.length;
+        
+        for (let i = 0; i < componentsToShow; i++) {
+          const component = styleData.components[i];
+          promptData += `- ${component.name} (${component.type})\n`;
+        }
+      }
     }
     
-    // Add structure information
-    promptData += '\nStructure contains the following elements:\n';
-    this.addChildStructure(styleData, promptData, 0);
+    // Add structure information (simplified if requested)
+    if (!simplified) {
+      promptData += '\nStructure contains the following elements:\n';
+      this.addChildStructure(styleData, promptData, 0);
+    } else {
+      promptData += '\nBasic structure:\n';
+      promptData += `- ${styleData.name} (${styleData.type})\n`;
+      
+      // Only add first level children in simplified mode
+      if (styleData.childrenData && styleData.childrenData.length > 0) {
+        const childrenToShow = Math.min(5, styleData.childrenData.length);
+        for (let i = 0; i < childrenToShow; i++) {
+          const child = styleData.childrenData[i];
+          promptData += `  - ${child.name} (${child.type})\n`;
+        }
+        
+        if (styleData.childrenData.length > childrenToShow) {
+          promptData += `  - ... and ${styleData.childrenData.length - childrenToShow} more elements\n`;
+        }
+      }
+    }
     
     return promptData;
   }
