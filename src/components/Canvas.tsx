@@ -909,9 +909,16 @@ export const Canvas: React.FC = () => {
   // Add a state to track if we've overridden loading state for safety
   const [loadingSafetyOverride, setLoadingSafetyOverride] = useState(false);
   
-  // Track the last active page ID to prevent position sharing between pages
+  // Refs
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const lastCursorPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastActivePageIdRef = useRef<string | null>(null);
-
+  const userInteractingRef = useRef<boolean>(false);
+  const designRefs = useRef<Record<string, HtmlDesignRendererHandle>>({});
+  const renderedIterationsRef = useRef<Set<string>>(new Set());
+  const renderedDesignsRef = useRef<Set<string>>(new Set());
+  
   // Reference to track if we've initialized position for this page
   const positionInitializedRef = useRef<{[pageId: string]: boolean}>({});
 
@@ -1018,21 +1025,6 @@ export const Canvas: React.FC = () => {
   }, [currentPage?.id, loadCanvasPosition, saveCanvasPosition]);
 
   // User interaction tracking - add this below position related refs
-  const userInteractingRef = useRef(false);
-
-  // Remove the following effect as it's causing issues with position loading
-  // Modified effect to save canvas position and scale to localStorage when they change
-  useEffect(() => {
-    if (!currentPage?.id || !userInteractingRef.current) return;
-    
-    const timeoutId = setTimeout(() => {
-      if (currentPage?.id) {
-        saveCanvasPosition(currentPage.id, position, scale);
-      }
-    }, 300); // Reduced debounce time for faster response
-    
-    return () => clearTimeout(timeoutId);
-  }, [position, scale, currentPage?.id, saveCanvasPosition, userInteractingRef]);
 
   // State for multiple designs
   const [designs, setDesigns] = useState<ExtendedDesign[]>([]);
@@ -1049,16 +1041,6 @@ export const Canvas: React.FC = () => {
   // Analysis panel state
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DesignIteration | null>(null);
-  
-  // Refs
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const lastCursorPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const lastActivePageIdRef = useRef<string | null>(null);
-  const userInteractingRef = useRef<boolean>(false);
-  const designRefs = useRef<Record<string, HtmlDesignRendererHandle>>({});
-  const renderedIterationsRef = useRef<Set<string>>(new Set());
-  const renderedDesignsRef = useRef<Set<string>>(new Set());
   
   // Debounced update function to avoid too many database calls
   const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
@@ -2786,7 +2768,7 @@ export const Canvas: React.FC = () => {
   return (
     <>
       <GlobalStyle />
-      <CanvasContainer ref={containerRef}>
+      <CanvasContainer ref={canvasRef}>
         {loading && !loadingSafetyOverride ? (
           <LoadingIndicator>
             <LoadingSpinner />
