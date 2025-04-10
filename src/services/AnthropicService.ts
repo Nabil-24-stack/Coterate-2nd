@@ -404,87 +404,105 @@ class AnthropicService {
         ]
       };
       
-      // First try the proxy endpoint, with fallback to direct call if allowed
-      let analysisResponse;
+      // Track analysis progress for better feedback
+      let analysisProgress = '';
+      const analysisProgressCallback = (text: string) => {
+        analysisProgress = text;
+        // Log progress at regular intervals to show activity
+        console.log(`Analysis in progress, received ${text.length} characters so far...`);
+      };
+      
+      // First try the proxy endpoint with streaming for better reliability
+      let analysisText = '';
       let analysisError = null;
       
       try {
-        // Try using our server proxy first
-        console.log('Trying server proxy for Anthropic API analysis...');
+        // Try using our server proxy with streaming
+        console.log('Using streaming API for Anthropic analysis...');
         
-        // Fix: Explicitly set the method as POST and include proper content type headers
-        analysisResponse = await fetch('/api/anthropic-proxy', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(analysisRequestBody),
-          cache: 'no-cache'
-        });
+        analysisText = await this.callAnthropicAPI(
+          analysisSystemPrompt,
+          [
+            {
+              type: "text",
+              text: analysisUserPrompt
+            },
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: processedBase64Image
+              }
+            }
+          ],
+          {
+            model: "claude-3-7-sonnet-20250219",
+            max_tokens: 4000,
+            temperature: 0.2,
+            useProxy: true,
+            stream: true,
+            onProgress: analysisProgressCallback
+          }
+        );
         
-        if (!analysisResponse.ok) {
-          const errorText = await analysisResponse.text();
-          console.error('Server proxy error response:', analysisResponse.status, errorText);
+        if (!analysisText || analysisText.length < 100) {
+          throw new Error('Insufficient analysis response received');
+        }
+        
+        console.log('Design analysis complete with streaming, length:', analysisText.length);
+      } catch (error: any) {
+        // If streaming fails, fall back to non-streaming approach
+        console.error('Streaming analysis failed, falling back to standard approach:', error.message);
+        
+        try {
+          // Fall back to standard approach
+          console.log('Trying server proxy for Anthropic API analysis (non-streaming)...');
           
-          // More detailed error logging
-          if (analysisResponse.status === 405) {
-            console.error('Method Not Allowed: The server proxy only accepts POST requests. Check if the request is being sent properly.');
-          } else if (analysisResponse.status === 401 || analysisResponse.status === 403) {
-            console.error('Authentication error: Check if the Anthropic API key is configured correctly in environment variables.');
-          } else if (analysisResponse.status === 500) {
-            console.error('Server error: The proxy server encountered an internal error. Check server logs for details.');
+          // Fix: Explicitly set the method as POST and include proper content type headers
+          const analysisResponse = await fetch('/api/anthropic-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(analysisRequestBody),
+            cache: 'no-cache'
+          });
+          
+          if (!analysisResponse.ok) {
+            const errorText = await analysisResponse.text();
+            console.error('Server proxy error response:', analysisResponse.status, errorText);
+            
+            throw new Error(`Server proxy returned: ${analysisResponse.status} ${analysisResponse.statusText}`);
           }
           
-          throw new Error(`Server proxy returned: ${analysisResponse.status} ${analysisResponse.statusText}`);
-        }
-      } catch (error: any) {
-        const proxyError = error;
-        // If we're not in production and have an API key, try direct call as fallback
-        if (!this.isProductionEnvironment() && this.apiKey) {
-          console.log('Server proxy failed, attempting direct API call:', proxyError.message);
+          const analysisData = await analysisResponse.json();
           
-          try {
-            // Direct call to Anthropic API as fallback
-            analysisResponse = await fetch('https://api.anthropic.com/v1/messages', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': `${this.apiKey}`,
-                'anthropic-version': '2023-06-01'
-              },
-              body: JSON.stringify(analysisRequestBody)
-            });
-            
-            if (!analysisResponse.ok) {
-              throw new Error(`Direct API call also failed: ${analysisResponse.status}`);
-            }
-          } catch (fallbackError: any) {
-            // If both failed, throw a combined error
-            analysisError = new Error(`Server proxy failed: ${proxyError.message}. Direct API call failed: ${fallbackError.message}`);
+          if (!analysisData.content || !analysisData.content[0] || !analysisData.content[0].text) {
+            console.error('Unexpected Anthropic API response format (analysis):', analysisData);
+            throw new Error('Unexpected response format from Anthropic API');
+          }
+          
+          analysisText = analysisData.content[0].text;
+          console.log('Design analysis complete with standard approach, length:', analysisText.length);
+        } catch (secondError: any) {
+          // If both failed, check if we have partial results from streaming
+          if (analysisProgress && analysisProgress.length > 500) {
+            console.log('Using partial analysis results from streaming attempt');
+            analysisText = analysisProgress;
+          } else {
+            // Both approaches failed
+            analysisError = new Error(`Analysis failed: ${error.message}. Fallback also failed: ${secondError.message}`);
             throw analysisError;
           }
-        } else {
-          // In production, we only try the proxy, so just throw the proxy error
-          throw proxyError;
         }
       }
-      
-      const analysisData = await analysisResponse.json();
-      
-      if (!analysisData.content || !analysisData.content[0] || !analysisData.content[0].text) {
-        console.error('Unexpected Anthropic API response format (analysis):', analysisData);
-        throw new Error('Unexpected response format from Anthropic API');
-      }
-      
-      const analysisText = analysisData.content[0].text;
-      console.log('Design analysis complete, length:', analysisText.length);
       
       // Extract design system information from analysis
       const designSystem = this.extractDesignSystem(analysisText);
       
       // STEP 2: Generate HTML/CSS that accurately reproduces the original design with targeted improvements
-      
       console.log('STEP 2: Generating improved HTML/CSS based on analysis...');
       
       const iterationSystemPrompt = `You are a UI/UX implementation expert who creates pixel-perfect HTML/CSS iterations of UI designs.
@@ -528,50 +546,99 @@ class AnthropicService {
       
       Your HTML/CSS must look like a subtle iteration of the original design, not a new design.`;
       
-      const iterationRequestBody = {
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 4000,
-        temperature: 0.2,
-        system: iterationSystemPrompt,
-        messages: [
-          {
-            role: "user", 
-            content: [
-              {
-                type: "text",
-                text: iterationUserPrompt
-              }
-            ]
-          }
-        ]
+      // Track iteration progress
+      let iterationProgress = '';
+      const iterationProgressCallback = (text: string) => {
+        iterationProgress = text;
+        // Log progress at intervals
+        if (text.length % 1000 < 20) { // Log approximately every 1000 chars
+          console.log(`HTML/CSS generation in progress, received ${text.length} characters so far...`);
+        }
       };
       
-      // Make API call to Anthropic for HTML/CSS generation
-      const iterationResponse = await fetch('/api/anthropic-proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(iterationRequestBody),
-        cache: 'no-cache'
-      });
-      
-      if (!iterationResponse.ok) {
-        const errorData = await iterationResponse.text();
-        console.error('Anthropic API error response (iteration):', errorData);
-        throw new Error(`HTML/CSS generation failed: ${iterationResponse.status} ${iterationResponse.statusText}`);
+      // Make API call to Anthropic for HTML/CSS generation using streaming
+      let iterationText = '';
+      try {
+        console.log('Using streaming for HTML/CSS generation...');
+        
+        iterationText = await this.callAnthropicAPI(
+          iterationSystemPrompt,
+          [{ type: "text", text: iterationUserPrompt }],
+          {
+            model: "claude-3-7-sonnet-20250219",
+            max_tokens: 4000,
+            temperature: 0.2,
+            useProxy: true,
+            stream: true,
+            onProgress: iterationProgressCallback
+          }
+        );
+        
+        if (!iterationText || iterationText.length < 100) {
+          throw new Error('Insufficient HTML/CSS response received');
+        }
+        
+        console.log('HTML/CSS generation complete with streaming, length:', iterationText.length);
+      } catch (error: any) {
+        // If streaming fails, fall back to non-streaming approach
+        console.error('Streaming HTML/CSS generation failed, falling back to standard approach:', error.message);
+        
+        try {
+          // Fall back to standard request
+          const iterationRequestBody = {
+            model: "claude-3-7-sonnet-20250219",
+            max_tokens: 4000,
+            temperature: 0.2,
+            system: iterationSystemPrompt,
+            messages: [
+              {
+                role: "user", 
+                content: [
+                  {
+                    type: "text",
+                    text: iterationUserPrompt
+                  }
+                ]
+              }
+            ]
+          };
+          
+          const iterationResponse = await fetch('/api/anthropic-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(iterationRequestBody),
+            cache: 'no-cache'
+          });
+          
+          if (!iterationResponse.ok) {
+            const errorData = await iterationResponse.text();
+            console.error('Anthropic API error response (iteration):', errorData);
+            throw new Error(`HTML/CSS generation failed: ${iterationResponse.status} ${iterationResponse.statusText}`);
+          }
+          
+          const iterationData = await iterationResponse.json();
+          
+          if (!iterationData.content || !iterationData.content[0] || !iterationData.content[0].text) {
+            console.error('Unexpected Anthropic API response format (iteration):', iterationData);
+            throw new Error('Unexpected response format from Anthropic API');
+          }
+          
+          iterationText = iterationData.content[0].text;
+          console.log('HTML/CSS generation complete with standard approach, length:', iterationText.length);
+        } catch (secondError: any) {
+          // If both failed, check if we have partial results from streaming
+          if (iterationProgress && iterationProgress.length > 1000) {
+            console.log('Using partial HTML/CSS results from streaming attempt');
+            iterationText = iterationProgress;
+          } else {
+            // Both approaches failed
+            throw new Error(`HTML/CSS generation failed: ${error.message}. Fallback also failed: ${secondError.message}`);
+          }
+        }
       }
-      
-      const iterationData = await iterationResponse.json();
-      
-      if (!iterationData.content || !iterationData.content[0] || !iterationData.content[0].text) {
-        console.error('Unexpected Anthropic API response format (iteration):', iterationData);
-        throw new Error('Unexpected response format from Anthropic API');
-      }
-      
-      const iterationText = iterationData.content[0].text;
-      console.log('HTML/CSS generation complete, length:', iterationText.length);
       
       // Parse the complete response to extract HTML, CSS, and analysis
       return this.parseResponseWithAnalysis(iterationText, analysisText, designSystem);
@@ -2134,6 +2201,8 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
       max_tokens: number;
       temperature: number;
       useProxy: boolean;
+      stream?: boolean;
+      onProgress?: (text: string) => void;
     }
   ): Promise<string> {
     // Prepare content array if string was provided
@@ -2152,17 +2221,27 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
           role: "user", 
           content
         }
-      ]
+      ],
+      stream: options.stream === true
     };
     
     // Ensure we're not sending any problematic properties
     const requestBodyCopy = JSON.parse(JSON.stringify(requestBody));
     
+    // If streaming is not explicitly requested but there are images in the content,
+    // disable streaming as it may cause issues with image processing
+    if (options.stream !== true && content.some(item => item.type === 'image')) {
+      requestBodyCopy.stream = false;
+    }
+    
+    // Check if we need to use streaming
+    const useStreaming = requestBodyCopy.stream === true;
+    
     try {
       // If this is a large request, add a retry count header for better tracking
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': useStreaming ? 'text/event-stream' : 'application/json'
       };
       
       if (JSON.stringify(requestBodyCopy).length > 100000) {
@@ -2199,10 +2278,124 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
         throw new Error(errorMessage);
       }
       
-      const data = await response.json();
-      return data.content?.[0]?.text || '';
+      // If streaming is enabled, process the response as a stream
+      if (useStreaming) {
+        console.log('Processing streaming response from Anthropic');
+        return this.processAnthropicStream(response, options.onProgress);
+      } else {
+        // For non-streaming responses, parse the JSON as before
+        const data = await response.json();
+        return data.content?.[0]?.text || '';
+      }
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
+      throw error;
+    }
+  }
+  
+  // Helper method to process a streaming response from the Anthropic API
+  private async processAnthropicStream(
+    response: Response, 
+    onProgress?: (text: string) => void
+  ): Promise<string> {
+    try {
+      // Create a reader for the response body stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Cannot read response stream');
+      }
+      
+      // Set up text decoder and result variables
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      let buffer = '';
+      
+      while (true) {
+        // Read the next chunk
+        const { done, value } = await reader.read();
+        
+        // Exit the loop if we're done
+        if (done) {
+          console.log('Stream completed');
+          break;
+        }
+        
+        // Decode the chunk and add it to the buffer
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        
+        // Process all complete events in the buffer
+        let eventStart = 0;
+        while (true) {
+          // Find the next complete event
+          const eventEnd = buffer.indexOf('\n\n', eventStart);
+          if (eventEnd === -1) break;
+          
+          // Extract the event
+          const eventData = buffer.substring(eventStart, eventEnd).trim();
+          eventStart = eventEnd + 2;
+          
+          // Skip empty events
+          if (!eventData) continue;
+          
+          // Skip events that aren't data
+          if (!eventData.startsWith('data: ')) continue;
+          
+          // Extract the data
+          const data = eventData.slice(6); // Remove 'data: ' prefix
+          
+          // Skip completion marker
+          if (data === '[DONE]') continue;
+          
+          try {
+            // Parse the event data as JSON
+            const event = JSON.parse(data);
+            
+            // Process different event types
+            if (event.type === 'content_block_delta' && event.delta?.text) {
+              // Add the text to the full content
+              fullContent += event.delta.text;
+              
+              // Call the progress callback if provided
+              if (onProgress) {
+                onProgress(fullContent);
+              }
+            } else if (event.type === 'message_complete') {
+              // If we have a message_complete event with content, use that
+              // This is useful for design conversions where we might have accumulated the full content
+              if (event.message?.content && event.message.content.length > 0) {
+                const messageContent = event.message.content.map((c: any) => 
+                  c.type === 'text' ? c.text : ''
+                ).join('');
+                
+                if (messageContent.length > 0) {
+                  // Use the complete message if it's longer than what we've accumulated
+                  if (messageContent.length > fullContent.length) {
+                    fullContent = messageContent;
+                    
+                    // Call the progress callback if provided
+                    if (onProgress) {
+                      onProgress(fullContent);
+                    }
+                  }
+                }
+              }
+            } else if (event.type === 'error') {
+              throw new Error(`Stream error: ${event.error?.message || 'Unknown streaming error'}`);
+            }
+          } catch (e) {
+            console.error('Error processing stream event:', e, 'Raw data:', data);
+          }
+        }
+        
+        // Keep any incomplete events in the buffer
+        buffer = buffer.substring(eventStart);
+      }
+      
+      console.log('Full content length:', fullContent.length);
+      return fullContent;
+    } catch (error) {
+      console.error('Error processing Anthropic stream:', error);
       throw error;
     }
   }
@@ -2389,6 +2582,22 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
         }
       ];
       
+      // Set up progress tracking
+      let progressText = '';
+      let lastProgressUpdate = Date.now();
+      
+      const onProgress = (text: string) => {
+        progressText = text;
+        
+        // Throttle progress updates to avoid excessive logging
+        const now = Date.now();
+        if (now - lastProgressUpdate > 2000) {
+          const textLength = text.length;
+          console.log(`Processing response... Received ${textLength} chars so far`);
+          lastProgressUpdate = now;
+        }
+      };
+      
       // Implement retry logic for resilience
       const maxRetries = 2;
       let lastError = null;
@@ -2397,16 +2606,18 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
         try {
           console.log(`Attempt ${attempt + 1}/${maxRetries + 1} to convert design with Claude vision`);
           
-          // Call Claude with timeout
+          // Call Claude with streaming enabled
           const result = await Promise.race([
             this.callAnthropicAPI(systemPrompt, contentArray, {
               model: "claude-3-7-sonnet-20250219",
               max_tokens: 4000,
               temperature: 0.2,
-              useProxy: true
+              useProxy: true,
+              stream: true,
+              onProgress
             }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Request timed out after 120 seconds')), 120000)
+              setTimeout(() => reject(new Error('Request timed out after 180 seconds')), 180000)
             )
           ]) as string;
           
@@ -2435,6 +2646,23 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
                 htmlContent: `<html>${altHtmlMatch[1]}</html>`,
                 cssContent: altCssMatch[1].trim()
               };
+            }
+            
+            // If we have a partial response from streaming, see if we can salvage anything
+            if (progressText && progressText.length > 0) {
+              console.warn('Could not find complete HTML/CSS blocks, trying to extract from partial response');
+              
+              // Try to extract HTML and CSS from the progress text
+              const partialHtmlMatch = progressText.match(/```html\s*([\s\S]*?)\s*```/);
+              const partialCssMatch = progressText.match(/```css\s*([\s\S]*?)\s*```/);
+              
+              if (partialHtmlMatch && partialCssMatch) {
+                return {
+                  htmlContent: partialHtmlMatch[1].trim(),
+                  cssContent: partialCssMatch[1].trim(),
+                  error: 'Extracted from partial response'
+                };
+              }
             }
             
             throw new Error('Failed to extract HTML/CSS from Claude response');
@@ -2513,41 +2741,56 @@ DO NOT generate any code in this stage.`;
 
       console.log('STAGE 1: Analyzing design structure and extracting design system');
       
+      // Progress tracking for analysis
+      let analysisProgressText = '';
+      const analysisProgressCallback = (text: string) => {
+        analysisProgressText = text;
+        console.log(`Analysis progress: ${text.length} characters received`);
+      };
+      
       let analysisResult = '';
       try {
-        // First attempt with a simpler prompt
+        // First attempt with a simpler prompt, using streaming for reliability
         analysisResult = await this.callAnthropicAPI(analysisPrompt, analysisContentArray, {
           model: "claude-3-7-sonnet-20250219",
-          max_tokens: 1500, // Reduced token count for analysis
+          max_tokens: 1500,
           temperature: 0.2,
-          useProxy: true
+          useProxy: true,
+          stream: true,
+          onProgress: analysisProgressCallback
         });
         
         console.log('Design analysis completed successfully');
       } catch (analysisError) {
         console.error('Error in design analysis stage:', analysisError);
         
-        // If the full analysis fails, try again with a more focused prompt
-        try {
-          console.log('Trying simpler analysis prompt...');
-          const simplifiedPrompt = `Analyze this UI design and list only:
+        // If we have meaningful progress, use that instead of failing
+        if (analysisProgressText && analysisProgressText.length > 200) {
+          console.log('Using partial progress from streaming attempt for analysis');
+          analysisResult = analysisProgressText;
+        } else {
+          // If the full analysis fails, try again with a more focused prompt
+          try {
+            console.log('Trying simpler analysis prompt...');
+            const simplifiedPrompt = `Analyze this UI design and list only:
 1. Main colors (hex codes)
 2. Fonts used
 3. Basic layout description
 Keep it very brief.`;
-          
-          analysisResult = await this.callAnthropicAPI(simplifiedPrompt, analysisContentArray, {
-            model: "claude-3-7-sonnet-20250219",
-            max_tokens: 800,
-            temperature: 0.1,
-            useProxy: true
-          });
-          
-          console.log('Simplified design analysis completed');
-        } catch (retryError) {
-          console.error('Both analysis attempts failed:', retryError);
-          // Create a generic analysis result if all else fails
-          analysisResult = `COLOR PALETTE: 
+            
+            analysisResult = await this.callAnthropicAPI(simplifiedPrompt, analysisContentArray, {
+              model: "claude-3-7-sonnet-20250219",
+              max_tokens: 800,
+              temperature: 0.1,
+              useProxy: true,
+              stream: true
+            });
+            
+            console.log('Simplified design analysis completed');
+          } catch (retryError) {
+            console.error('Both analysis attempts failed:', retryError);
+            // Create a generic analysis result if all else fails
+            analysisResult = `COLOR PALETTE: 
 - #FFFFFF (white/background)
 - #000000 (black/text)
 - #007BFF (blue/primary)
@@ -2565,6 +2808,7 @@ COMPONENTS:
 - Navigation elements
 - Content containers
 - Interactive elements`;
+          }
         }
       }
 
@@ -2587,9 +2831,19 @@ Requirements:
 
 Focus ONLY on HTML structure in this step.`;
 
+      // Progress tracking for HTML generation
+      let htmlProgressText = '';
+      const htmlProgressCallback = (text: string) => {
+        htmlProgressText = text;
+        // Log progress at reasonable intervals
+        if (text.length % 500 < 20) {
+          console.log(`HTML generation progress: ${text.length} characters received`);
+        }
+      };
+
       let htmlContent = '';
       try {
-        // Try to generate just the HTML first
+        // Try to generate just the HTML first, with streaming
         const htmlResult = await this.callAnthropicAPI(htmlPrompt, [
           { 
             type: "text", 
@@ -2603,7 +2857,9 @@ Focus ONLY on HTML structure in this step.`;
           model: "claude-3-7-sonnet-20250219",
           max_tokens: 2000,
           temperature: 0.2,
-          useProxy: true
+          useProxy: true,
+          stream: true,
+          onProgress: htmlProgressCallback
         });
         
         // Extract HTML
@@ -2611,6 +2867,15 @@ Focus ONLY on HTML structure in this step.`;
         if (htmlMatch && htmlMatch[1]) {
           htmlContent = htmlMatch[1].trim();
           console.log('HTML structure generation successful, length:', htmlContent.length);
+        } else if (htmlProgressText && htmlProgressText.length > 300) {
+          // Try to extract from progress if main extraction failed
+          const progressHtmlMatch = htmlProgressText.match(/```html\s*([\s\S]*?)\s*```/);
+          if (progressHtmlMatch && progressHtmlMatch[1]) {
+            htmlContent = progressHtmlMatch[1].trim();
+            console.log('Extracted HTML from progress text, length:', htmlContent.length);
+          } else {
+            throw new Error('Failed to extract HTML from response');
+          }
         } else {
           throw new Error('Failed to extract HTML from response');
         }
@@ -2659,9 +2924,19 @@ Requirements:
 
 Make sure your CSS works with the provided HTML structure.`;
 
+      // Progress tracking for CSS generation
+      let cssProgressText = '';
+      const cssProgressCallback = (text: string) => {
+        cssProgressText = text;
+        // Log progress at reasonable intervals
+        if (text.length % 500 < 20) {
+          console.log(`CSS generation progress: ${text.length} characters received`);
+        }
+      };
+
       let cssContent = '';
       try {
-        // Try to generate just the CSS
+        // Try to generate just the CSS, with streaming
         const cssResult = await this.callAnthropicAPI(cssPrompt, [
           { 
             type: "text", 
@@ -2675,7 +2950,9 @@ Make sure your CSS works with the provided HTML structure.`;
           model: "claude-3-7-sonnet-20250219",
           max_tokens: 2500,
           temperature: 0.2,
-          useProxy: true
+          useProxy: true,
+          stream: true,
+          onProgress: cssProgressCallback
         });
         
         // Extract CSS
@@ -2683,6 +2960,15 @@ Make sure your CSS works with the provided HTML structure.`;
         if (cssMatch && cssMatch[1]) {
           cssContent = cssMatch[1].trim();
           console.log('CSS generation successful, length:', cssContent.length);
+        } else if (cssProgressText && cssProgressText.length > 300) {
+          // Try to extract from progress if main extraction failed
+          const progressCssMatch = cssProgressText.match(/```css\s*([\s\S]*?)\s*```/);
+          if (progressCssMatch && progressCssMatch[1]) {
+            cssContent = progressCssMatch[1].trim();
+            console.log('Extracted CSS from progress text, length:', cssContent.length);
+          } else {
+            throw new Error('Failed to extract CSS from response');
+          }
         } else {
           throw new Error('Failed to extract CSS from response');
         }

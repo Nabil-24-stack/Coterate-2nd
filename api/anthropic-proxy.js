@@ -43,18 +43,21 @@ module.exports = async (req, res) => {
       });
     }
     
-    // Check if client supports streaming
-    const useStreaming = requestBody.stream === true || 
-                        (requestBody.messages?.[0]?.content?.some(c => c.type === 'image') === false &&
-                        requestBody.max_tokens > 1000);
+    // Determine if we should use streaming based on request characteristics
+    const hasImages = requestBody.messages?.[0]?.content?.some(c => c.type === 'image');
+    const isLargeRequest = requestBody.max_tokens > 1000;
+    const clientRequestsStreaming = requestBody.stream === true;
+    
+    // Enable streaming if client requests it, or if it's a large request without images
+    // Note: Image requests need special handling and may not always work with streaming
+    const useStreaming = clientRequestsStreaming || 
+                        (!hasImages && isLargeRequest);
     
     // Optimize the request for better throughput
     const optimizedRequest = optimizeRequest(requestBody);
     
-    // Remove the stream property if we added it
-    if (optimizedRequest.stream && requestBody.stream !== true) {
-      delete optimizedRequest.stream;
-    }
+    // Set the stream property based on our decision
+    optimizedRequest.stream = useStreaming;
     
     // Check if this is a design conversion request (longer timeout)
     const isDesignConversion = 
@@ -76,7 +79,7 @@ module.exports = async (req, res) => {
     console.log('API request:', {
       model: optimizedRequest.model,
       maxTokens: optimizedRequest.max_tokens,
-      hasImage: optimizedRequest.messages?.[0]?.content?.some(c => c.type === 'image'),
+      hasImage: hasImages,
       isDesignConversion,
       useStreaming,
       requestSize: JSON.stringify(optimizedRequest).length
@@ -125,24 +128,123 @@ module.exports = async (req, res) => {
         });
       }
       
-      // For large responses or design conversions, break up the response to avoid timeouts
-      if (isDesignConversion && optimizedRequest.max_tokens > 2000) {
-        // Parse the response in chunks to avoid timeouts
-        const responseData = await response.json();
+      // Handle streaming responses differently
+      if (useStreaming) {
+        // Set appropriate headers for streaming
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
         
-        // Add a short delay to ensure the client has time to process the response
-        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('Streaming response to client');
         
-        return res.status(200).json(responseData);
+        // Create a readable stream from the response body
+        const reader = response.body.getReader();
+        const textDecoder = new TextDecoder();
+        
+        // Keep track of accumulated events for design conversions
+        let accumulatedEvents = [];
+        let accumulatedContent = '';
+        let streamComplete = false;
+        
+        try {
+          // Read chunks from the stream as they arrive
+          while (!streamComplete) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              streamComplete = true;
+              console.log('Stream complete');
+              
+              // For design conversions, we want to process the complete response
+              if (isDesignConversion && accumulatedEvents.length > 0) {
+                // Construct a complete response from accumulated events
+                const completeEvent = {
+                  type: 'message_complete',
+                  message: {
+                    id: accumulatedEvents[0]?.message?.id || 'msg_unknown',
+                    content: accumulatedContent.length > 0 ? [{ type: 'text', text: accumulatedContent }] : [],
+                    model: optimizedRequest.model,
+                    role: 'assistant',
+                    usage: accumulatedEvents[accumulatedEvents.length - 1]?.message?.usage || {}
+                  }
+                };
+                
+                // Send the complete event
+                res.write(`data: ${JSON.stringify(completeEvent)}\n\n`);
+              }
+              
+              res.write('data: [DONE]\n\n');
+              res.end();
+              break;
+            }
+            
+            // Decode the chunk
+            const chunk = textDecoder.decode(value, { stream: true });
+            
+            // Split the chunk by lines and process each line
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              // Skip empty lines
+              if (!line.trim()) continue;
+              
+              // Check if line starts with "data: "
+              if (line.startsWith('data: ')) {
+                const eventData = line.slice(6); // Remove "data: " prefix
+                
+                // Skip [DONE] marker, we'll add our own at the end
+                if (eventData === '[DONE]') continue;
+                
+                try {
+                  // Try to parse the event data as JSON
+                  const event = JSON.parse(eventData);
+                  
+                  // For design conversions, we want to accumulate the content
+                  if (isDesignConversion && event.type === 'content_block_delta') {
+                    // Accumulate content for design conversions
+                    accumulatedContent += event.delta?.text || '';
+                    accumulatedEvents.push(event);
+                    
+                    // For large design conversions, don't stream every event to avoid overwhelming the client
+                    if (accumulatedEvents.length % 5 === 0) {
+                      res.write(`data: ${eventData}\n\n`);
+                    }
+                  } else {
+                    // For regular requests, stream each event as it arrives
+                    res.write(`data: ${eventData}\n\n`);
+                  }
+                } catch (e) {
+                  console.error('Error parsing SSE event:', e, 'Raw event:', eventData);
+                  
+                  // Send unparseable events as-is
+                  res.write(`data: ${eventData}\n\n`);
+                }
+              } else if (line.trim()) {
+                // If line doesn't start with "data: " but isn't empty, log it
+                console.warn('Received unexpected line in SSE stream:', line);
+              }
+            }
+          }
+        } catch (streamError) {
+          console.error('Error processing stream:', streamError);
+          
+          // If we encounter an error during streaming, send an error event
+          const errorEvent = {
+            type: 'error',
+            error: {
+              message: `Streaming error: ${streamError.message}`
+            }
+          };
+          
+          res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+        }
       } else {
-        // For normal responses, just pass through the JSON
+        // For non-streaming responses, process normally
         const responseData = await response.json();
         return res.status(200).json(responseData);
       }
     } catch (error) {
-      // Clear timeout if it exists
-      if (timeout) clearTimeout(timeout);
-      
       // Handle timeout errors
       if (error.name === 'AbortError') {
         console.error('Request to Anthropic API timed out');
