@@ -77,12 +77,13 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 #### 2.3.3 Native Figma Design Import
 - Support pasting Figma selection links directly into the canvas
 - Integrate with Figma API to fetch and recreate designs accurately
+- Convert the Figma design into an exact HTML/CSS replica using Claude 3.7 Sonnet
 - Preserve Figma design fidelity including:
   - Component hierarchy
   - Visual properties (size, position, color)
   - Typography
   - Imagery
-- Display recreated designs as high-quality viewable components
+- Display recreated designs as interactive HTML/CSS components on the canvas
 - Maintain reference to original Figma file data
 
 #### 2.3.4 Figma Design Import Flow
@@ -90,8 +91,9 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 2. User pastes (Ctrl+V/Cmd+V) directly onto the Coterate canvas
 3. System detects Figma selection link and processes it
 4. System displays a loading indicator during the recreation process
-5. Canvas displays the recreated design with high fidelity
-6. Maintain original Figma file and node references for future editing/updating
+5. Claude 3.7 Sonnet analyzes the design and converts it to precise HTML/CSS code
+6. Canvas renders the HTML/CSS representation with high fidelity
+7. Maintain original Figma file and node references for future editing/updating
 
 ### 2.4 Design Iteration
 
@@ -232,10 +234,11 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 - **Canvas**: Main workspace component with zooming/panning capabilities
 - **Sidebar**: Navigation and page management
 - **Toolbar**: Top navigation and actions
-- **FigmaDesignRenderer**: Component for rendering native Figma designs on the canvas
+- **FigmaDesignRenderer**: Component for rendering HTML/CSS versions of Figma designs on the canvas
+- **HTMLDesignRenderer**: Component for displaying and managing HTML/CSS implementations
 - **DesignItem**: Component for containing and managing individual rendered designs
 - **IterationPanel**: Interface for triggering and managing iterations
-- **CodePreview**: Component for viewing and editing generated code
+- **CodePreview**: Component for viewing and editing generated HTML/CSS code
 
 ### 3.2 Backend
 
@@ -280,12 +283,13 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 
 #### 3.3.3 Design Analysis and Generation Pipeline
 1. **Retrieval**: Fetch the Figma design data via API
-2. **Insights Integration**: Compile relevant user insights from linked folders
-3. **Combined Analysis**: Send design and insights to Claude 3.7 Sonnet for holistic evaluation
-4. **Suggestions**: Generate actionable design modifications informed by both design principles and user feedback
-5. **Generation**: Create new design version that addresses both visual improvement needs and user pain points
-6. **Rendering**: Render the modified design on the canvas
-7. **Documentation**: Provide clear explanation of changes made and how they relate to user insights
+2. **Initial Conversion**: Use Claude 3.7 Sonnet to transform the Figma design into precise HTML/CSS code
+3. **Insights Integration**: Compile relevant user insights from linked folders
+4. **Combined Analysis**: Send design and insights to Claude 3.7 Sonnet for holistic evaluation
+5. **Suggestions**: Generate actionable design modifications informed by both design principles and user feedback
+6. **Generation**: Create new HTML/CSS version that addresses both visual improvement needs and user pain points
+7. **Rendering**: Render the HTML/CSS implementation on the canvas
+8. **Documentation**: Provide clear explanation of changes made and how they relate to user insights
 
 #### 3.3.4 Figma API Integration
 - Implement secure Figma API access using user OAuth tokens
@@ -321,8 +325,10 @@ The core functionality is already partially implemented with the following featu
 #### 4.4.1 Figma Design Import
 1. Implement the selection link parser to extract Figma file and node IDs
 2. Create proxy endpoints for Figma API access
-3. Develop the design recreation pipeline
-4. Build design rendering components
+3. Develop the design extraction and image retrieval pipeline
+4. Integrate Claude 3.7 Sonnet for converting Figma designs to HTML/CSS 
+5. Build HTML/CSS rendering components for the canvas
+6. Implement responsive and interactive behavior in rendered designs
 
 #### 4.4.2 Design Iteration Features
 1. Create the "+" button UI and interaction
