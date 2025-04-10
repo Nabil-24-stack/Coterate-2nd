@@ -89,6 +89,16 @@ class AnthropicService {
   
   // Check if API key is available
   hasApiKey(): boolean {
+    // For production environments (like Vercel), we'll assume the API key is configured
+    // server-side and not check for it client-side
+    if (this.isProductionEnvironment()) {
+      // In production, we'll trust that the server has the API key
+      // and test the connection directly rather than checking for a client-side key
+      console.log('Production environment detected, assuming API key is configured server-side');
+      return true;
+    }
+    
+    // For development environments, we still check for a client-side key
     return !!this.apiKey;
   }
   
@@ -176,7 +186,8 @@ class AnthropicService {
   
   // Main method to analyze design image and generate improved version
   async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
-    if (!this.apiKey && !this.isProductionEnvironment()) {
+    // In production we don't check for API key client-side as it's handled by the server
+    if (!this.hasApiKey()) {
       console.error('Anthropic API key not configured, cannot generate design iteration');
       throw new Error('Anthropic API key not configured. Please set it in your environment variables.');
     }
