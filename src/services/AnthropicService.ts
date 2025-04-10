@@ -890,6 +890,550 @@ class AnthropicService {
   
   // Create a fallback demo response for development/testing
   private getFallbackAnalysisResponse(dimensions: {width: number, height: number}): DesignAnalysisResponse {
+    console.log('Generating smart fallback response with dimensions:', dimensions.width, 'x', dimensions.height);
+
+    // Calculate appropriate layout based on dimensions
+    const isWide = dimensions.width > dimensions.height * 1.2;
+    const isNarrow = dimensions.height > dimensions.width * 1.2;
+    const isMobile = dimensions.width < 600;
+    const isLarge = dimensions.width > 1200;
+    
+    // Determine responsive layout structure
+    const layout = isWide ? 'horizontal' : isNarrow ? 'vertical' : 'balanced';
+    const columns = isMobile ? 1 : isWide ? 4 : 3;
+    
+    // Scale font sizes based on dimensions
+    const baseFontSize = Math.max(14, Math.min(16, Math.floor(dimensions.width / 50)));
+    const titleSize = Math.max(24, Math.min(48, Math.floor(dimensions.width / 25)));
+    const headingSize = Math.max(20, Math.min(32, Math.floor(dimensions.width / 35)));
+    const subheadingSize = Math.max(16, Math.min(24, Math.floor(dimensions.width / 45)));
+    
+    // Adjust spacing based on dimensions
+    const baseSpacing = Math.max(8, Math.min(24, Math.floor(dimensions.width / 60)));
+    
+    // Generate a color scheme if provided dimensions look like a real design
+    const colorPalette = {
+      primary: ['#4A6CF7', '#3D5EDF'],
+      secondary: ['#6F7DEB', '#5A69D1'],
+      background: ['#FFFFFF', '#F8F9FB'],
+      text: ['#1D2939', '#4B5563']
+    };
+    
+    // Build customized layout structure
+    let htmlStructure = '';
+    let cssStructure = '';
+    
+    // Navigation structure
+    if (isLarge) {
+      htmlStructure += `
+        <header class="header">
+          <div class="logo">
+            <h1>Brand Logo</h1>
+          </div>
+          <nav class="main-nav">
+            <ul>
+              <li><a href="#" class="active">Home</a></li>
+              <li><a href="#">Features</a></li>
+              <li><a href="#">Pricing</a></li>
+              <li><a href="#">About</a></li>
+              <li><a href="#">Contact</a></li>
+            </ul>
+          </nav>
+          <div class="cta-button">
+            <button class="primary-button">Get Started</button>
+          </div>
+        </header>`;
+    } else if (isMobile) {
+      htmlStructure += `
+        <header class="header">
+          <div class="logo">
+            <h1>Brand</h1>
+          </div>
+          <button class="mobile-menu-toggle">
+            <i class="fas fa-bars"></i>
+          </button>
+        </header>`;
+    } else {
+      htmlStructure += `
+        <header class="header">
+          <div class="logo">
+            <h1>Brand Logo</h1>
+          </div>
+          <nav class="main-nav">
+            <ul>
+              <li><a href="#" class="active">Home</a></li>
+              <li><a href="#">Features</a></li>
+              <li><a href="#">About</a></li>
+            </ul>
+          </nav>
+        </header>`;
+    }
+    
+    // Main content structure based on layout
+    if (layout === 'horizontal') {
+      htmlStructure += `
+        <main>
+          <section class="hero">
+            <div class="hero-content">
+              <h2>Main Headline Text</h2>
+              <p>Supporting description text that provides context and information about the product or service.</p>
+              <button class="primary-button">Primary Action</button>
+            </div>
+            <div class="hero-image">
+              <div class="image-placeholder"></div>
+            </div>
+          </section>
+          
+          <section class="features">
+            <h3>Key Features</h3>
+            <div class="feature-cards">
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                <h4>Feature One</h4>
+                <p>Feature description with improved legibility and clarity.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-lock"></i></div>
+                <h4>Feature Two</h4>
+                <p>Feature description with improved legibility and clarity.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                <h4>Feature Three</h4>
+                <p>Feature description with improved legibility and clarity.</p>
+              </div>
+            </div>
+          </section>
+        </main>`;
+    } else if (layout === 'vertical') {
+      htmlStructure += `
+        <main>
+          <section class="hero vertical">
+            <div class="hero-content">
+              <h2>Main Headline Text</h2>
+              <p>Supporting description text that provides context and information about the product or service.</p>
+              <button class="primary-button">Primary Action</button>
+            </div>
+            <div class="hero-image">
+              <div class="image-placeholder"></div>
+            </div>
+          </section>
+          
+          <section class="features">
+            <h3>Key Features</h3>
+            <div class="feature-cards vertical">
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                <h4>Feature One</h4>
+                <p>Feature description with improved legibility and clarity.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-lock"></i></div>
+                <h4>Feature Two</h4>
+                <p>Feature description with improved legibility and clarity.</p>
+              </div>
+            </div>
+          </section>
+        </main>`;
+    } else {
+      htmlStructure += `
+        <main>
+          <section class="hero">
+            <div class="hero-content">
+              <h2>Main Headline Text</h2>
+              <p>Supporting description text that provides context and information.</p>
+              <button class="primary-button">Primary Action</button>
+            </div>
+          </section>
+          
+          <section class="features">
+            <h3>Key Features</h3>
+            <div class="feature-cards ${columns}-columns">
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                <h4>Feature One</h4>
+                <p>Feature description with improved legibility.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-lock"></i></div>
+                <h4>Feature Two</h4>
+                <p>Feature description with improved legibility.</p>
+              </div>
+              <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                <h4>Feature Three</h4>
+                <p>Feature description with improved legibility.</p>
+              </div>
+            </div>
+          </section>
+        </main>`;
+    }
+    
+    // Footer structure
+    htmlStructure += `
+      <footer>
+        <div class="footer-content">
+          <div class="footer-logo">
+            <h5>Brand Logo</h5>
+          </div>
+          <div class="footer-links">
+            <ul>
+              <li><a href="#">Link One</a></li>
+              <li><a href="#">Link Two</a></li>
+              <li><a href="#">Link Three</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>© 2024 Brand Name. All rights reserved.</p>
+        </div>
+      </footer>`;
+      
+    // CSS structure based on layout and dimensions
+    cssStructure = `/* CSS Variables for consistent theming */
+:root {
+  /* Color variables */
+  --primary-color: ${colorPalette.primary[0]};
+  --primary-hover: ${colorPalette.primary[1]};
+  --secondary-color: ${colorPalette.secondary[0]};
+  --secondary-hover: ${colorPalette.secondary[1]};
+  --background: ${colorPalette.background[0]};
+  --background-alt: ${colorPalette.background[1]};
+  --text-color: ${colorPalette.text[0]};
+  --text-light: ${colorPalette.text[1]};
+  
+  /* Typography */
+  --base-font-size: ${baseFontSize}px;
+  --title-font-size: ${titleSize}px;
+  --heading-font-size: ${headingSize}px;
+  --subheading-font-size: ${subheadingSize}px;
+  
+  /* Spacing */
+  --spacing-xs: ${baseSpacing * 0.5}px;
+  --spacing-sm: ${baseSpacing}px;
+  --spacing-md: ${baseSpacing * 1.5}px;
+  --spacing-lg: ${baseSpacing * 2}px;
+  --spacing-xl: ${baseSpacing * 3}px;
+  
+  /* Other */
+  --border-radius: ${Math.max(4, baseSpacing * 0.5)}px;
+  --box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--text-color);
+  line-height: 1.5;
+  background-color: var(--background);
+  font-size: var(--base-font-size);
+}
+
+.container {
+  width: ${dimensions.width}px;
+  height: ${dimensions.height}px;
+  margin: 0 auto;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: var(--title-font-size);
+}
+
+h2 {
+  font-size: var(--heading-font-size);
+  color: var(--text-color);
+}
+
+h3 {
+  font-size: var(--subheading-font-size);
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+h4 {
+  font-size: calc(var(--base-font-size) * 1.2);
+  margin-bottom: var(--spacing-sm);
+}
+
+h5 {
+  font-size: var(--base-font-size);
+  margin-bottom: var(--spacing-md);
+  color: var(--secondary-color);
+}
+
+p {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-light);
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover, a:focus {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+/* Buttons */
+.primary-button {
+  background-color: var(--primary-color);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--border-radius);
+  border: none;
+  font-weight: 500;
+  font-size: var(--base-font-size);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  box-shadow: var(--box-shadow);
+}
+
+.primary-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.primary-button:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.primary-button:active {
+  transform: translateY(1px);
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-lg) var(--spacing-md);
+  border-bottom: 1px solid var(--background-alt);
+}
+
+.logo h1 {
+  font-size: calc(var(--base-font-size) * 1.5);
+  margin-bottom: 0;
+}
+
+.main-nav ul {
+  display: flex;
+  list-style: none;
+  gap: var(--spacing-lg);
+}
+
+.main-nav a {
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.main-nav a.active {
+  color: var(--primary-color);
+}
+
+/* Mobile menu */
+.mobile-menu-toggle {
+  background: none;
+  border: none;
+  font-size: calc(var(--base-font-size) * 1.5);
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+/* Hero Section */
+.hero {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xl) var(--spacing-md);
+  gap: var(--spacing-xl);
+  ${layout === 'vertical' ? 'flex-direction: column;' : ''}
+}
+
+.hero-content {
+  flex: 1;
+  ${layout === 'vertical' ? 'text-align: center; max-width: 80%;' : ''}
+}
+
+.hero-content h2 {
+  font-size: var(--heading-font-size);
+  margin-bottom: var(--spacing-md);
+}
+
+.hero-content p {
+  font-size: calc(var(--base-font-size) * 1.1);
+  margin-bottom: var(--spacing-lg);
+}
+
+.hero-image {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: ${Math.min(300, dimensions.height * 0.4)}px;
+  background-color: #e5e7eb;
+  border-radius: var(--border-radius);
+  border: 1px solid #d1d5db;
+}
+
+/* Features Section */
+.features {
+  padding: var(--spacing-xl) var(--spacing-md);
+  background-color: var(--background-alt);
+}
+
+.feature-cards {
+  display: flex;
+  gap: var(--spacing-lg);
+  justify-content: space-between;
+  ${layout === 'vertical' ? 'flex-direction: column;' : ''}
+}
+
+.feature-cards.vertical {
+  flex-direction: column;
+}
+
+.feature-cards.1-columns {
+  flex-direction: column;
+}
+
+.feature-cards.2-columns {
+  flex-wrap: wrap;
+}
+
+.feature-cards.2-columns .feature-card {
+  flex-basis: calc(50% - var(--spacing-lg));
+}
+
+.feature-cards.3-columns {
+  flex-wrap: wrap;
+}
+
+.feature-cards.3-columns .feature-card {
+  flex-basis: calc(33.333% - var(--spacing-lg));
+}
+
+.feature-cards.4-columns {
+  flex-wrap: wrap;
+}
+
+.feature-cards.4-columns .feature-card {
+  flex-basis: calc(25% - var(--spacing-lg));
+}
+
+.feature-card {
+  flex: 1;
+  background-color: var(--background);
+  padding: var(--spacing-lg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  transition: transform 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+}
+
+.feature-icon {
+  font-size: calc(var(--base-font-size) * 1.5);
+  color: var(--primary-color);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Footer */
+footer {
+  background-color: var(--background-alt);
+  padding: var(--spacing-xl) var(--spacing-md);
+  margin-top: var(--spacing-xl);
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-lg);
+}
+
+.footer-links ul {
+  list-style: none;
+}
+
+.footer-links li {
+  margin-bottom: var(--spacing-sm);
+}
+
+.footer-links a {
+  color: var(--text-light);
+  font-size: calc(var(--base-font-size) * 0.9);
+}
+
+.footer-bottom {
+  text-align: center;
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid rgba(0,0,0,0.1);
+  color: var(--text-light);
+  font-size: calc(var(--base-font-size) * 0.9);
+}
+
+/* Accessibility */
+:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--primary-color);
+  outline-offset: 3px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .hero, .feature-cards {
+    flex-direction: column;
+  }
+  
+  .feature-card {
+    margin-bottom: var(--spacing-lg);
+  }
+}`;
+
+    const finalHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Improved Design</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="container">
+    ${htmlStructure}
+  </div>
+</body>
+</html>`;
+
+    // Generate analysis response
     return {
       analysis: {
         strengths: [
@@ -990,404 +1534,32 @@ class AnthropicService {
         },
         designSystem: {
           colorPalette: [
-            "Primary: #4A6CF7 - Used for primary buttons, links, and key accent elements",
-            "Secondary: #6F7DEB - Used for secondary buttons and supporting elements",
-            "Background: #FFFFFF (main), #F8F9FB (secondary) - Used for page and card backgrounds",
-            "Text: #1D2939 (headings), #4B5563 (body), #6B7280 (secondary text)"
+            `Primary: ${colorPalette.primary[0]} - Used for primary buttons, links, and key accent elements`,
+            `Secondary: ${colorPalette.secondary[0]} - Used for secondary buttons and supporting elements`,
+            `Background: ${colorPalette.background[0]} (main), ${colorPalette.background[1]} (secondary) - Used for page and card backgrounds`,
+            `Text: ${colorPalette.text[0]} (headings), ${colorPalette.text[1]} (body) - Used for text elements`
           ],
           typography: [
-            "Headings: Plus Jakarta Sans, 28px/700 (h1), 24px/600 (h2), 20px/600 (h3)",
-            "Body: Inter, 16px/400 (primary), 14px/400 (secondary)",
-            "Buttons: Inter, 16px/500",
-            "Labels: Inter, 14px/500"
+            `Headings: Inter, ${titleSize}px/700 (h1), ${headingSize}px/600 (h2), ${subheadingSize}px/600 (h3)`,
+            `Body: Inter, ${baseFontSize}px/400 (primary)`,
+            `Buttons: Inter, ${baseFontSize}px/500`,
+            `Labels: Inter, ${Math.floor(baseFontSize * 0.9)}px/500`
           ],
           components: [
-            "Buttons: Rounded corners (8px), consistent padding (16px horizontal, 10px vertical), primary (#4A6CF7), secondary (#EEF1FF with #6F7DEB text)",
-            "Input fields: 1px border (#E5E7EB), 8px border radius, 12px padding, #F9FAFB background",
-            "Cards: White background, subtle shadow (0 2px 5px rgba(0,0,0,0.08)), 16px border radius, 24px padding",
-            "Navigation: Consistent 16px spacing between items, 2px accent indicator for active items"
+            `Buttons: Rounded corners (${Math.max(4, baseSpacing * 0.5)}px), padding (${baseSpacing}px ${baseSpacing * 2}px), primary (${colorPalette.primary[0]}), hover (${colorPalette.primary[1]})`,
+            `Cards: White background, subtle shadow (0 2px 5px rgba(0,0,0,0.1)), ${Math.max(4, baseSpacing * 0.5)}px border radius, ${baseSpacing * 2}px padding`,
+            `Navigation: ${baseSpacing * 2}px spacing between items, active state uses primary color`
           ]
         }
       },
-      htmlCode: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Improved Design</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-  <!-- This is a demo fallback response. In production, this would be an iterated version of the original UI -->
-  <div class="container">
-    <!-- Preserving original header structure -->
-    <header class="header">
-      <div class="logo">
-        <h1>Original Logo</h1>
-      </div>
-      <nav class="main-nav">
-        <ul>
-          <li><a href="#" class="active">Home</a></li>
-          <li><a href="#">Features</a></li>
-          <li><a href="#">Pricing</a></li>
-          <li><a href="#">About</a></li>
-        </ul>
-      </nav>
-      <!-- Enhancement: Improved button with better contrast -->
-      <div class="cta-button">
-        <button class="primary-button">Get Started</button>
-      </div>
-    </header>
-    
-    <main>
-      <!-- Preserving original hero structure with improved contrast -->
-      <section class="hero">
-        <div class="hero-content">
-          <h2>Original Headline Text</h2>
-          <p>Original description text with improved line height and spacing.</p>
-          <button class="primary-button">Try It Now</button>
-        </div>
-        <div class="hero-image">
-          <!-- Image placeholder preserving original dimensions -->
-          <div class="image-placeholder"></div>
-        </div>
-      </section>
-      
-      <!-- Original features section with improved spacing -->
-      <section class="features">
-        <h3>Key Features</h3>
-        <div class="feature-cards">
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-magic"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-users"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-        </div>
-      </section>
-    </main>
-    
-    <!-- Preserving original footer structure -->
-    <footer>
-      <div class="footer-links">
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>Original copyright text.</p>
-      </div>
-    </footer>
-  </div>
-</body>
-</html>`,
-      cssCode: `/* CSS Variables for consistent theming */
-:root {
-  /* Preserving original color values with adjustments for accessibility */
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --secondary-color: #6b7280;
-  --text-color: #1f2937;
-  --light-text: #4b5563; /* Slightly darker than original for better contrast */
-  --background: #ffffff;
-  --light-bg: #f9fafb;
-  --border-color: #e5e7eb;
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --border-radius: 0.375rem;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Base styles - preserving original with minor enhancements */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  /* Preserving original font stack */
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  color: var(--text-color);
-  line-height: 1.5; /* Improved from original 1.3 */
-  background-color: var(--background);
-  font-size: 16px; /* Preserved from original */
-}
-
-.container {
-  width: ${dimensions.width}px; /* Preserving original width */
-  margin: 0 auto;
-  overflow: hidden;
-}
-
-/* Typography - preserving original with minor enhancements for readability */
-h1, h2, h3, h4, h5, h6 {
-  margin-bottom: var(--spacing-md);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-h1 {
-  font-size: 1.875rem; /* Preserved from original */
-}
-
-h2 {
-  font-size: 2.25rem; /* Preserved from original */
-  color: var(--text-color);
-}
-
-h3 {
-  font-size: 1.5rem; /* Preserved from original */
-  text-align: center;
-  margin-bottom: var(--spacing-xl);
-}
-
-h4 {
-  font-size: 1.25rem; /* Preserved from original */
-  margin-bottom: var(--spacing-sm);
-}
-
-h5 {
-  font-size: 1rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-  color: var(--secondary-color);
-}
-
-p {
-  margin-bottom: var(--spacing-md);
-  color: var(--light-text); /* Adjusted for better contrast */
-}
-
-a {
-  color: var(--primary-color);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-/* Enhancement: Better hover states while preserving original styling */
-a:hover, a:focus {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-
-/* Buttons - preserving original with accessibility enhancements */
-.primary-button {
-  background-color: var(--primary-color);
-  color: white;
-  padding: 0.75rem 1.5rem; /* Preserved from original */
-  border-radius: var(--border-radius);
-  border: none;
-  font-weight: 500;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  box-shadow: var(--shadow-sm);
-}
-
-.primary-button:hover {
-  background-color: var(--primary-hover);
-}
-
-/* Enhancement: Better focus states */
-.primary-button:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-.primary-button:active {
-  transform: translateY(1px);
-}
-
-/* Header - preserving original structure */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-lg) 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.logo h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0;
-}
-
-.main-nav ul {
-  display: flex;
-  list-style: none;
-  gap: var(--spacing-lg);
-}
-
-.main-nav a {
-  color: var(--light-text);
-  font-weight: 500;
-}
-
-.main-nav a.active {
-  color: var(--primary-color);
-}
-
-/* Hero Section - preserving original layout */
-.hero {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-xl) 0;
-  gap: var(--spacing-xl);
-}
-
-.hero-content {
-  flex: 1;
-}
-
-.hero-content h2 {
-  font-size: 2.5rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-}
-
-.hero-content p {
-  font-size: 1.125rem; /* Preserved from original */
-  margin-bottom: var(--spacing-lg);
-}
-
-.hero-image {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.image-placeholder {
-  width: 100%;
-  height: 300px; /* Preserved from original */
-  background-color: #e5e7eb;
-  border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
-}
-
-/* Features Section - preserving original with minor improvements */
-.features {
-  padding: var(--spacing-xl) 0;
-  background-color: var(--light-bg);
-}
-
-.feature-cards {
-  display: flex;
-  gap: var(--spacing-lg);
-  justify-content: space-between;
-}
-
-.feature-card {
-  flex: 1;
-  background-color: var(--background);
-  padding: var(--spacing-lg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow-md);
-  transition: transform 0.2s ease;
-}
-
-/* Enhancement: Subtle hover effect */
-.feature-card:hover {
-  transform: translateY(-2px); /* More subtle than original */
-}
-
-.feature-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-  margin-bottom: var(--spacing-md);
-}
-
-/* Footer - preserving original structure */
-footer {
-  background-color: var(--light-bg);
-  padding: var(--spacing-xl) 0;
-  margin-top: var(--spacing-xl);
-}
-
-.footer-links {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-xl);
-}
-
-.footer-column ul {
-  list-style: none;
-}
-
-.footer-column li {
-  margin-bottom: var(--spacing-sm);
-}
-
-.footer-column a {
-  color: var(--light-text);
-  font-size: 0.875rem; /* Preserved from original */
-}
-
-.footer-bottom {
-  text-align: center;
-  padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
-  color: var(--light-text);
-  font-size: 0.875rem;
-}
-
-/* Accessibility Enhancements */
-:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-/* High contrast focus for keyboard navigation */
-:focus-visible {
-  outline: 3px solid var(--primary-color);
-  outline-offset: 3px;
-}`,
+      htmlCode: finalHtml,
+      cssCode: cssStructure,
       metadata: {
-        colors: {
-          primary: ['#4f46e5', '#4338ca'],
-          secondary: ['#6b7280'],
-          background: ['#ffffff', '#f9fafb'],
-          text: ['#1f2937', '#4b5563']  // Slightly adjusted for better contrast
-        },
+        colors: colorPalette,
         fonts: [
-          'Inter', 
-          '-apple-system', 
-          'BlinkMacSystemFont', 
-          'Segoe UI', 
-          'Roboto'
+          'Inter',
+          'system-ui',
+          'sans-serif'
         ],
         components: [
           'Navigation Menu',
