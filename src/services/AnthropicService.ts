@@ -58,9 +58,26 @@ class AnthropicService {
     // Try to get API key from environment
     this.apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY || null;
     
-    // If no key in env, check localStorage as fallback
+    // If no key in env, check if we have other environment variables
     if (!this.apiKey) {
+      this.apiKey = process.env.ANTHROPIC_API_KEY || 
+                   process.env.VERCEL_ANTHROPIC_API_KEY || null;
+      
+      // Log available environment variables for debugging (without revealing actual keys)
+      if (this.isDevEnvironment()) {
+        console.log('Environment variables available:', {
+          hasReactAppKey: !!process.env.REACT_APP_ANTHROPIC_API_KEY,
+          hasRegularKey: !!process.env.ANTHROPIC_API_KEY,
+          hasVercelKey: !!process.env.VERCEL_ANTHROPIC_API_KEY,
+          nodeEnv: process.env.NODE_ENV
+        });
+      }
+    }
+    
+    // If still no key from env, check localStorage as fallback for development
+    if (!this.apiKey && this.isDevEnvironment()) {
       this.apiKey = localStorage.getItem('anthropic_api_key');
+      console.log('Using API key from localStorage:', !!this.apiKey);
     }
   }
   
@@ -313,17 +330,31 @@ class AnthropicService {
       try {
         // Try using our server proxy first
         console.log('Trying server proxy for Anthropic API analysis...');
+        
+        // Fix: Explicitly set the method as POST and include proper content type headers
         analysisResponse = await fetch('/api/anthropic-proxy', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify(analysisRequestBody)
+          body: JSON.stringify(analysisRequestBody),
+          cache: 'no-cache'
         });
         
         if (!analysisResponse.ok) {
           const errorText = await analysisResponse.text();
           console.error('Server proxy error response:', analysisResponse.status, errorText);
+          
+          // More detailed error logging
+          if (analysisResponse.status === 405) {
+            console.error('Method Not Allowed: The server proxy only accepts POST requests. Check if the request is being sent properly.');
+          } else if (analysisResponse.status === 401 || analysisResponse.status === 403) {
+            console.error('Authentication error: Check if the Anthropic API key is configured correctly in environment variables.');
+          } else if (analysisResponse.status === 500) {
+            console.error('Server error: The proxy server encountered an internal error. Check server logs for details.');
+          }
+          
           throw new Error(`Server proxy returned: ${analysisResponse.status} ${analysisResponse.statusText}`);
         }
       } catch (error: any) {
@@ -439,8 +470,10 @@ class AnthropicService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify(iterationRequestBody)
+        body: JSON.stringify(iterationRequestBody),
+        cache: 'no-cache'
       });
       
       if (!iterationResponse.ok) {
