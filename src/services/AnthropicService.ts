@@ -1708,44 +1708,116 @@ class AnthropicService {
   }> {
     try {
       console.log('Converting Figma design to HTML/CSS:', { 
-        imageUrl: imageUrl.substring(0, 50) + '...',  // Only log part of the URL for privacy
         width: designInfo.width,
         height: designInfo.height,
         figmaFileKey: designInfo.figmaFileKey,
         figmaNodeId: designInfo.figmaNodeId 
       });
       
-      // First, ensure the image URL is accessible (some Figma URLs have short expiration times)
+      // STEP 1: Image validation and preparation
       let validImageUrl = imageUrl;
+      let imageOptimized = false;
+      
       try {
-        // Test if the image URL is still valid with a HEAD request
-        const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
+        // Test if the image URL is still valid
+        const imageResponse = await fetch(imageUrl, { 
+          method: 'HEAD',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        
         if (!imageResponse.ok) {
-          console.warn('Image URL may have expired, will use a placeholder description instead');
-          validImageUrl = ''; // We'll handle this case with a fallback approach
+          console.warn('Image URL may have expired, attempting to optimize');
+          validImageUrl = ''; // Will be handled by fallback approach
+        } else {
+          // Try to optimize the image if it's valid
+          try {
+            // Load the image to get its natural dimensions
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            // Wait for the image to load
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = () => reject(new Error('Failed to load image for optimization'));
+              img.src = imageUrl;
+            });
+            
+            // Don't optimize if the image is already small
+            if (img.naturalWidth > 1000 || img.naturalHeight > 1000) {
+              // Create a canvas and downscale the image
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              
+              // Calculate new dimensions (keeping aspect ratio)
+              const aspectRatio = img.naturalWidth / img.naturalHeight;
+              const maxDimension = 1000; // Max dimension for Claude processing
+              
+              let newWidth, newHeight;
+              if (img.naturalWidth > img.naturalHeight) {
+                newWidth = maxDimension;
+                newHeight = maxDimension / aspectRatio;
+              } else {
+                newHeight = maxDimension;
+                newWidth = maxDimension * aspectRatio;
+              }
+              
+              // Set canvas size
+              canvas.width = newWidth;
+              canvas.height = newHeight;
+              
+              // Draw image at reduced size
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+                
+                // Convert to JPEG data URL with reduced quality
+                validImageUrl = canvas.toDataURL('image/jpeg', 0.85);
+                imageOptimized = true;
+                console.log('Image optimized to', Math.round(newWidth), 'x', Math.round(newHeight), 'pixels');
+              }
+            }
+          } catch (optimizeError) {
+            console.warn('Failed to optimize image:', optimizeError);
+            // Continue with original URL if optimization fails
+          }
         }
       } catch (imageError) {
         console.warn('Error validating image URL:', imageError);
-        validImageUrl = ''; // We'll handle this case with a fallback approach
+        validImageUrl = ''; // Will be handled by fallback approach
       }
       
-      const systemPrompt = `You are a highly skilled UI developer specializing in pixel-perfect HTML/CSS recreation of designs.
+      // STEP 2: Create a comprehensive design description for Claude
+      const designDescription = `
+        Figma Design Component Information:
+        - Type: UI Component from Figma
+        - Dimensions: ${designInfo.width}px × ${designInfo.height}px
+        - Figma File: ${designInfo.figmaFileKey}
+        - Node ID: ${designInfo.figmaNodeId}
+        - Component Style: Modern UI with clean layout
+        - Context: This is a UI element that needs to be converted to precise HTML/CSS
+      `;
+      
+      // STEP 3: Prepare the system prompt with detailed instructions
+      const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
 Your task is to convert a Figma design into precise HTML and CSS code.
-Focus solely on creating an exact replica with these requirements:
 
-1. Create semantic HTML5 structure
-2. Use clean, modern CSS (avoid unnecessary frameworks)
-3. Match visual details exactly: colors, spacing, typography, shadows, etc.
-4. Ensure the output is responsive where appropriate
-5. Separate HTML and CSS in your response
-6. Keep your code clean and maintainable
+INSTRUCTIONS:
+1. Create valid, semantic HTML5 structure
+2. Use clean, modern CSS - prefer vanilla CSS over frameworks
+3. Match visual details precisely - colors, spacing, typography, shadows, etc.
+4. Focus on component dimensions: ${designInfo.width}px × ${designInfo.height}px
+5. Use responsive techniques where appropriate
+6. Separate HTML and CSS in your response
+7. Keep your code clean and maintainable
 
-Return your response in this format:
-1. First the complete HTML code 
-2. Then the complete CSS code
+FORMATTING REQUIREMENTS:
+- Return HTML code in a \`\`\`html code block
+- Return CSS code in a \`\`\`css code block
+- Make CSS styles specific to avoid conflicts (use class prefixes)
+- Include basic browser resets in your CSS
 
-This is purely a conversion task - maintain the original design exactly as shown.`;
+You're a UI conversion expert - maintain the original design exactly as shown.`;
 
+      // STEP 4: Prepare the user prompt with fallback instructions in case image processing fails
       const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
 
 Design Information:
@@ -1758,44 +1830,54 @@ Requirements:
 1. Create a pixel-perfect recreation of the design
 2. Use semantic HTML5 elements
 3. Use modern CSS (no unnecessary frameworks)
-4. Ensure exact matching of:
+4. Focus on exact dimensions (${designInfo.width}px × ${designInfo.height}px)
+5. Ensure exact matching of all visual properties:
    - Colors, gradients, and transparency
    - Typography (fonts, sizes, weights, line heights)
    - Spacing and positioning
    - Borders, shadows, and effects
-5. Handle any visible text content exactly as shown
-6. For any icons, use appropriate HTML/CSS or Font Awesome equivalents
-7. For form elements, ensure they look identical to the design
+6. Handle any visible text content exactly as shown
+7. For any icons, use appropriate HTML/CSS or Font Awesome equivalents
 
-Provide the complete HTML and CSS code needed to recreate this design exactly.
+If you encounter any issues processing the image, please create a reasonable UI component based on the dimensions and context provided.`;
 
-If you encounter any issues processing the image, please create a minimal responsive layout based on the dimensions provided.`;
-
-      // Prepare the content array with or without the image
+      // STEP 5: Prepare message content array with a structured approach
       const contentArray = [];
       
+      // Always include the design description text first
+      contentArray.push({
+        type: "text",
+        text: designDescription
+      });
+      
+      // Add the image if available (optimized or original)
       if (validImageUrl) {
         contentArray.push({
           type: "image",
           source: {
-            type: "url",
-            url: validImageUrl
+            type: validImageUrl.startsWith('data:') ? "base64" : "url",
+            ...(validImageUrl.startsWith('data:') 
+              ? { 
+                  data: validImageUrl.split(',')[1],
+                  media_type: "image/jpeg"
+                } 
+              : { url: validImageUrl })
           }
         });
+        
+        console.log('Added image to request', imageOptimized ? '(optimized)' : '(original)');
       } else {
-        // Add a text-only description of the design if the image is not available
-        contentArray.push({
-          type: "text",
-          text: `[Image description: The design is a UI component with dimensions ${designInfo.width}px × ${designInfo.height}px from Figma file ${designInfo.figmaFileKey}, node ${designInfo.figmaNodeId}]`
-        });
+        console.log('No valid image available, using text-only approach');
       }
       
-      // Always add the text prompt
+      // Always add the main user prompt
       contentArray.push({
         type: "text",
         text: userPrompt
       });
 
+      // STEP 6: Make the API request with enhanced error handling and timeouts
+      // Prepare request body with our processed content
       const requestBody = {
         model: "claude-3-7-sonnet-20250219",
         max_tokens: 4000,
@@ -1809,11 +1891,13 @@ If you encounter any issues processing the image, please create a minimal respon
         ]
       };
       
-      // Add timeout handling
+      // Set up timeout handling with AbortController
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout
       
       try {
+        console.log('Sending request to Anthropic API via proxy...');
+        
         // Make API call to Anthropic for HTML/CSS generation
         const response = await fetch('/api/anthropic-proxy', {
           method: 'POST',
@@ -1835,7 +1919,8 @@ If you encounter any issues processing the image, please create a minimal respon
           
           // Handle timeout specifically
           if (response.status === 504) {
-            throw new Error('API request timed out. The Figma design might be too complex for processing.');
+            console.warn('API request timed out, falling back to simplified approach');
+            return this.generateSimplifiedHtmlCss(designInfo);
           }
           
           throw new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
@@ -1851,82 +1936,160 @@ If you encounter any issues processing the image, please create a minimal respon
         const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
         const cssContent = cssMatch ? cssMatch[1].trim() : '';
         
+        // If extraction failed, try alternative extraction patterns
         if (!htmlContent || !cssContent) {
-          console.error('Failed to extract HTML/CSS from Claude response:', generatedText.substring(0, 500) + '...');
+          console.warn('Failed to extract HTML/CSS with primary patterns, trying alternatives...');
           
-          // Generate a simple fallback HTML/CSS if extraction fails
-          return {
-            htmlContent: `<div class="figma-design">
-  <div class="figma-component" style="width: ${designInfo.width}px; height: ${designInfo.height}px;">
-    <p>Failed to extract HTML content from AI response.</p>
-  </div>
-</div>`,
-            cssContent: `.figma-design {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-}
-.figma-component {
-  background-color: #f5f5f5;
-  border: 1px solid #ccc;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-family: sans-serif;
-  color: #333;
-  text-align: center;
-  padding: 20px;
-  box-sizing: border-box;
-}`,
-            error: 'Failed to extract HTML/CSS from the generated response'
-          };
+          // Alternative HTML extraction
+          let altHtmlContent = '';
+          let altCssContent = '';
+          
+          // Try to extract HTML content between <html> and </html> tags
+          const htmlDocMatch = generatedText.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+          if (htmlDocMatch && htmlDocMatch[1]) {
+            altHtmlContent = `<html>${htmlDocMatch[1]}</html>`;
+          }
+          
+          // Try to extract CSS from <style> tags
+          const styleMatch = generatedText.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+          if (styleMatch && styleMatch[1]) {
+            altCssContent = styleMatch[1].trim();
+          }
+          
+          // If we found content with alternative patterns, use it
+          if (altHtmlContent && altCssContent) {
+            console.log('Successfully extracted HTML/CSS using alternative patterns');
+            return { htmlContent: altHtmlContent, cssContent: altCssContent };
+          }
+          
+          console.error('Failed to extract HTML/CSS from Claude response, falling back to simplified approach');
+          return this.generateSimplifiedHtmlCss(designInfo);
         }
         
+        console.log('Successfully extracted HTML/CSS from Claude response');
         return { htmlContent, cssContent };
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
         
         // Handle AbortController timeout
         if (fetchError.name === 'AbortError') {
-          throw new Error('Request timed out. The Figma design might be too complex to process.');
+          console.warn('Request timed out, falling back to simplified approach');
+          return this.generateSimplifiedHtmlCss(designInfo);
         }
         
-        throw fetchError;
+        // For other errors, attempt fallback
+        console.error('Error during API request:', fetchError);
+        return this.generateSimplifiedHtmlCss(designInfo);
       }
     } catch (error: any) {
       console.error('Error converting Figma design to HTML/CSS:', error);
+      return this.generateSimplifiedHtmlCss(designInfo, error.message);
+    }
+  }
+
+  // Helper method to generate a simplified but useful HTML/CSS component
+  // This is used as a fallback when the main conversion process fails
+  private generateSimplifiedHtmlCss(
+    designInfo: { width: number, height: number, figmaFileKey: string, figmaNodeId: string },
+    errorMessage?: string
+  ): Promise<{ htmlContent: string, cssContent: string, error?: string }> {
+    return new Promise(resolve => {
+      console.log('Generating simplified HTML/CSS as fallback');
       
-      // Return a minimal valid HTML/CSS as fallback
-      return {
-        htmlContent: `<div class="figma-design">
-  <div class="figma-component" style="width: ${designInfo.width}px; height: ${designInfo.height}px;">
-    <p>Error: ${error.message || 'Failed to generate HTML content'}</p>
+      // Extract component name from the node ID for better labeling
+      const componentName = designInfo.figmaNodeId.split(':').pop() || 'component';
+      const containerClass = `figma-component-${componentName}`;
+      
+      // Generate HTML with reasonable semantic structure
+      const htmlContent = `<div class="${containerClass}-wrapper">
+  <div class="${containerClass}" role="region" aria-label="Figma Component">
+    <header class="${containerClass}-header">
+      <h2 class="${containerClass}-title">Figma Component</h2>
+      ${errorMessage ? `<p class="${containerClass}-error">Error: ${errorMessage}</p>` : ''}
+    </header>
+    <div class="${containerClass}-content">
+      <div class="${containerClass}-placeholder">
+        <p>Figma Design: ${designInfo.figmaFileKey}</p>
+        <p>Node ID: ${designInfo.figmaNodeId}</p>
+        <p>Dimensions: ${designInfo.width}px × ${designInfo.height}px</p>
+      </div>
+    </div>
   </div>
-</div>`,
-        cssContent: `.figma-design {
+</div>`;
+
+      // Generate CSS with reasonable styling
+      const cssContent = `.${containerClass}-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
-  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-.figma-component {
+
+.${containerClass} {
+  width: ${designInfo.width}px;
+  height: ${designInfo.height}px;
   background-color: #f5f5f5;
-  border: 1px solid #ccc;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.${containerClass}-header {
+  background-color: #f0f0f0;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.${containerClass}-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.${containerClass}-error {
+  color: #d32f2f;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.${containerClass}-content {
+  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-family: sans-serif;
-  color: #333;
+  padding: 16px;
+}
+
+.${containerClass}-placeholder {
   text-align: center;
-  padding: 20px;
-  box-sizing: border-box;
-}`,
-        error: error.message || 'Unknown error occurred'
-      };
-    }
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.${containerClass}-placeholder p {
+  margin: 4px 0;
+}
+
+@media (max-width: ${designInfo.width + 32}px) {
+  .${containerClass} {
+    width: 100%;
+    height: auto;
+    min-height: ${Math.min(designInfo.height, 300)}px;
+  }
+}`;
+
+      resolve({
+        htmlContent,
+        cssContent,
+        error: errorMessage || 'Used simplified fallback due to processing limitations'
+      });
+    });
   }
 }
 

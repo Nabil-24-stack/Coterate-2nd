@@ -23,6 +23,9 @@ module.exports = async (req, res) => {
     });
   }
 
+  // For tracking request processing time
+  const requestStartTime = Date.now();
+
   try {
     // Log request details for debugging
     console.log(`API proxy request received: ${new Date().toISOString()}`);
@@ -57,88 +60,204 @@ module.exports = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request body' });
     }
     
-    // Check for image content to determine if this will be a heavy request
+    // Check for and optimize any image content
+    let enhancedRequestBody = { ...requestBody };
     let hasImageContent = false;
     let imageSize = 0;
+    
     try {
       if (requestBody.messages && 
           requestBody.messages[0] && 
           requestBody.messages[0].content && 
           Array.isArray(requestBody.messages[0].content)) {
         
-        // Look for any image content
-        const imageItem = requestBody.messages[0].content.find(item => 
-          item.type === 'image' && item.source
-        );
+        // Process the message content array
+        const processedContent = [];
         
-        if (imageItem) {
-          hasImageContent = true;
-          console.log('Request contains image data, this may take longer to process');
-          
-          // If it's base64, measure its size
-          if (imageItem.source.type === 'base64' && imageItem.source.data) {
-            imageSize = imageItem.source.data.length;
-            console.log(`Image data size: approximately ${Math.round(imageSize / 1024)}KB`);
-          } else if (imageItem.source.type === 'url') {
-            console.log('Image is provided via URL:', imageItem.source.url.substring(0, 50) + '...');
+        // First gather text parts to maintain original order
+        for (const contentItem of requestBody.messages[0].content) {
+          if (contentItem.type === 'text') {
+            // Keep text content as is
+            processedContent.push(contentItem);
+          } else if (contentItem.type === 'image') {
+            hasImageContent = true;
+            
+            // Check image source type
+            if (contentItem.source.type === 'base64' && contentItem.source.data) {
+              // Process base64 image
+              imageSize = contentItem.source.data.length;
+              console.log(`Processing base64 image, size: approximately ${Math.round(imageSize / 1024)}KB`);
+              
+              // If it's extremely large, we might need to trim it
+              // Claude has a 4MB limit for images
+              const maxBase64Size = 3.5 * 1024 * 1024; // 3.5MB limit (to be safe)
+              
+              if (imageSize > maxBase64Size) {
+                console.log(`Image exceeds recommended size limit (${Math.round(imageSize/1024/1024)}MB), truncating to ${Math.round(maxBase64Size/1024/1024)}MB`);
+                // Trim the base64 data to fit within limits
+                // This is not ideal but better than failing
+                contentItem.source.data = contentItem.source.data.substring(0, maxBase64Size);
+              }
+              
+              processedContent.push(contentItem);
+            } else if (contentItem.source.type === 'url') {
+              // For URL images, we pass them through as-is
+              console.log('Processing image URL:', contentItem.source.url.substring(0, 50) + '...');
+              processedContent.push(contentItem);
+            }
           }
         }
+        
+        // Replace the content array with our processed version
+        enhancedRequestBody.messages[0].content = processedContent;
       }
-    } catch (validationError) {
-      console.error('Error checking for image content:', validationError);
-      // Continue anyway, let Anthropic handle the validation
+    } catch (processingError) {
+      console.error('Error processing request content:', processingError);
+      // Continue with original request body if processing fails
+      enhancedRequestBody = requestBody;
     }
     
-    console.log('Forwarding request to Anthropic API...');
+    console.log(`Prepared request ${hasImageContent ? 'with image content' : 'without images'}`);
+    
+    // Apply different timeouts based on content type
+    const timeoutOptions = {
+      initialTimeout: hasImageContent ? 55000 : 30000,  // Initial timeout: 55s for images, 30s for text
+      retryTimeout: 10000,                              // Additional time for retry: 10s
+      maxRetries: 1                                     // Maximum number of retries
+    };
     
     // Create a fetch controller to implement timeout
     const controller = new AbortController();
-    const timeoutMs = hasImageContent ? 55000 : 30000; // 55 seconds for image requests, 30 for others
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutOptions.initialTimeout);
+    
+    // Function to make the actual API call with retry logic
+    const callAnthropicAPI = async (attemptNumber = 1) => {
+      try {
+        const anthropicUrl = 'https://api.anthropic.com/v1/messages';
+        
+        // Update logs with attempt information
+        console.log(`Anthropic API call attempt ${attemptNumber} started at ${new Date().toISOString()}`);
+        
+        const response = await fetch(anthropicUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'max-tokens-boost-enabled' // Enable higher token limit for responses
+          },
+          body: JSON.stringify(enhancedRequestBody),
+          signal: controller.signal
+        });
+        
+        const responseTime = Date.now() - requestStartTime;
+        console.log(`Anthropic API response received in ${responseTime}ms with status: ${response.status}`);
+        
+        // Handle error responses that might benefit from retry
+        if (!response.ok) {
+          const errorStatus = response.status;
+          
+          // Check if we should retry based on status and attempt number
+          if (
+            (errorStatus === 429 || errorStatus === 500 || errorStatus === 503) && 
+            attemptNumber <= timeoutOptions.maxRetries
+          ) {
+            // For these specific errors, we'll retry once
+            console.log(`Received error ${errorStatus}, will retry (attempt ${attemptNumber}/${timeoutOptions.maxRetries})`);
+            
+            // Clear the current timeout
+            clearTimeout(timeoutId);
+            
+            // Wait briefly before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Set a new timeout for the retry
+            const newTimeoutId = setTimeout(() => controller.abort(), timeoutOptions.retryTimeout);
+            
+            try {
+              // Recursive call to retry
+              return await callAnthropicAPI(attemptNumber + 1);
+            } finally {
+              clearTimeout(newTimeoutId);
+            }
+          }
+          
+          // If we reach here, we either shouldn't retry or have exhausted retries
+          const errorText = await response.text();
+          return { 
+            ok: false, 
+            status: response.status, 
+            data: errorText 
+          };
+        }
+        
+        // Success path - parse the JSON response
+        const jsonData = await response.json();
+        return { 
+          ok: true, 
+          status: response.status, 
+          data: jsonData 
+        };
+      } catch (fetchError) {
+        // Check if this was a timeout
+        if (fetchError.name === 'AbortError') {
+          console.error('API request aborted/timed out');
+          return { 
+            ok: false, 
+            status: 504, 
+            data: {
+              error: {
+                type: 'timeout_error',
+                message: 'Request to Anthropic API timed out. The processing may be too complex or the API is experiencing high load.'
+              }
+            }
+          };
+        }
+        
+        // For other fetch errors
+        console.error('Fetch error during API call:', fetchError);
+        return { 
+          ok: false, 
+          status: 500, 
+          data: { 
+            error: { 
+              type: 'api_connection_error',
+              message: `API connection error: ${fetchError.message}`
+            }
+          }
+        };
+      }
+    };
     
     try {
-      // Forward the request to Anthropic API with timeout
-      const anthropicUrl = 'https://api.anthropic.com/v1/messages';
-      const response = await fetch(anthropicUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-        // Add high timeout values
-        timeout: timeoutMs - 1000, // 1 second less than our abort controller
-        size: 50 * 1024 * 1024, // Allow up to 50MB response size
-      });
+      // Make the API call with our retry logic
+      const result = await callAnthropicAPI();
       
-      // Clear the timeout since we got a response
+      // Clean up the timeout
       clearTimeout(timeoutId);
       
-      console.log(`Anthropic API response status: ${response.status}`);
-      
-      // Get the response data
-      const responseData = await response.json();
-      
-      // Return the response from Anthropic API
-      return res.status(response.status).json(responseData);
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      // Special handling for timeout errors
-      if (fetchError.name === 'AbortError') {
-        console.error('Request to Anthropic API timed out');
-        return res.status(504).json({
-          error: {
-            type: 'timeout_error',
-            message: 'Request to Anthropic API timed out. The processing may be too complex or the API is experiencing high load.'
+      // Return the appropriate response to the client
+      if (!result.ok) {
+        // If it's a string error response, try to parse it as JSON first
+        let errorData = result.data;
+        if (typeof errorData === 'string') {
+          try {
+            errorData = JSON.parse(errorData);
+          } catch (e) {
+            // Keep as string if parsing fails
           }
-        });
+        }
+        
+        console.error('API returned error:', result.status, typeof errorData === 'string' ? errorData.substring(0, 200) : JSON.stringify(errorData).substring(0, 200));
+        return res.status(result.status).json(errorData);
       }
       
-      // Rethrow other errors
-      throw fetchError;
+      // Success case - return the data
+      return res.status(result.status).json(result.data);
+    } catch (apiCallError) {
+      // Clean up timeout
+      clearTimeout(timeoutId);
+      throw apiCallError;
     }
   } catch (error) {
     console.error('Server error during Anthropic API call:', error);
