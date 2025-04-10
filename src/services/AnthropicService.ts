@@ -309,12 +309,10 @@ class AnthropicService {
       };
       
       // Make API call to Anthropic for analysis
-      const analysisResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      const analysisResponse = await fetch('/api/anthropic-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': `${this.apiKey}`,
-          'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify(analysisRequestBody)
       });
@@ -402,12 +400,10 @@ class AnthropicService {
       };
       
       // Make API call to Anthropic for HTML/CSS generation
-      const iterationResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      const iterationResponse = await fetch('/api/anthropic-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': `${this.apiKey}`,
-          'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify(iterationRequestBody)
       });

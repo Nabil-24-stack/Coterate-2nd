@@ -2288,6 +2288,316 @@ export const Canvas: React.FC = () => {
     loadCanvasPosition(currentPage.id);
   }, []); // Empty dependency array = only run once on mount
 
+  // Generate a design iteration - this implements PRD 2.4.2 and 2.4.4
+  const generateDesignIteration = async (designId: string) => {
+    try {
+      console.log('Generating iteration for design ID:', designId);
+      
+      // Find the design to iterate on
+      const designToIterate = findDesignById(designId);
+      if (!designToIterate) {
+        console.error('Design not found for iteration', designId);
+        return;
+      }
+      
+      console.log('Found design to iterate on:', designToIterate);
+      
+      // Is this a base design or an iteration?
+      const isIteration = 'parentId' in designToIterate;
+      
+      // Get the dimensions of the original design
+      let originalDimensions: { width: number; height: number } | undefined;
+      
+      // Get the source image URL for analysis
+      let sourceImageUrl = '';
+      
+      if (isIteration) {
+        // Using the HtmlDesignRenderer ref to convert to image
+        const iteration = designToIterate as DesignIteration;
+        
+        // Find the rendered component by its ID
+        const rendererRef = getDesignRef(iteration.id);
+        if (rendererRef?.current) {
+          // Convert to image
+          console.log('Converting iteration to image for analysis...');
+          const imageUrl = await rendererRef.current.convertToImage();
+          if (imageUrl) {
+            sourceImageUrl = imageUrl;
+            
+            // Also get dimensions
+            originalDimensions = iteration.dimensions;
+          } else {
+            console.error('Failed to convert iteration to image');
+            return;
+          }
+        } else {
+          console.error('Renderer ref not found for iteration', iteration.id);
+          return;
+        }
+      } else {
+        // For a base design, use its image URL
+        const design = designToIterate as Design;
+        sourceImageUrl = design.imageUrl;
+        
+        // Try to get dimensions from the image
+        if (design.dimensions) {
+          originalDimensions = design.dimensions;
+        } else {
+          try {
+            originalDimensions = await getImageDimensions(sourceImageUrl);
+            
+            // Update the design with the dimensions
+            setDesigns(prevDesigns => 
+              prevDesigns.map(d => d.id === design.id ? { ...d, dimensions: originalDimensions } : d)
+            );
+          } catch (error) {
+            console.error('Error getting image dimensions:', error);
+          }
+        }
+      }
+      
+      // Make sure we have dimensions
+      if (!originalDimensions) {
+        console.error('Could not get dimensions for design');
+        return;
+      }
+      
+      console.log('Using source image URL:', sourceImageUrl);
+      console.log('Original dimensions:', originalDimensions);
+      
+      // Update the processing state to "Analyzing Design" to indicate progression
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id === designId) {
+            // If it's a base design
+            return { ...design, isProcessing: true, processingStep: 'analyzing' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, isProcessing: true, processingStep: 'analyzing' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+          }
+          return design;
+        })
+      );
+      
+      // Step 1: AI Analysis - Call Anthropic service to analyze the design according to PRD 2.4.2
+      console.log('Starting design analysis with Anthropic service...');
+      
+      // Get any linked insights for this design from the current page
+      const linkedInsights = []; // In the future, get this from the insights tab
+      
+      let result;
+      if (isIteration) {
+        // For iterations, analyze the rendered image of the HTML/CSS iteration
+        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl, linkedInsights);
+      } else {
+        // For base designs, analyze the original image
+        result = await anthropicService.analyzeDesignAndGenerateHTML(sourceImageUrl, linkedInsights);
+      }
+      
+      console.log('Design analysis complete, generating improved version...');
+      
+      // Update the processing step to "Generating Improved Design"
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id === designId) {
+            // If it's a base design
+            return { ...design, processingStep: 'recreating' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, processingStep: 'recreating' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+          }
+          return design;
+        })
+      );
+      
+      // Generate a unique ID for the iteration
+      const iterationId = crypto.randomUUID();
+      
+      // Calculate the position for the new iteration (positioned to the right of the original)
+      const xOffset = originalDimensions?.width || 400;
+      const marginBetween = 50;
+      
+      // Get the position of the design we're iterating on
+      const designPosition = isIteration
+        ? (designToIterate as DesignIteration).position
+        : (designToIterate as Design).position;
+      
+      const iterationPosition = {
+        x: designPosition.x + xOffset + marginBetween,
+        y: designPosition.y
+      };
+      
+      // Create the new iteration with enhanced analysis data according to PRD 2.4.4
+      const newIteration: DesignIteration = {
+        id: iterationId,
+        parentId: isIteration ? (designToIterate as DesignIteration).parentId : designId,
+        htmlContent: result.htmlCode,
+        cssContent: result.cssCode,
+        position: iterationPosition, // Store absolute position instead of relative
+        analysis: {
+          strengths: result.analysis.strengths,
+          weaknesses: result.analysis.weaknesses,
+          improvementAreas: result.analysis.improvementAreas,
+          specificChanges: result.analysis.specificChanges,
+          // Add the enhanced UX analysis categories
+          visualHierarchy: {
+            issues: result.analysis.visualHierarchy?.issues || [],
+            improvements: result.analysis.visualHierarchy?.improvements || []
+          },
+          colorContrast: {
+            issues: result.analysis.colorContrast?.issues || [],
+            improvements: result.analysis.colorContrast?.improvements || []
+          },
+          componentSelection: {
+            issues: result.analysis.componentSelection?.issues || [],
+            improvements: result.analysis.componentSelection?.improvements || []
+          },
+          textLegibility: {
+            issues: result.analysis.textLegibility?.issues || [],
+            improvements: result.analysis.textLegibility?.improvements || []
+          },
+          usability: {
+            issues: result.analysis.usability?.issues || [],
+            improvements: result.analysis.usability?.improvements || []
+          },
+          accessibility: {
+            issues: result.analysis.accessibility?.issues || [],
+            improvements: result.analysis.accessibility?.improvements || []
+          },
+          metadata: {
+            colors: result.metadata.colors,
+            fonts: result.metadata.fonts,
+            components: result.metadata.components
+          }
+        },
+        dimensions: originalDimensions, // Add the original dimensions to the iteration
+        created_at: new Date().toISOString()
+      };
+      
+      // Update the processing step
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id === designId) {
+            // If it's a base design
+            return { ...design, processingStep: 'rendering' };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, processingStep: 'rendering' }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+          }
+          return design;
+        })
+      );
+      
+      // Short delay to show the rendering step
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Update designs with a properly immutable state update
+      setDesigns(prevDesigns => {
+        return prevDesigns.map(design => {
+          if (isIteration) {
+            // If we're iterating on an iteration, add the new iteration to its parent
+            if (design.iterations?.some(it => it.id === designId)) {
+              // Create or append to iterations array
+              const existingIterations = design.iterations || [];
+              
+              // Reset the processing state on the iteration that was clicked
+              const updatedExistingIterations = existingIterations.map(it => 
+                it.id === designId 
+                  ? { ...it, isProcessing: false, processingStep: null } 
+                  : it
+              );
+              
+              const updatedIterations = [...updatedExistingIterations, newIteration];
+              
+              // Return the updated design with a new iterations array
+              return {
+                ...design,
+                iterations: updatedIterations
+              };
+            }
+          } else if (design.id === designId) {
+            // If we're iterating on a base design
+            // Create or append to iterations array
+            const existingIterations = design.iterations || [];
+            const updatedIterations = [...existingIterations, newIteration];
+            
+            // Return the updated design with a new iterations array and reset the processing flag
+            return {
+              ...design,
+              iterations: updatedIterations,
+              isProcessing: false,
+              processingStep: null
+            };
+          }
+          return design;
+        });
+      });
+      
+      // In a simple localStorage-only version, we don't need to persist to any database
+      // as the state changes will trigger our effect that saves to localStorage
+      console.log('Iteration stored in local state only, will be saved to localStorage');
+      
+      // Set the current analysis to show the analysis panel
+      setCurrentAnalysis(newIteration);
+      setAnalysisVisible(true);
+    } catch (error) {
+      console.error('Error generating iteration:', error);
+      
+      // Reset the processing state on error
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id === designId) {
+            // Reset if it's a base design
+            return { ...design, isProcessing: false, processingStep: null };
+          } else if (design.iterations) {
+            // Check if the designId matches any of this design's iterations
+            const updatedIterations = design.iterations.map(iteration => 
+              iteration.id === designId
+                ? { ...iteration, isProcessing: false, processingStep: null }
+                : iteration
+            );
+            
+            // Only return a new design object if one of its iterations changed
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+          }
+          return design;
+        })
+      );
+      
+      // Show an error message
+      alert('Error generating iteration: ' + (error as Error).message);
+    }
+  };
+
   return (
     <>
       <GlobalStyle />
