@@ -1715,94 +1715,51 @@ class AnthropicService {
         figmaNodeId: designInfo.figmaNodeId 
       });
       
-      // Try the direct vision-based approach first as it's more reliable
-      if (imageUrl) {
-        console.log('Using direct vision-based approach with Claude 3.7 Sonnet');
-        try {
-          const visionResult = await this.convertFigmaDesignWithVision(imageUrl, designInfo);
-          return visionResult;
-        } catch (visionError) {
-          console.error('Vision-based approach failed, falling back to original method:', visionError);
-          // Continue with the original approach as fallback
-        }
-      }
-      
-      // Original approach continues below (as fallback)
-      // STEP 1: Get detailed design data directly from Figma API
-      console.log('Falling back to Figma API based approach');
-      let figmaStyleData = null;
-      let figmaError = null;
-      
-      try {
-        figmaStyleData = await figmaService.getStructuredNodeData(
-          designInfo.figmaFileKey, 
-          designInfo.figmaNodeId
-        );
-        console.log('Successfully retrieved Figma design data');
-      } catch (error) {
-        console.error('Error fetching Figma design data:', error);
-        figmaError = error;
-        // We'll continue with the fallback approach
-      }
-      
-      // STEP 2: Image preparation (as fallback or additional reference)
-      let validImageUrl = imageUrl;
-      let imageOptimized = false;
-      
-      // Initialize conversion attempts with different strategies
-      const conversionAttempts = [
-        // Attempt 1: Full attempt with Figma data and image if available
-        {
-          strategy: 'full',
-          includeImage: !!validImageUrl,
-          includeFigmaData: true,
-          simplifyFigmaData: false,
-          description: 'Full data with detailed Figma information'
-        },
-        // Attempt 2: Simplified Figma data only, no image
-        {
-          strategy: 'figma-data-only',
-          includeImage: false,
-          includeFigmaData: true,
-          simplifyFigmaData: true,
-          description: 'Simplified Figma data only (no image)'
-        },
-        // Attempt 3: Fallback with minimal data
-        {
-          strategy: 'fallback',
-          includeImage: false,
-          includeFigmaData: true,
-          simplifyFigmaData: true,
-          directFallback: true,
-          description: 'Fallback with minimal data'
-        }
-      ];
-      
-      // Try each strategy until one succeeds
-      for (const attempt of conversionAttempts) {
-        try {
-          console.log(`Attempting HTML/CSS conversion with strategy: ${attempt.strategy} (${attempt.description})`);
-          
-          // Skip image-based approaches if no valid image
-          if (attempt.includeImage && !validImageUrl) {
-            console.log('No valid image available, skipping this approach');
-            continue;
+      // Try each approach in sequence until one succeeds
+      const approaches = [
+        // Approach 1: Direct vision with image - most accurate
+        async () => {
+          if (imageUrl) {
+            console.log('Trying approach 1: Direct vision with image');
+            return await this.convertFigmaDesignWithVision(imageUrl, designInfo);
           }
+          throw new Error('No image URL available');
+        },
+        
+        // Approach 2: Two-stage decomposition with vision - more reliable for complex designs
+        async () => {
+          if (imageUrl && designInfo.width * designInfo.height > 800000) {
+            console.log('Trying approach 2: Two-stage decomposition with vision');
+            return await this.convertComplexDesignWithVision(imageUrl, designInfo);
+          }
+          throw new Error('Skipping two-stage approach (not a complex design or no image)');
+        },
+        
+        // Approach 3: Text-only description - fallback if vision approaches fail
+        async () => {
+          console.log('Trying approach 3: Text-only generation');
+          return await this.generateHtmlCssTextOnly(designInfo);
+        },
+        
+        // Approach 4: Figma API data - ultimate fallback
+        async () => {
+          console.log('Trying approach 4: Figma API data approach');
+          let figmaStyleData = null;
           
-          // If we're using the direct fallback (last resort)
-          if (attempt.directFallback) {
-            console.log('No valid image available, using Figma data only approach');
-            // Generate a simplified HTML/CSS as fallback when all else fails
-            if (figmaStyleData) {
-              console.log('Sending request to Anthropic API via proxy (strategy: fallback)...');
-              try {
-                // Try text-only approach with simplified system prompt
-                const systemPrompt = `You are a UI developer specializing in HTML/CSS recreation of designs.
+          try {
+            figmaStyleData = await figmaService.getStructuredNodeData(
+              designInfo.figmaFileKey, 
+              designInfo.figmaNodeId
+            );
+            console.log('Successfully retrieved Figma design data');
+            
+            // Generate HTML/CSS using Figma data
+            const systemPrompt = `You are a UI developer specializing in HTML/CSS recreation of designs.
 Your task is to convert a Figma design into clean HTML and CSS code based on the design data provided.
 Create semantic HTML with clean CSS that matches the provided specs exactly.`;
 
-                const userPrompt = `Please create HTML and CSS based on this Figma design data:
-                
+            const userPrompt = `Please create HTML and CSS based on this Figma design data:
+            
 Width: ${designInfo.width}px
 Height: ${designInfo.height}px
 Colors: ${figmaStyleData.designSystem.colors.primary.join(', ')} (primary), 
@@ -1814,202 +1771,51 @@ Component Name: ${figmaStyleData.styleData.name || 'Figma Component'}
 Create a simple, clean component matching these specs.
 Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
 
-                const maxRetries = 2;
-                let retryCount = 0;
-                let result = null;
-                
-                while (retryCount <= maxRetries) {
-                  try {
-                    result = await this.callAnthropicAPI(systemPrompt, userPrompt, {
-                      model: "claude-3-7-sonnet-20250219",
-                      max_tokens: 3000,
-                      temperature: 0.2,
-                      useProxy: true
-                    });
-                    break; // Success, exit the loop
-                  } catch (error) {
-                    retryCount++;
-                    if (retryCount > maxRetries) throw error;
-                    console.log(`Retry ${retryCount}/${maxRetries} for fallback conversion`);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                  }
-                }
-                
-                if (result) {
-                  // Extract HTML and CSS blocks from the result
-                  const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
-                  const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
-                  
-                  if (htmlMatch && cssMatch) {
-                    return {
-                      htmlContent: htmlMatch[1].trim(),
-                      cssContent: cssMatch[1].trim(),
-                      error: 'Used fallback approach with Figma data'
-                    };
-                  }
-                }
-              } catch (fallbackError) {
-                console.error('Error in fallback approach:', fallbackError);
-              }
-            }
+            const result = await this.callAnthropicAPI(systemPrompt, userPrompt, {
+              model: "claude-3-7-sonnet-20250219",
+              max_tokens: 3000,
+              temperature: 0.2,
+              useProxy: true
+            });
             
-            // If we reach here, use the built-in fallback generator
-            console.warn('All HTML/CSS conversion attempts failed, using built-in fallback');
-            return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, 
-              'All conversion attempts failed, using simplified fallback');
+            const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
+            const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
+            
+            if (htmlMatch && cssMatch) {
+              return {
+                htmlContent: htmlMatch[1].trim(),
+                cssContent: cssMatch[1].trim(),
+                error: 'Used Figma API data approach'
+              };
+            }
+          } catch (error) {
+            console.error('Error with Figma API approach:', error);
           }
           
-          // For non-fallback attempts, try direct API call with different strategies
-          try {
-            // Implementation remains similar but with better error tolerance
-            const figmaDataDescription = (attempt.includeFigmaData && figmaStyleData) 
-              ? this.createFigmaDataDescription(figmaStyleData, attempt.simplifyFigmaData) 
-              : '';
-            
-            // Create a comprehensive design description
-            const designDescription = `
-              Figma Design Component Information:
-              - Type: UI Component from Figma
-              - Dimensions: ${designInfo.width}px × ${designInfo.height}px
-              - Figma File: ${designInfo.figmaFileKey}
-              - Node ID: ${designInfo.figmaNodeId}
-              ${figmaDataDescription}
-            `;
-            
-            // Prepare system prompt with detailed instructions
-            const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
-Your task is to convert a Figma design into precise HTML and CSS code.
-
-INSTRUCTIONS:
-1. Create valid, semantic HTML5 structure
-2. Use clean, modern CSS - prefer vanilla CSS over frameworks
-3. Match visual details precisely - colors, spacing, typography, shadows, etc.
-4. Focus on component dimensions: ${designInfo.width}px × ${designInfo.height}px
-5. Use responsive techniques where appropriate
-6. Separate HTML and CSS in your response
-7. Keep your code clean and maintainable
-
-FORMATTING REQUIREMENTS:
-- Return HTML code in a \`\`\`html code block
-- Return CSS code in a \`\`\`css code block
-- Make CSS styles specific to avoid conflicts (use class prefixes)
-- Include basic browser resets in your CSS
-
-You're a UI conversion expert - maintain the original design exactly as shown.`;
-
-            // Prepare user prompt with Figma data appropriate to the current attempt
-            const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
-
-${(attempt.includeFigmaData && figmaStyleData) ? 'I am providing you with the exact design data extracted directly from Figma API:' : 'Design Information:'}
-- Width: ${designInfo.width}px
-- Height: ${designInfo.height}px
-- Figma File Key: ${designInfo.figmaFileKey}
-- Figma Node ID: ${designInfo.figmaNodeId}
-
-${(attempt.includeFigmaData && figmaStyleData) ? 'USE THESE EXACT VALUES FROM FIGMA:' : 'Requirements:'}
-${(attempt.includeFigmaData && figmaStyleData) 
-  ? this.formatFigmaDataForPrompt(figmaStyleData, attempt.simplifyFigmaData) 
-  : `
-1. Create a pixel-perfect recreation of the design
-2. Use semantic HTML5 elements
-3. Use modern CSS (no unnecessary frameworks)
-4. Focus on exact dimensions (${designInfo.width}px × ${designInfo.height}px)
-5. Ensure exact matching of all visual properties:
-   - Colors, gradients, and transparency
-   - Typography (fonts, sizes, weights, line heights)
-   - Spacing and positioning
-   - Borders, shadows, and effects
-6. Handle any visible text content exactly as shown
-7. For any icons, use appropriate HTML/CSS or Font Awesome equivalents`}
-
-If you encounter any issues processing the image, use the exact Figma data I've provided to create an accurate implementation.`;
-
-            // Prepare message content array based on attempt strategy
-            const contentArray = [];
-            
-            // Always include the design description text first
-            contentArray.push({
-              type: "text",
-              text: designDescription
-            });
-            
-            // Add image content only for image-based approaches
-            if (attempt.includeImage && validImageUrl) {
-              contentArray.push({
-                type: "image",
-                source: {
-                  type: "url",
-                  url: validImageUrl
-                }
-              });
-            }
-            
-            // Add the main user prompt
-            contentArray.push({
-              type: "text",
-              text: userPrompt
-            });
-            
-            // Set up retry mechanism for API calls
-            const maxRetries = 2;
-            let retryCount = 0;
-            let result = null;
-            
-            while (retryCount <= maxRetries) {
-              try {
-                // Call the API with a timeout
-                result = await Promise.race([
-                  this.callAnthropicAPI(systemPrompt, contentArray, {
-                    model: "claude-3-7-sonnet-20250219",
-                    max_tokens: 4000,
-                    temperature: 0.2,
-                    useProxy: true
-                  }),
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('API request timed out')), 120000)
-                  )
-                ]) as string;
-                
-                break; // Success, exit the loop
-              } catch (error) {
-                retryCount++;
-                if (retryCount > maxRetries) throw error;
-                console.log(`Retry ${retryCount}/${maxRetries} for strategy: ${attempt.strategy}`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-            }
-            
-            if (result) {
-              // Extract HTML and CSS blocks from the result
-              const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
-              const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
-              
-              if (htmlMatch && cssMatch) {
-                return {
-                  htmlContent: htmlMatch[1].trim(),
-                  cssContent: cssMatch[1].trim(),
-                  error: attempt.strategy !== 'full' ? `Used ${attempt.strategy} strategy` : undefined
-                };
-              } else {
-                throw new Error('Failed to extract HTML or CSS from the response');
-              }
-            } else {
-              throw new Error('Empty response from Anthropic API');
-            }
-          } catch (directAttemptError) {
-            console.error('Error in direct approach:', directAttemptError);
-            // Continue with next strategy
-          }
-        } catch (strategyError) {
-          console.error(`Strategy ${attempt.strategy} failed:`, strategyError);
-          // Continue with the next strategy
+          throw new Error('Figma API approach failed');
+        }
+      ];
+      
+      // Try each approach in sequence
+      let lastError = null;
+      
+      for (const approach of approaches) {
+        try {
+          return await approach();
+        } catch (error) {
+          console.warn('Approach failed:', error);
+          lastError = error;
+          // Continue to next approach
         }
       }
       
-      // If we've tried all strategies and none worked, use the built-in fallback
-      console.warn('All conversion strategies failed, using built-in fallback');
-      return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, 
-        'All conversion approaches failed, using simplified fallback');
+      // If all approaches fail, use the built-in fallback
+      console.warn('All approaches failed, using built-in fallback');
+      return this.generateSimplifiedHtmlCss(
+        designInfo, 
+        null, 
+        `All conversion approaches failed: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`
+      );
       
     } catch (error) {
       console.error('Error converting Figma design to HTML/CSS:', error);
@@ -2350,13 +2156,20 @@ If you encounter any issues processing the image, use the exact Figma data I've 
     };
     
     try {
+      // If this is a large request, add a retry count header for better tracking
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      if (JSON.stringify(requestBody).length > 100000) {
+        headers['X-Request-Size'] = 'large';
+      }
+      
       // Make the API call
       const response = await fetch('/api/anthropic-proxy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers,
         body: JSON.stringify(requestBody),
         cache: 'no-cache'
       });
@@ -2371,6 +2184,104 @@ If you encounter any issues processing the image, use the exact Figma data I've 
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
       throw error;
+    }
+  }
+
+  // Add a text-only fallback for generating HTML/CSS without vision
+  private async generateHtmlCssTextOnly(designInfo: {
+    width: number,
+    height: number,
+    figmaFileKey: string,
+    figmaNodeId: string
+  }, description?: string): Promise<{
+    htmlContent: string,
+    cssContent: string,
+    error?: string
+  }> {
+    try {
+      console.log('Using text-only approach for HTML/CSS generation');
+      
+      // Create a detailed text description of the desired UI
+      const designDescription = description || `
+        A clean, modern UI component with the following specs:
+        - Width: ${designInfo.width}px
+        - Height: ${designInfo.height}px
+        - Color scheme: A balanced palette with primary, secondary, and neutral colors
+        - Typography: Clean, readable fonts with proper hierarchy
+        - Layout: Responsive grid-based layout with proper spacing
+        - Components: Modern UI elements with consistent styling
+      `;
+      
+      const systemPrompt = `You are an expert UI developer who creates pixel-perfect HTML and CSS code.
+Your task is to create a clean, modern UI component based on the provided specifications.
+
+REQUIREMENTS:
+1. Create semantic HTML with proper structure and accessibility
+2. Write clean, well-structured CSS that implements the design precisely
+3. Focus on the exact dimensions: ${designInfo.width}px × ${designInfo.height}px
+4. Create a visually appealing design with proper hierarchy and spacing
+5. Implement a responsive design that works well across devices
+6. Use modern CSS features for layout and styling
+
+Your output must include:
+1. An HTML code block with the complete markup (inside \`\`\`html tags)
+2. A CSS code block with all necessary styles (inside \`\`\`css tags)`;
+
+      const userPrompt = `Please create HTML and CSS for the following design:
+
+${designDescription}
+
+Design Details:
+- Width: ${designInfo.width}px
+- Height: ${designInfo.height}px
+- Figma File: ${designInfo.figmaFileKey}
+- Node ID: ${designInfo.figmaNodeId}
+
+I need professionally written, clean code that creates a visually appealing UI component matching these specifications.`;
+
+      console.log('Generating HTML/CSS with text-only approach');
+      
+      const result = await this.callAnthropicAPI(systemPrompt, userPrompt, {
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 3500,
+        temperature: 0.3, // Slightly higher temperature for more creativity
+        useProxy: true
+      });
+      
+      console.log('Text-only HTML/CSS generation completed');
+      
+      // Extract HTML and CSS
+      const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
+      const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
+      
+      if (htmlMatch && cssMatch) {
+        return {
+          htmlContent: htmlMatch[1].trim(),
+          cssContent: cssMatch[1].trim(),
+          error: 'Used text-only approach (no image analysis)'
+        };
+      } else {
+        // Try alternative extraction
+        const altHtmlMatch = result.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+        const altCssMatch = result.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        
+        if (altHtmlMatch && altCssMatch) {
+          return {
+            htmlContent: `<html>${altHtmlMatch[1]}</html>`,
+            cssContent: altCssMatch[1].trim(),
+            error: 'Used text-only approach (no image analysis)'
+          };
+        }
+        
+        throw new Error('Failed to extract HTML/CSS from text-only response');
+      }
+    } catch (error) {
+      console.error('Error in text-only HTML/CSS generation:', error);
+      return this.generateSimplifiedHtmlCss(
+        designInfo,
+        null,
+        `Text-only generation failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -2399,6 +2310,16 @@ If you encounter any issues processing the image, use the exact Figma data I've 
       if (!imageUrl) {
         throw new Error('Missing image URL for Figma design conversion');
       }
+      
+      // Determine if this is a complex design based on dimensions
+      const isComplexDesign = designInfo.width * designInfo.height > 1000000; // More than ~1000x1000px
+      
+      if (isComplexDesign) {
+        console.log('Complex design detected, using two-stage approach');
+        return this.convertComplexDesignWithVision(imageUrl, designInfo);
+      }
+
+      // For simpler designs, use a direct single-stage approach
       
       // System prompt focused on exact HTML/CSS conversion with detailed instructions
       const systemPrompt = `You are an expert UI developer who specializes in converting designs into pixel-perfect HTML and CSS. 
@@ -2525,6 +2446,139 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
         designInfo, 
         null, 
         `Vision conversion error: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  // New method to handle complex designs by breaking them into a two-stage process
+  private async convertComplexDesignWithVision(
+    imageUrl: string,
+    designInfo: {
+      width: number,
+      height: number,
+      figmaFileKey: string,
+      figmaNodeId: string
+    }
+  ): Promise<{
+    htmlContent: string,
+    cssContent: string,
+    error?: string
+  }> {
+    console.log('Using two-stage approach for complex design');
+
+    try {
+      // STAGE 1: Analyze the design and extract structure, colors, and typography
+      const analysisPrompt = `You are a UI design expert. Analyze this Figma design and extract ONLY the following information:
+
+1. Color palette (exact hex codes)
+2. Typography (font families, sizes, weights)
+3. Layout structure (describe the overall layout)
+4. Key components (list main UI components)
+
+FORMAT YOUR RESPONSE:
+- COLOR PALETTE: [list hex codes]
+- TYPOGRAPHY: [list font details]
+- LAYOUT: [brief description]
+- COMPONENTS: [list main components]
+
+DO NOT generate any code in this stage.`;
+
+      const analysisContentArray = [
+        { type: "text", text: "Analyze this Figma design and extract its design system information only." },
+        { 
+          type: "image", 
+          source: { type: "url", url: imageUrl }
+        }
+      ];
+
+      console.log('STAGE 1: Analyzing design structure and extracting design system');
+      
+      const analysisResult = await this.callAnthropicAPI(analysisPrompt, analysisContentArray, {
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 2000,
+        temperature: 0.2,
+        useProxy: true
+      });
+
+      console.log('Design analysis completed successfully');
+
+      // STAGE 2: Use the analysis to generate the HTML/CSS implementation
+      const implementationPrompt = `You are an expert UI developer who specializes in converting designs into pixel-perfect HTML and CSS.
+Your task is to convert the Figma design into clean HTML and CSS based on the provided design analysis.
+
+REQUIREMENTS:
+1. Create semantic HTML with appropriate element hierarchy
+2. Write clean, well-structured CSS that matches the design exactly
+3. Use the EXACT colors, typography, and component structure from the analysis
+4. Optimize the implementation for performance
+5. Return the complete HTML and CSS as separate code blocks
+
+The design dimensions are ${designInfo.width}px × ${designInfo.height}px.
+
+Your output must include:
+1. An HTML code block with the complete markup (inside \`\`\`html tags)
+2. A CSS code block with all necessary styles (inside \`\`\`css tags)`;
+
+      const implementationContentArray = [
+        {
+          type: "text",
+          text: `Use this design analysis to create precise HTML/CSS implementation:
+
+${analysisResult}
+
+Design Details:
+- Dimensions: ${designInfo.width}px × ${designInfo.height}px
+- Figma File: ${designInfo.figmaFileKey}
+- Node ID: ${designInfo.figmaNodeId}
+
+Create clean, semantic HTML with exact CSS that implements this design precisely.`
+        },
+        {
+          type: "image",
+          source: { type: "url", url: imageUrl }
+        }
+      ];
+
+      console.log('STAGE 2: Generating HTML/CSS implementation based on analysis');
+      
+      const implementationResult = await this.callAnthropicAPI(implementationPrompt, implementationContentArray, {
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 4000,
+        temperature: 0.2,
+        useProxy: true
+      });
+
+      console.log('HTML/CSS implementation completed successfully');
+
+      // Extract HTML and CSS
+      const htmlMatch = implementationResult.match(/```html\s*([\s\S]*?)\s*```/);
+      const cssMatch = implementationResult.match(/```css\s*([\s\S]*?)\s*```/);
+      
+      if (htmlMatch && cssMatch) {
+        return {
+          htmlContent: htmlMatch[1].trim(),
+          cssContent: cssMatch[1].trim()
+        };
+      } else {
+        // Try alternative extraction
+        const altHtmlMatch = implementationResult.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+        const altCssMatch = implementationResult.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        
+        if (altHtmlMatch && altCssMatch) {
+          return {
+            htmlContent: `<html>${altHtmlMatch[1]}</html>`,
+            cssContent: altCssMatch[1].trim()
+          };
+        }
+        
+        throw new Error('Failed to extract HTML/CSS from implementation response');
+      }
+    } catch (error) {
+      console.error('Error in two-stage design conversion:', error);
+      return this.generateSimplifiedHtmlCss(
+        designInfo,
+        null,
+        `Two-stage conversion failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
