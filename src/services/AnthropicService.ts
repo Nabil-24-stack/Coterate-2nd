@@ -1727,241 +1727,144 @@ class AnthropicService {
         );
         console.log('Successfully retrieved Figma design data');
       } catch (error) {
-        console.warn('Error fetching Figma design data:', error);
+        console.error('Error fetching Figma design data:', error);
         figmaError = error;
-        // We'll continue with image-based approach as fallback
+        // We'll continue with the fallback approach
       }
       
       // STEP 2: Image preparation (as fallback or additional reference)
       let validImageUrl = imageUrl;
       let imageOptimized = false;
       
-      try {
-        // Test if the image URL is still valid
-        const imageResponse = await fetch(imageUrl, { 
-          method: 'HEAD',
-          headers: { 'Cache-Control': 'no-cache' }
-        });
-        
-        if (!imageResponse.ok) {
-          console.warn('Image URL may have expired, attempting to optimize');
-          validImageUrl = ''; // Will be handled by fallback approach
-        } else {
-          // Try to optimize the image if it's valid
-          try {
-            // Load the image to get its natural dimensions
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            // Wait for the image to load
-            await new Promise<void>((resolve, reject) => {
-              img.onload = () => resolve();
-              img.onerror = () => reject(new Error('Failed to load image for optimization'));
-              img.src = imageUrl;
-            });
-            
-            // Don't optimize if the image is already small
-            if (img.naturalWidth > 1000 || img.naturalHeight > 1000) {
-              // Create a canvas and downscale the image
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
-              
-              // Calculate new dimensions (keeping aspect ratio)
-              const aspectRatio = img.naturalWidth / img.naturalHeight;
-              const maxDimension = 800; // Reduced from 1000 to better handle complex designs
-              
-              let newWidth, newHeight;
-              if (img.naturalWidth > img.naturalHeight) {
-                newWidth = maxDimension;
-                newHeight = maxDimension / aspectRatio;
-              } else {
-                newHeight = maxDimension;
-                newWidth = maxDimension * aspectRatio;
-              }
-              
-              // Set canvas size
-              canvas.width = newWidth;
-              canvas.height = newHeight;
-              
-              // Draw image at reduced size
-              if (ctx) {
-                ctx.drawImage(img, 0, 0, newWidth, newHeight);
-                
-                // Convert to JPEG data URL with reduced quality to decrease size
-                validImageUrl = canvas.toDataURL('image/jpeg', 0.75);
-                imageOptimized = true;
-                console.log('Image optimized to', Math.round(newWidth), 'x', Math.round(newHeight), 'pixels');
-              }
-            }
-          } catch (optimizeError) {
-            console.warn('Failed to optimize image:', optimizeError);
-            // Continue with original URL if optimization fails
-          }
-        }
-      } catch (imageError) {
-        console.warn('Error validating image URL:', imageError);
-        validImageUrl = ''; // Will be handled by fallback approach
-      }
-      
-      // STEP 3: Prepare for multiple attempts with progressive simplification
-      const attempts = [
+      // Initialize conversion attempts with different strategies
+      const conversionAttempts = [
+        // Attempt 1: Full attempt with Figma data and image if available
         {
-          name: 'complete',
-          description: 'Full Figma data with optimized image',
-          includeFigmaData: true,
+          strategy: 'full',
           includeImage: !!validImageUrl,
-          simplifyFigmaData: false
-        },
-        {
-          name: 'figmaOnly',
-          description: 'Figma data only without image',
           includeFigmaData: true,
-          includeImage: false,
-          simplifyFigmaData: false
+          simplifyFigmaData: false,
+          description: 'Full data with detailed Figma information'
         },
+        // Attempt 2: Simplified Figma data only, no image
         {
-          name: 'simplifiedFigma',
-          description: 'Simplified Figma data without image',
+          strategy: 'figma-data-only',
+          includeImage: false,
           includeFigmaData: true,
-          includeImage: false,
-          simplifyFigmaData: true
+          simplifyFigmaData: true,
+          description: 'Simplified Figma data only (no image)'
         },
+        // Attempt 3: Fallback with minimal data
         {
-          name: 'fallback',
-          description: 'Fallback with minimal data',
-          includeFigmaData: false,
+          strategy: 'fallback',
           includeImage: false,
-          simplifyFigmaData: true
+          includeFigmaData: true,
+          simplifyFigmaData: true,
+          directFallback: true,
+          description: 'Fallback with minimal data'
         }
       ];
       
-      // If we have no valid Figma data, adjust our attempts
-      if (!figmaStyleData) {
-        if (validImageUrl) {
-          // If we only have image but no Figma data
-          attempts.splice(0, 2, {
-            name: 'imageOnly',
-            description: 'Image only without Figma data',
-            includeFigmaData: false,
-            includeImage: true,
-            simplifyFigmaData: false
-          });
-        } else {
-          // If we have neither Figma data nor image
-          attempts.splice(0, 3);
-        }
-      }
-      
-      // STEP 4: Try each approach in sequence
-      let lastError = null;
-      
-      for (const attempt of attempts) {
-        console.log(`Attempting HTML/CSS conversion with strategy: ${attempt.name} (${attempt.description})`);
-        
+      // Try each strategy until one succeeds
+      for (const attempt of conversionAttempts) {
         try {
-          // For complex designs, try a direct approach without images first
-          if (attempt.name === 'complete' && !attempt.simplifyFigmaData) {
-            try {
-              console.log('Trying direct Figma ID based conversion first (no image)');
-              
-              // Create a direct prompt that uses only the Figma file and node IDs
-              const directPrompt = `Please convert this Figma design into precise HTML and CSS code.
-This is a direct conversion request with the exact Figma IDs:
-
-Figma File Key: ${designInfo.figmaFileKey}
-Figma Node ID: ${designInfo.figmaNodeId}
-Dimensions: ${designInfo.width}px × ${designInfo.height}px
-
-Create a pixel-perfect recreation with valid HTML5 and clean CSS.
-Use these specifications:
-1. Use semantic HTML structure with appropriate tags
-2. Match the exact dimensions and layout
-3. Handle responsive behavior appropriately
-4. Maintain visual fidelity to the original design
-
-Return the code in two separate blocks: one for HTML and one for CSS.`;
-
-              // Make a focused call without images for faster processing
-              const directRequestBody = {
-                model: "claude-3-7-sonnet-20250219",
-                max_tokens: 4000,
-                temperature: 0.2,
-                system: "You are a UI development expert who creates perfect HTML/CSS from Figma designs. Focus on accurately representing the design with clean, semantic HTML and CSS.",
-                messages: [
-                  {
-                    role: "user", 
-                    content: [{ type: "text", text: directPrompt }]
-                  }
-                ]
-              };
-              
-              // Set a shorter timeout for this attempt
-              const directController = new AbortController();
-              const directTimeoutId = setTimeout(() => directController.abort(), 30000);
-              
+          console.log(`Attempting HTML/CSS conversion with strategy: ${attempt.strategy} (${attempt.description})`);
+          
+          // Skip image-based approaches if no valid image
+          if (attempt.includeImage && !validImageUrl) {
+            console.log('No valid image available, skipping this approach');
+            continue;
+          }
+          
+          // If we're using the direct fallback (last resort)
+          if (attempt.directFallback) {
+            console.log('No valid image available, using Figma data only approach');
+            // Generate a simplified HTML/CSS as fallback when all else fails
+            if (figmaStyleData) {
+              console.log('Sending request to Anthropic API via proxy (strategy: fallback)...');
               try {
-                console.log('Sending direct ID-based conversion request');
+                // Try text-only approach with simplified system prompt
+                const systemPrompt = `You are a UI developer specializing in HTML/CSS recreation of designs.
+Your task is to convert a Figma design into clean HTML and CSS code based on the design data provided.
+Create semantic HTML with clean CSS that matches the provided specs exactly.`;
+
+                const userPrompt = `Please create HTML and CSS based on this Figma design data:
                 
-                const directResponse = await fetch('/api/anthropic-proxy', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                  },
-                  body: JSON.stringify(directRequestBody),
-                  cache: 'no-cache',
-                  signal: directController.signal
-                });
+Width: ${designInfo.width}px
+Height: ${designInfo.height}px
+Colors: ${figmaStyleData.designSystem.colors.primary.join(', ')} (primary), 
+        ${figmaStyleData.designSystem.colors.background.join(', ')} (background),
+        ${figmaStyleData.designSystem.colors.text.join(', ')} (text)
+Typography: ${figmaStyleData.designSystem.typography.families.join(', ')} at sizes ${figmaStyleData.designSystem.typography.sizes.join(', ')}px
+Component Name: ${figmaStyleData.styleData.name || 'Figma Component'}
+
+Create a simple, clean component matching these specs.
+Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
+
+                const maxRetries = 2;
+                let retryCount = 0;
+                let result = null;
                 
-                clearTimeout(directTimeoutId);
-                
-                if (directResponse.ok) {
-                  const data = await directResponse.json();
-                  const generatedText = data.content?.[0]?.text || '';
-                  
-                  // Extract HTML and CSS
-                  const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
-                  const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
-                  
-                  if (htmlMatch && cssMatch) {
-                    console.log('Successfully extracted HTML/CSS from direct ID-based approach');
-                    return { 
-                      htmlContent: htmlMatch[1].trim(), 
-                      cssContent: cssMatch[1].trim() 
-                    };
+                while (retryCount <= maxRetries) {
+                  try {
+                    result = await this.callAnthropicAPI(systemPrompt, userPrompt, {
+                      model: "claude-3-7-sonnet-20250219",
+                      max_tokens: 3000,
+                      temperature: 0.2,
+                      useProxy: true
+                    });
+                    break; // Success, exit the loop
+                  } catch (error) {
+                    retryCount++;
+                    if (retryCount > maxRetries) throw error;
+                    console.log(`Retry ${retryCount}/${maxRetries} for fallback conversion`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                   }
                 }
                 
-                // If direct approach fails, continue with normal strategies
-                console.log('Direct ID-based approach failed, continuing with normal strategies');
-              } catch (directError) {
-                clearTimeout(directTimeoutId);
-                console.log('Direct ID-based approach failed with error:', directError);
-                // Continue with normal flow
+                if (result) {
+                  // Extract HTML and CSS blocks from the result
+                  const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
+                  const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
+                  
+                  if (htmlMatch && cssMatch) {
+                    return {
+                      htmlContent: htmlMatch[1].trim(),
+                      cssContent: cssMatch[1].trim(),
+                      error: 'Used fallback approach with Figma data'
+                    };
+                  }
+                }
+              } catch (fallbackError) {
+                console.error('Error in fallback approach:', fallbackError);
               }
-            } catch (directAttemptError) {
-              console.log('Error in direct approach:', directAttemptError);
-              // Continue with normal flow
             }
+            
+            // If we reach here, use the built-in fallback generator
+            console.warn('All HTML/CSS conversion attempts failed, using built-in fallback');
+            return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, 
+              'All conversion attempts failed, using simplified fallback');
           }
           
-          // Prepare data based on the current attempt strategy
-          const figmaDataDescription = (attempt.includeFigmaData && figmaStyleData) 
-            ? this.createFigmaDataDescription(figmaStyleData, attempt.simplifyFigmaData) 
-            : '';
-          
-          // Create a comprehensive design description
-          const designDescription = `
-            Figma Design Component Information:
-            - Type: UI Component from Figma
-            - Dimensions: ${designInfo.width}px × ${designInfo.height}px
-            - Figma File: ${designInfo.figmaFileKey}
-            - Node ID: ${designInfo.figmaNodeId}
-            ${figmaDataDescription}
-          `;
-          
-          // Prepare system prompt with detailed instructions
-          const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
+          // For non-fallback attempts, try direct API call with different strategies
+          try {
+            // Implementation remains similar but with better error tolerance
+            const figmaDataDescription = (attempt.includeFigmaData && figmaStyleData) 
+              ? this.createFigmaDataDescription(figmaStyleData, attempt.simplifyFigmaData) 
+              : '';
+            
+            // Create a comprehensive design description
+            const designDescription = `
+              Figma Design Component Information:
+              - Type: UI Component from Figma
+              - Dimensions: ${designInfo.width}px × ${designInfo.height}px
+              - Figma File: ${designInfo.figmaFileKey}
+              - Node ID: ${designInfo.figmaNodeId}
+              ${figmaDataDescription}
+            `;
+            
+            // Prepare system prompt with detailed instructions
+            const systemPrompt = `You are a UI development expert specializing in pixel-perfect HTML/CSS recreation of designs.
 Your task is to convert a Figma design into precise HTML and CSS code.
 
 INSTRUCTIONS:
@@ -1981,8 +1884,8 @@ FORMATTING REQUIREMENTS:
 
 You're a UI conversion expert - maintain the original design exactly as shown.`;
 
-          // Prepare user prompt with Figma data appropriate to the current attempt
-          const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
+            // Prepare user prompt with Figma data appropriate to the current attempt
+            const userPrompt = `Please convert this Figma design into precise HTML and CSS code.
 
 ${(attempt.includeFigmaData && figmaStyleData) ? 'I am providing you with the exact design data extracted directly from Figma API:' : 'Design Information:'}
 - Width: ${designInfo.width}px
@@ -2008,163 +1911,102 @@ ${(attempt.includeFigmaData && figmaStyleData)
 
 If you encounter any issues processing the image, use the exact Figma data I've provided to create an accurate implementation.`;
 
-          // Prepare message content array based on attempt strategy
-          const contentArray = [];
-          
-          // Always include the design description text first
-          contentArray.push({
-            type: "text",
-            text: designDescription
-          });
-          
-          // Add the image if the current attempt includes images
-          if (attempt.includeImage && validImageUrl) {
+            // Prepare message content array based on attempt strategy
+            const contentArray = [];
+            
+            // Always include the design description text first
             contentArray.push({
-              type: "image",
-              source: {
-                type: validImageUrl.startsWith('data:') ? "base64" : "url",
-                ...(validImageUrl.startsWith('data:') 
-                  ? { 
-                      data: validImageUrl.split(',')[1],
-                      media_type: "image/jpeg"
-                    } 
-                  : { url: validImageUrl })
-              }
+              type: "text",
+              text: designDescription
             });
             
-            console.log('Added image to request', imageOptimized ? '(optimized)' : '(original)');
-          } else {
-            console.log('No valid image available, using Figma data only approach');
-          }
-          
-          // Always add the main user prompt
-          contentArray.push({
-            type: "text",
-            text: userPrompt
-          });
-
-          // Prepare request body with our processed content
-          const requestBody = {
-            model: "claude-3-7-sonnet-20250219", // Explicitly use Sonnet which is faster
-            max_tokens: 4000,
-            temperature: 0.2,
-            system: systemPrompt,
-            messages: [
-              {
-                role: "user", 
-                content: contentArray
-              }
-            ]
-          };
-          
-          // Set up timeout handling with AbortController
-          // Give appropriate time for each attempt type
-          const timeoutMs = attempt.name === 'fallback' ? 25000 : 
-                            attempt.name === 'simplifiedFigma' ? 35000 :
-                            attempt.name === 'figmaOnly' ? 40000 : 45000;
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-          
-          try {
-            console.log(`Sending request to Anthropic API via proxy (strategy: ${attempt.name})...`);
+            // Add image content only for image-based approaches
+            if (attempt.includeImage && validImageUrl) {
+              contentArray.push({
+                type: "image",
+                source: {
+                  type: "url",
+                  url: validImageUrl
+                }
+              });
+            }
             
-            // Make API call to Anthropic for HTML/CSS generation
-            const response = await fetch('/api/anthropic-proxy', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-              },
-              body: JSON.stringify(requestBody),
-              cache: 'no-cache',
-              signal: controller.signal
+            // Add the main user prompt
+            contentArray.push({
+              type: "text",
+              text: userPrompt
             });
             
-            // Clear the timeout since we got a response
-            clearTimeout(timeoutId);
+            // Set up retry mechanism for API calls
+            const maxRetries = 2;
+            let retryCount = 0;
+            let result = null;
             
-            if (!response.ok) {
-              const errorData = await response.text();
-              console.error(`Anthropic API error response (${attempt.name}):`, errorData);
-              
-              // Store the error and continue to the next attempt
-              lastError = new Error(`HTML/CSS generation failed: ${response.status} ${response.statusText}`);
-              continue;
+            while (retryCount <= maxRetries) {
+              try {
+                // Call the API with a timeout
+                result = await Promise.race([
+                  this.callAnthropicAPI(systemPrompt, contentArray, {
+                    model: "claude-3-7-sonnet-20250219",
+                    max_tokens: 4000,
+                    temperature: 0.2,
+                    useProxy: true
+                  }),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('API request timed out')), 120000)
+                  )
+                ]) as string;
+                
+                break; // Success, exit the loop
+              } catch (error) {
+                retryCount++;
+                if (retryCount > maxRetries) throw error;
+                console.log(`Retry ${retryCount}/${maxRetries} for strategy: ${attempt.strategy}`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
             }
             
-            const data = await response.json();
-            const generatedText = data.content?.[0]?.text || '';
-            
-            // Extract HTML and CSS from the response
-            const htmlMatch = generatedText.match(/```html\s*([\s\S]*?)\s*```/);
-            const cssMatch = generatedText.match(/```css\s*([\s\S]*?)\s*```/);
-            
-            const htmlContent = htmlMatch ? htmlMatch[1].trim() : '';
-            const cssContent = cssMatch ? cssMatch[1].trim() : '';
-            
-            // If extraction failed, try alternative extraction patterns
-            if (!htmlContent || !cssContent) {
-              console.warn(`Failed to extract HTML/CSS with primary patterns in ${attempt.name} attempt, trying alternatives...`);
+            if (result) {
+              // Extract HTML and CSS blocks from the result
+              const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
+              const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
               
-              // Alternative HTML extraction
-              let altHtmlContent = '';
-              let altCssContent = '';
-              
-              // Try to extract HTML content between <html> and </html> tags
-              const htmlDocMatch = generatedText.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
-              if (htmlDocMatch && htmlDocMatch[1]) {
-                altHtmlContent = `<html>${htmlDocMatch[1]}</html>`;
+              if (htmlMatch && cssMatch) {
+                return {
+                  htmlContent: htmlMatch[1].trim(),
+                  cssContent: cssMatch[1].trim(),
+                  error: attempt.strategy !== 'full' ? `Used ${attempt.strategy} strategy` : undefined
+                };
+              } else {
+                throw new Error('Failed to extract HTML or CSS from the response');
               }
-              
-              // Try to extract CSS from <style> tags
-              const styleMatch = generatedText.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-              if (styleMatch && styleMatch[1]) {
-                altCssContent = styleMatch[1].trim();
-              }
-              
-              // If we found content with alternative patterns, use it
-              if (altHtmlContent && altCssContent) {
-                console.log(`Successfully extracted HTML/CSS using alternative patterns in ${attempt.name} attempt`);
-                return { htmlContent: altHtmlContent, cssContent: altCssContent };
-              }
-              
-              // If no content extracted, continue to next attempt
-              console.error(`Failed to extract HTML/CSS from Claude response in ${attempt.name} attempt`);
-              lastError = new Error('Failed to extract HTML/CSS content from response');
-              continue;
+            } else {
+              throw new Error('Empty response from Anthropic API');
             }
-            
-            console.log(`Successfully extracted HTML/CSS from Claude response in ${attempt.name} attempt`);
-            return { htmlContent, cssContent };
-          } catch (fetchError: any) {
-            clearTimeout(timeoutId);
-            
-            // Handle AbortController timeout
-            if (fetchError.name === 'AbortError') {
-              console.warn(`Request timed out for ${attempt.name} attempt, trying next approach...`);
-              lastError = new Error(`Request timed out for ${attempt.name} approach`);
-              continue;
-            }
-            
-            // For other errors, try next attempt
-            console.error(`Error during API request (${attempt.name}):`, fetchError);
-            lastError = fetchError;
-            continue;
+          } catch (directAttemptError) {
+            console.error('Error in direct approach:', directAttemptError);
+            // Continue with next strategy
           }
-        } catch (attemptError: any) {
-          console.error(`Error during ${attempt.name} attempt:`, attemptError);
-          lastError = attemptError;
-          continue;
+        } catch (strategyError) {
+          console.error(`Strategy ${attempt.strategy} failed:`, strategyError);
+          // Continue with the next strategy
         }
       }
       
-      // If we've tried all approaches and none worked, use our fallback
-      console.warn('All HTML/CSS conversion attempts failed, using built-in fallback');
-      return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, lastError?.message || 'All conversion attempts failed');
-    } catch (error: any) {
+      // If we've tried all strategies and none worked, use the built-in fallback
+      console.warn('All conversion strategies failed, using built-in fallback');
+      return this.generateSimplifiedHtmlCss(designInfo, figmaStyleData, 
+        'All conversion approaches failed, using simplified fallback');
+      
+    } catch (error) {
       console.error('Error converting Figma design to HTML/CSS:', error);
-      return this.generateSimplifiedHtmlCss(designInfo, null, error.message);
+      
+      // Always return some usable output even in case of errors
+      return this.generateSimplifiedHtmlCss(
+        designInfo, 
+        null, 
+        `HTML/CSS generation error: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -2462,6 +2304,61 @@ If you encounter any issues processing the image, use the exact Figma data I've 
         error: errorMessage || 'Used simplified fallback with Figma data'
       });
     });
+  }
+
+  // Helper method to call the Anthropic API with consistent error handling
+  private async callAnthropicAPI(
+    systemPrompt: string, 
+    userContent: string | any[], 
+    options: {
+      model: string;
+      max_tokens: number;
+      temperature: number;
+      useProxy: boolean;
+    }
+  ): Promise<string> {
+    // Prepare content array if string was provided
+    const content = Array.isArray(userContent) 
+      ? userContent 
+      : [{ type: "text", text: userContent }];
+    
+    // Prepare request body
+    const requestBody = {
+      model: options.model,
+      max_tokens: options.max_tokens,
+      temperature: options.temperature,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user", 
+          content
+        }
+      ]
+    };
+    
+    try {
+      // Make the API call
+      const response = await fetch('/api/anthropic-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        cache: 'no-cache'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+      
+      const data = await response.json();
+      return data.content?.[0]?.text || '';
+    } catch (error) {
+      console.error('Error calling Anthropic API:', error);
+      throw error;
+    }
   }
 }
 

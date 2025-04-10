@@ -309,43 +309,69 @@ class FigmaService {
     try {
       console.log(`Getting detailed style data for node ${nodeId} in file ${fileKey}`);
       
-      // First, get the full node data from Figma API
-      const response = await fetch(
-        `${FIGMA_API_BASE}/files/${fileKey}/nodes?ids=${nodeId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.accessToken}`
+      // Implement retry logic with exponential backoff
+      let attempt = 0;
+      const maxAttempts = 3;
+      let lastError;
+      
+      while (attempt < maxAttempts) {
+        try {
+          // First, get the full node data from Figma API
+          const response = await fetch(
+            `${FIGMA_API_BASE}/files/${fileKey}/nodes?ids=${nodeId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${this.accessToken}`
+              }
+            }
+          );
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch node data: ${response.status} ${response.statusText} - ${errorText}`);
+          }
+          
+          const data = await response.json();
+          
+          // Extract the node from the response
+          const node = data.nodes[nodeId]?.document;
+          if (!node) {
+            throw new Error('Node not found in response');
+          }
+          
+          // Extract style information
+          const styleData = this.extractStyleInformation(node);
+          
+          // Get image URL if needed for reference
+          const imageUrls = await this.getImageUrls(fileKey, [nodeId]);
+          const imageUrl = imageUrls[nodeId];
+          
+          return {
+            node,
+            styleData,
+            imageUrl
+          };
+        } catch (error) {
+          lastError = error;
+          attempt++;
+          
+          // Log the error but continue with retry
+          console.warn(`Attempt ${attempt}/${maxAttempts} failed:`, error);
+          
+          if (attempt < maxAttempts) {
+            // Exponential backoff with jitter
+            const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 1000, 5000);
+            console.log(`Retrying after ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch node data: ${response.statusText}`);
       }
       
-      const data = await response.json();
-      
-      // Extract the node from the response
-      const node = data.nodes[nodeId]?.document;
-      if (!node) {
-        throw new Error('Node not found in response');
-      }
-      
-      // Extract style information
-      const styleData = this.extractStyleInformation(node);
-      
-      // Get image URL if needed for reference
-      const imageUrls = await this.getImageUrls(fileKey, [nodeId]);
-      const imageUrl = imageUrls[nodeId];
-      
-      return {
-        node,
-        styleData,
-        imageUrl
-      };
+      // If we get here, all attempts failed
+      throw lastError || new Error('Failed to fetch node data after multiple attempts');
     } catch (error) {
       console.error('Error fetching node style data:', error);
-      throw error;
+      throw new Error('Failed to fetch node data: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -485,15 +511,58 @@ class FigmaService {
 
   // Get a comprehensive structure representation
   async getStructuredNodeData(fileKey: string, nodeId: string): Promise<any> {
-    const styleData = await this.getNodeStyleData(fileKey, nodeId);
-    
-    // Process the data into a comprehensive design system structure
-    const designSystem = this.processIntoDesignSystem(styleData);
-    
-    return {
-      ...styleData,
-      designSystem
-    };
+    try {
+      const styleData = await this.getNodeStyleData(fileKey, nodeId);
+      
+      // Process the data into a comprehensive design system structure
+      const designSystem = this.processIntoDesignSystem(styleData);
+      
+      return {
+        ...styleData,
+        designSystem
+      };
+    } catch (error) {
+      console.error('Error in getStructuredNodeData:', error);
+      
+      // Return a fallback structure with minimal data
+      return {
+        styleData: {
+          name: 'Unknown Component',
+          type: 'FRAME',
+          width: 0,
+          height: 0,
+          colors: [],
+          typography: [],
+          effects: [],
+          components: [],
+          childrenData: []
+        },
+        designSystem: {
+          colors: {
+            primary: [],
+            secondary: [],
+            background: ['#ffffff', '#f5f5f5'],
+            text: ['#333333', '#000000']
+          },
+          typography: {
+            families: ['Inter', 'sans-serif'],
+            sizes: [12, 14, 16, 18, 24],
+            weights: [400, 500, 600, 700],
+            styles: []
+          },
+          spacing: {
+            values: [4, 8, 16, 24, 32]
+          },
+          borderRadius: {
+            values: [4, 8]
+          },
+          shadows: [],
+          components: []
+        },
+        imageUrl: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   // Process style data into a design system representation

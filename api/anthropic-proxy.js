@@ -48,16 +48,33 @@ module.exports = async (req, res) => {
     
     // Create AbortController for timeout handling
     const controller = new AbortController();
+    
+    // Check if this is a design conversion request (longer timeout)
+    const isDesignConversion = 
+      optimizedRequest.system?.includes('convert a Figma design into precise HTML and CSS code') || 
+      optimizedRequest.messages?.[0]?.content?.some(c => 
+        c.type === 'text' && 
+        c.text?.includes('convert this Figma design into precise HTML')
+      );
+    
+    // Set longer timeout for design conversions
+    const timeoutDuration = isDesignConversion ? 180000 : 90000; // 3 minutes for design conversions, 90s for others
+    
+    if (isDesignConversion) {
+      console.log('Design conversion request detected, using extended timeout:', timeoutDuration);
+    }
+    
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 90000); // 90 second timeout
+    }, timeoutDuration);
     
     // Add logging for the request
     console.log('Sending request to Anthropic API:', {
       model: optimizedRequest.model,
       hasImage: optimizedRequest.messages?.[0]?.content?.some(c => c.type === 'image'),
       messageCount: optimizedRequest.messages?.length,
-      systemPromptLength: optimizedRequest.system?.length
+      systemPromptLength: optimizedRequest.system?.length,
+      isDesignConversion
     });
     
     // Configure the API endpoint
@@ -142,6 +159,11 @@ function optimizeRequest(requestBody) {
     optimized.model = 'claude-3-7-sonnet-20250219'; // Use the Sonnet model which is faster
   }
   
+  // Set higher token limit for design conversions
+  if (optimized.system?.includes('convert a Figma design into precise HTML and CSS code')) {
+    optimized.max_tokens = Math.max(optimized.max_tokens || 4000, 4000);
+  }
+  
   // Process images if present to ensure they're not too large
   if (optimized.messages && optimized.messages.length > 0) {
     for (const message of optimized.messages) {
@@ -151,6 +173,12 @@ function optimizeRequest(requestBody) {
           if (contentItem.type === 'image' && 
               contentItem.source && 
               contentItem.source.type === 'base64') {
+            
+            // Ensure the media type is correct for base64 images
+            // PNG is more reliable for design screenshots
+            if (contentItem.source.media_type === 'image/jpeg') {
+              contentItem.source.media_type = 'image/png';
+            }
             
             // Check if the base64 data is over 1MB
             if (contentItem.source.data && contentItem.source.data.length > 1000000) {
@@ -164,6 +192,11 @@ function optimizeRequest(requestBody) {
         }
       }
     }
+  }
+  
+  // Remove potentially problematic beta headers
+  if (optimized.anthropic_beta && optimized.anthropic_beta.includes('max-tokens-boost-enabled')) {
+    delete optimized.anthropic_beta;
   }
   
   return optimized;
