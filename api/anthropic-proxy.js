@@ -1,13 +1,29 @@
 // Server-side proxy for Anthropic API to avoid CORS issues and secure API key
 module.exports = async (req, res) => {
+  // Set CORS headers to allow requests from any origin
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+    console.error(`Method not allowed: ${req.method}`);
+    return res.status(405).json({ message: 'Method not allowed', method: req.method });
   }
 
   try {
-    // Get the API key from environment variables - use the Create React App env variable
-    const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
+    // Log request details for debugging
+    console.log(`API proxy request received: ${new Date().toISOString()}`);
+    
+    // Get the API key from environment variables - try multiple possible locations
+    const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY || 
+                   process.env.ANTHROPIC_API_KEY || 
+                   process.env.VERCEL_ANTHROPIC_API_KEY;
     
     if (!apiKey) {
       console.error('Anthropic API key not configured');
@@ -16,6 +32,7 @@ module.exports = async (req, res) => {
         envInfo: {
           hasReactAppKey: !!process.env.REACT_APP_ANTHROPIC_API_KEY,
           hasRegularKey: !!process.env.ANTHROPIC_API_KEY,
+          hasVercelKey: !!process.env.VERCEL_ANTHROPIC_API_KEY,
           nodeEnv: process.env.NODE_ENV,
         }
       });
@@ -29,8 +46,11 @@ module.exports = async (req, res) => {
     
     // Validate request body
     if (!requestBody || !requestBody.model || !requestBody.messages) {
+      console.error('Invalid request body');
       return res.status(400).json({ message: 'Invalid request body' });
     }
+    
+    console.log('Forwarding request to Anthropic API...');
     
     // Forward the request to Anthropic API
     const response = await fetch(anthropicUrl, {
@@ -43,6 +63,8 @@ module.exports = async (req, res) => {
       body: JSON.stringify(requestBody)
     });
     
+    console.log(`Anthropic API response status: ${response.status}`);
+    
     // Get the response data
     const responseData = await response.json();
     
@@ -52,7 +74,8 @@ module.exports = async (req, res) => {
     console.error('Server error during Anthropic API call:', error);
     return res.status(500).json({ 
       message: 'Server error during API call', 
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
 }; 
