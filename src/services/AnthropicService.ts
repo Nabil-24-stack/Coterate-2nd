@@ -2049,147 +2049,571 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
     figmaData: any = null,
     errorMessage?: string
   ): Promise<{ htmlContent: string, cssContent: string, error?: string }> {
-    return new Promise(resolve => {
-      console.log('Generating simplified HTML/CSS as fallback');
-      
-      // Extract component name from the node ID for better labeling
-      const componentName = designInfo.figmaNodeId.split(':').pop() || 'component';
-      const containerClass = `figma-component-${componentName}`;
-      
-      // Use actual Figma colors if available
-      let backgroundColor = '#f5f5f5';
-      let textColor = '#333333';
-      let borderColor = '#e0e0e0';
-      let headerColor = '#f0f0f0';
-      let fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-      
-      if (figmaData) {
-        // Use background color from Figma
-        if (figmaData.designSystem.colors.background.length > 0) {
-          backgroundColor = figmaData.designSystem.colors.background[0];
-        }
-        
-        // Use text color from Figma
-        if (figmaData.designSystem.colors.text.length > 0) {
-          textColor = figmaData.designSystem.colors.text[0];
-        }
-        
-        // Use border color - try to find a light gray
-        if (figmaData.styleData.colors.length > 0) {
-          // Find a light gray for borders
-          const grayColor = figmaData.styleData.colors.find((color: string) => 
-            color.toLowerCase().startsWith('#e') || 
-            color.toLowerCase().startsWith('#d') ||
-            color.toLowerCase().startsWith('#c')
-          );
-          if (grayColor) {
-            borderColor = grayColor;
-          }
-        }
-        
-        // Use font family from Figma
-        if (figmaData.designSystem.typography.families.length > 0) {
-          fontFamily = figmaData.designSystem.typography.families.join(', ');
-        }
+    try {
+      console.log('Generating simplified HTML/CSS fallback for Figma design:', designInfo);
+      if (errorMessage) {
+        console.log('Fallback reason:', errorMessage);
       }
       
-      // Generate HTML with reasonable semantic structure and actual Figma data if available
-      const htmlContent = `<div class="${containerClass}-wrapper">
-  <div class="${containerClass}" role="region" aria-label="Figma Component">
-    <header class="${containerClass}-header">
-      <h2 class="${containerClass}-title">${figmaData?.styleData?.name || 'Figma Component'}</h2>
-      ${errorMessage ? `<p class="${containerClass}-error">Error: ${errorMessage}</p>` : ''}
-    </header>
-    <div class="${containerClass}-content">
-      <div class="${containerClass}-placeholder">
-        <p>Figma Design: ${designInfo.figmaFileKey}</p>
-        <p>Node ID: ${designInfo.figmaNodeId}</p>
-        <p>Dimensions: ${designInfo.width}px × ${designInfo.height}px</p>
-        ${figmaData?.styleData?.typography?.map((t: any) => 
-          t.text ? `<p class="${containerClass}-text" style="font-family: ${t.fontFamily || fontFamily}; font-size: ${t.fontSize || 14}px; font-weight: ${t.fontWeight || 400};">${t.text}</p>` : ''
-        ).join('\n        ') || ''}
-      </div>
+      // Determine if this is a large design (likely a full page) or small (likely a component)
+      const isLargeDesign = designInfo.width > 800 || designInfo.height > 600;
+      const aspectRatio = designInfo.width / designInfo.height;
+      const isWide = aspectRatio > 1.5;
+      const isTall = aspectRatio < 0.75;
+      
+      // Generate a more visually informative fallback
+      let htmlContent = '';
+      let cssContent = '';
+      
+      if (isLargeDesign) {
+        // For large designs (likely pages), create a more structured layout
+        htmlContent = `<div class="figma-design-container">
+  <header class="figma-header">
+    <div class="logo-placeholder">Logo</div>
+    <nav class="nav-placeholder">
+      <ul>
+        <li>Menu 1</li>
+        <li>Menu 2</li>
+        <li>Menu 3</li>
+      </ul>
+    </nav>
+  </header>
+  
+  <main class="figma-content">
+    <section class="hero-section">
+      <h1>Figma Design Preview</h1>
+      <p>This is a simplified preview of your Figma design (${designInfo.width}×${designInfo.height}px)</p>
+      <div class="cta-button">Call to Action</div>
+    </section>
+    
+    <section class="features-section">
+      <div class="feature-card">Feature 1</div>
+      <div class="feature-card">Feature 2</div>
+      <div class="feature-card">Feature 3</div>
+    </section>
+  </main>
+  
+  <footer class="figma-footer">
+    <p>Figma File: ${designInfo.figmaFileKey} | Node ID: ${designInfo.figmaNodeId}</p>
+    <p class="error-info">${errorMessage || 'Using simplified fallback view'}</p>
+  </footer>
+</div>`;
+
+        cssContent = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.figma-design-container {
+  width: 100%;
+  height: 100%;
+  background-color: #f5f5f5;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: 20px;
+  overflow: auto;
+}
+
+.figma-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+}
+
+.logo-placeholder {
+  font-weight: bold;
+  font-size: 24px;
+  color: #0d99ff;
+}
+
+.nav-placeholder ul {
+  display: flex;
+  list-style: none;
+}
+
+.nav-placeholder li {
+  margin-left: 24px;
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+.figma-content {
+  flex: 1;
+  padding: 24px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.hero-section {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 40px 20px;
+  background-color: #f0f9ff;
+  border-radius: 8px;
+}
+
+.hero-section h1 {
+  font-size: 32px;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.hero-section p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.cta-button {
+  display: inline-block;
+  padding: 12px 24px;
+  background-color: #0d99ff;
+  color: white;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.features-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.feature-card {
+  flex: 1;
+  padding: 24px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  text-align: center;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #555;
+}
+
+.figma-footer {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: #f0f0f0;
+  text-align: center;
+  font-size: 14px;
+  color: #777;
+}
+
+.error-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+}`;
+      } else if (isWide) {
+        // For wide components (likely banners or cards)
+        htmlContent = `<div class="figma-component-container">
+  <div class="component-header">
+    <div class="component-title">Component Preview</div>
+    <div class="component-subtitle">Wide format (${designInfo.width}×${designInfo.height}px)</div>
+  </div>
+  
+  <div class="component-content">
+    <div class="content-left">
+      <div class="placeholder-image"></div>
+    </div>
+    <div class="content-right">
+      <h3>Component Title</h3>
+      <p>This is a placeholder for your component content. The original Figma design could not be fully converted.</p>
+      <button class="action-button">Button</button>
     </div>
   </div>
 </div>`;
 
-      // Generate CSS with reasonable styling using actual Figma data
-      const cssContent = `.${containerClass}-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  font-family: ${fontFamily};
+        cssContent = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.${containerClass} {
-  width: ${designInfo.width}px;
-  height: ${designInfo.height}px;
-  background-color: ${backgroundColor};
-  border: 1px solid ${borderColor};
+.figma-component-container {
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.component-header {
+  padding: 12px 16px;
+  background-color: #f5f9ff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.component-title {
+  font-weight: bold;
+  font-size: 16px;
+  color: #333;
+}
+
+.component-subtitle {
+  font-size: 12px;
+  color: #888;
+}
+
+.component-content {
+  display: flex;
+  height: calc(100% - 50px);
+}
+
+.content-left {
+  flex: 1;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-image {
+  width: 80%;
+  height: 80%;
+  background: linear-gradient(135deg, #e0e0e0 25%, #f0f0f0 25%, #f0f0f0 50%, #e0e0e0 50%, #e0e0e0 75%, #f0f0f0 75%, #f0f0f0 100%);
+  background-size: 20px 20px;
+  border-radius: 4px;
+}
+
+.content-right {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.content-right h3 {
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.content-right p {
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.action-button {
+  align-self: flex-start;
+  padding: 8px 16px;
+  background-color: #0d99ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}`;
+      } else if (isTall) {
+        // For tall components (likely sidebars or mobile views)
+        htmlContent = `<div class="figma-component-container tall">
+  <div class="component-header">
+    <div class="component-title">Component Preview</div>
+    <div class="component-subtitle">Tall format (${designInfo.width}×${designInfo.height}px)</div>
+  </div>
+  
+  <div class="component-content">
+    <div class="content-top">
+      <div class="placeholder-image"></div>
+    </div>
+    <div class="content-bottom">
+      <h3>Component Title</h3>
+      <p>This is a placeholder for your component content. The original Figma design could not be fully converted.</p>
+      <ul class="item-list">
+        <li>Item 1</li>
+        <li>Item 2</li>
+        <li>Item 3</li>
+      </ul>
+      <button class="action-button">Button</button>
+    </div>
+  </div>
+</div>`;
+
+        cssContent = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.figma-component-container.tall {
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.${containerClass}-header {
-  background-color: ${headerColor};
+.component-header {
   padding: 12px 16px;
-  border-bottom: 1px solid ${borderColor};
+  background-color: #f5f9ff;
+  border-bottom: 1px solid #e0e0e0;
 }
 
-.${containerClass}-title {
-  margin: 0;
+.component-title {
+  font-weight: bold;
   font-size: 16px;
-  font-weight: 500;
-  color: ${textColor};
+  color: #333;
 }
 
-.${containerClass}-error {
-  color: #d32f2f;
-  margin: 8px 0 0;
-  font-size: 14px;
+.component-subtitle {
+  font-size: 12px;
+  color: #888;
 }
 
-.${containerClass}-content {
-  flex: 1;
+.component-content {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 16px;
+  flex-direction: column;
+  flex: 1;
 }
 
-.${containerClass}-placeholder {
-  text-align: center;
-  color: ${textColor};
+.content-top {
+  height: 40%;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.placeholder-image {
+  width: 80%;
+  height: 80%;
+  background: linear-gradient(135deg, #e0e0e0 25%, #f0f0f0 25%, #f0f0f0 50%, #e0e0e0 50%, #e0e0e0 75%, #f0f0f0 75%, #f0f0f0 100%);
+  background-size: 20px 20px;
+  border-radius: 4px;
+}
+
+.content-bottom {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-bottom h3 {
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.content-bottom p {
+  margin-bottom: 16px;
+  color: #666;
   font-size: 14px;
   line-height: 1.5;
 }
 
-.${containerClass}-placeholder p {
-  margin: 4px 0;
+.item-list {
+  margin-bottom: 20px;
+  margin-left: 20px;
 }
 
-.${containerClass}-text {
-  margin: 8px 0;
+.item-list li {
+  margin-bottom: 8px;
+  color: #555;
 }
 
-@media (max-width: ${designInfo.width + 32}px) {
-  .${containerClass} {
-    width: 100%;
-    height: auto;
-    min-height: ${Math.min(designInfo.height, 300)}px;
-  }
+.action-button {
+  align-self: flex-start;
+  padding: 8px 16px;
+  background-color: #0d99ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: auto;
 }`;
+      } else {
+        // Default/standard component (e.g., buttons, form elements, small cards)
+        htmlContent = `<div class="figma-component-container standard">
+  <div class="component-header">
+    <div class="component-title">Component Preview</div>
+    <div class="component-subtitle">Standard format (${designInfo.width}×${designInfo.height}px)</div>
+  </div>
+  
+  <div class="component-content">
+    <div class="placeholder-content">
+      <h3>Component Preview</h3>
+      <p>Original Figma component (${designInfo.figmaFileKey})</p>
+      <button class="action-button">Action</button>
+    </div>
+  </div>
+  
+  <div class="component-footer">
+    <small>Design ID: ${designInfo.figmaNodeId}</small>
+  </div>
+</div>`;
 
-      resolve({
+        cssContent = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.figma-component-container.standard {
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.component-header {
+  padding: 8px 12px;
+  background-color: #f5f9ff;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 12px;
+}
+
+.component-title {
+  font-weight: bold;
+  color: #333;
+}
+
+.component-subtitle {
+  font-size: 10px;
+  color: #888;
+}
+
+.component-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.placeholder-content {
+  text-align: center;
+}
+
+.placeholder-content h3 {
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 16px;
+}
+
+.placeholder-content p {
+  margin-bottom: 12px;
+  color: #666;
+  font-size: 13px;
+}
+
+.action-button {
+  padding: 6px 12px;
+  background-color: #0d99ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.component-footer {
+  padding: 6px 12px;
+  background-color: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  font-size: 10px;
+  color: #999;
+  text-align: center;
+}`;
+      }
+      
+      // Log the generated fallback for diagnosis
+      console.log('Generated fallback HTML preview:', htmlContent.substring(0, 100) + '...');
+      console.log('Generated fallback CSS preview:', cssContent.substring(0, 100) + '...');
+      
+      return Promise.resolve({
         htmlContent,
         cssContent,
-        error: errorMessage || 'Used simplified fallback with Figma data'
+        error: errorMessage || 'Using simplified fallback HTML/CSS'
       });
-    });
+    } catch (error) {
+      console.error('Error generating simplified HTML/CSS:', error);
+      
+      // If even the simplified generation fails, return an ultra-basic fallback
+      const basicHtml = `<div class="basic-fallback">
+  <div class="fallback-header">Fallback Design View</div>
+  <div class="fallback-content">
+    <p>Could not generate HTML/CSS for Figma design.</p>
+    <p>Dimensions: ${designInfo.width}px × ${designInfo.height}px</p>
+    <p>Figma File: ${designInfo.figmaFileKey}</p>
+    <p>Node ID: ${designInfo.figmaNodeId}</p>
+    <p class="error-message">${error instanceof Error ? error.message : String(error)}</p>
+  </div>
+</div>`;
+      
+      const basicCss = `
+.basic-fallback {
+  width: 100%;
+  height: 100%;
+  background-color: #f5f5f5;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+}
+
+.fallback-header {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.fallback-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.error-message {
+  margin-top: 16px;
+  color: #ff3366;
+  font-size: 14px;
+  max-width: 80%;
+}`;
+      
+      return Promise.resolve({
+        htmlContent: basicHtml,
+        cssContent: basicCss,
+        error: `Failed to generate simplified HTML/CSS: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
   }
 
   // Helper method to call the Anthropic API with consistent error handling
@@ -2622,9 +3046,13 @@ Example format:
 }
 \`\`\`
 
-Do NOT include any additional text, explanations, or other formatting between or around these code blocks.
-Do NOT use HTML comments for the HTML code block markers - only use the exact \`\`\`html and \`\`\`css format.
-This is critical for proper extraction of your code.`;
+EXTREMELY IMPORTANT:
+- Start your response with \`\`\`html immediately, without any introduction
+- Include NO explanations, notes, or text other than the code blocks
+- Your response should ONLY contain the two code blocks
+- The exact format is required for code extraction
+
+This is a critical requirement for proper extraction of your code.`;
 
       // User prompt with specific design details
       const userPrompt = `Please convert this Figma design into HTML and CSS.
@@ -2646,7 +3074,8 @@ IMPORTANT: Your response must be formatted exactly as follows:
 2. CSS code in a \`\`\`css code block
 
 Do not include any additional text, explanations, or comments between these blocks. 
-This format is critical for extracting your code correctly.`;
+Start your response with \`\`\`html and put nothing before it.
+This exact format is critical for extracting your code correctly.`;
 
       // Create the content array with text and image
       const contentArray = [
@@ -2692,10 +3121,10 @@ This format is critical for extracting your code correctly.`;
             this.callAnthropicAPI(systemPrompt, contentArray, {
               model: "claude-3-7-sonnet-20250219",
               max_tokens: 4000,
-              temperature: 0.2,
+              temperature: 0.1, // Lower temperature for more deterministic output
               useProxy: true,
-              stream: true,
-              onProgress
+              stream: true, // Use streaming
+              onProgress: onProgress // Pass the progress callback
             }),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Request timed out after 180 seconds')), 180000)
@@ -2711,7 +3140,8 @@ This format is critical for extracting your code correctly.`;
           console.log(result);
           console.log('==== RAW CLAUDE RESPONSE END ====');
           
-          // Also log the response length and check for code block indicators
+          // For debugging, show first 500 chars and look for specific markers
+          console.log('Response preview:', result.substring(0, 500) + '...');
           console.log('Response length:', result.length);
           console.log('Contains ```html:', result.includes('```html'));
           console.log('Contains ```css:', result.includes('```css'));
@@ -2774,6 +3204,45 @@ This format is critical for extracting your code correctly.`;
             // Final attempt: Try to find any code blocks and split them ourselves
             console.warn('All standard extraction methods failed, trying last-resort extraction');
             
+            // Try a very loose regex approach first - find anything that looks like HTML and CSS
+            const looseHtmlMatch = result.match(/<\s*(!DOCTYPE\s+html|html|head|body|div|header|main|footer|section|nav)[\s>]/i);
+            const looseCssMatch = result.match(/([.#][a-zA-Z][^{]*{\s*[a-zA-Z-]+\s*:\s*[^;]+;\s*})/i);
+            
+            if (looseHtmlMatch && looseCssMatch) {
+              // Extract from the beginning of the first HTML tag to the end of the document
+              const htmlStartIndex = looseHtmlMatch.index;
+              const cssStartIndex = looseCssMatch.index;
+              
+              // Determine which comes first - HTML or CSS
+              if (htmlStartIndex !== undefined && cssStartIndex !== undefined) {
+                if (htmlStartIndex < cssStartIndex) {
+                  // HTML comes first, extract HTML from start to CSS
+                  const htmlContent = result.substring(htmlStartIndex, cssStartIndex).trim();
+                  // Extract CSS from CSS start to end
+                  const cssContent = result.substring(cssStartIndex).trim();
+                  
+                  console.log('Successfully extracted loose HTML and CSS blocks from different positions');
+                  return {
+                    htmlContent,
+                    cssContent,
+                    error: 'Extracted using loose pattern matching'
+                  };
+                } else {
+                  // CSS comes first, this is unusual but handle it
+                  const cssContent = result.substring(cssStartIndex).trim();
+                  // For HTML, create a minimal fallback
+                  const htmlContent = '<div class="container"></div>';
+                  
+                  console.log('Found CSS content but HTML came after it (unusual)');
+                  return {
+                    htmlContent,
+                    cssContent,
+                    error: 'Used CSS from response but HTML was in unexpected position'
+                  };
+                }
+              }
+            }
+            
             // Look for any code blocks and try to determine if they're HTML or CSS
             const allCodeBlocks = result.match(/```(?:html|css)?\s*([\s\S]*?)\s*```/g);
             
@@ -2819,6 +3288,31 @@ This format is critical for extracting your code correctly.`;
               }
             }
             
+            // Try one more desperate extraction - look for any HTML and CSS-like content
+            const anyHtml = result.match(/<\s*html[\s>][\s\S]*<\s*\/\s*html\s*>/i) || 
+                           result.match(/<\s*body[\s>][\s\S]*<\s*\/\s*body\s*>/i) ||
+                           result.match(/<\s*div[\s>][\s\S]*<\s*\/\s*div\s*>/i);
+                           
+            const anyCss = result.match(/[\s\S]*\{\s*[\s\S]*\}/i);
+            
+            if (anyHtml || anyCss) {
+              let htmlExtract = anyHtml ? anyHtml[0] : '<div class="container"></div>';
+              let cssExtract = anyCss ? anyCss[0] : '.container { width: 100%; }';
+              
+              // Make sure CSS doesn't contain HTML
+              if (cssExtract.includes('<html') || cssExtract.includes('<body') || cssExtract.includes('<div')) {
+                cssExtract = '.container { width: 100%; }';
+              }
+              
+              console.log('Extracted content using very loose pattern matching');
+              return {
+                htmlContent: htmlExtract,
+                cssContent: cssExtract,
+                error: 'Extracted using very loose pattern matching'
+              };
+            }
+            
+            console.error('All extraction methods failed for response:', result.substring(0, 200) + '...');
             throw new Error('Failed to extract HTML/CSS from Claude response');
           }
         } catch (error) {
@@ -3026,6 +3520,8 @@ Requirements:
 IMPORTANT FORMATTING:
 Your response MUST begin with \`\`\`html and end with \`\`\` with no other text.
 Do NOT add any explanations, comments, or text outside of the code block.
+ONLY output the HTML code wrapped in \`\`\`html and \`\`\` markers.
+Return NOTHING except the HTML code block.
 This exact format is critical for code extraction.
 
 Focus ONLY on HTML structure in this step.`;
@@ -3142,7 +3638,9 @@ Requirements:
 
 IMPORTANT FORMATTING:
 Your response MUST begin with \`\`\`css and end with \`\`\` with no other text.
-Do NOT add any explanations, comments, or text outside of the code block.`
+Do NOT add any explanations, comments, or text outside of the code block.
+ONLY output the CSS code wrapped in \`\`\`css and \`\`\` markers.
+Return NOTHING except the CSS code block.`
         : `You are an expert UI developer. Create CSS for this HTML structure based on the design analysis:
 
 DESIGN ANALYSIS:
@@ -3164,6 +3662,8 @@ Requirements:
 IMPORTANT FORMATTING:
 Your response MUST begin with \`\`\`css and end with \`\`\` with no other text.
 Do NOT add any explanations, comments, or text outside of the code block.
+ONLY output the CSS code wrapped in \`\`\`css and \`\`\` markers.
+Return NOTHING except the CSS code block.
 This exact format is critical for code extraction.`;
 
       // Progress tracking for CSS generation
