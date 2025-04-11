@@ -2268,8 +2268,14 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
             cache: 'no-cache'
           });
           
+          // Log basic response info for debugging
+          console.log(`Anthropic API response status: ${response.status}, streaming: ${useStreaming}`);
+          
           if (!response.ok) {
             const errorData = await response.text();
+            // Log the full error response for debugging
+            console.error(`Anthropic API error (${response.status}):`, errorData);
+            
             // Parse the error if possible to provide more details
             let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
             try {
@@ -2430,6 +2436,21 @@ Return HTML in a \`\`\`html code block and CSS in a \`\`\`css block.`;
       }
       
       console.log('Full content length:', fullContent.length);
+      
+      // Log format info to help diagnose extraction issues
+      console.log('Content contains ```html:', fullContent.includes('```html'));
+      console.log('Content contains ```css:', fullContent.includes('```css'));
+      
+      if (!fullContent.includes('```html') || !fullContent.includes('```css')) {
+        console.warn('Stream response may not have the expected code block format');
+        
+        // Log a snippet of the content for debugging (avoid logging the full content)
+        const contentPreview = fullContent.length > 200 
+          ? fullContent.substring(0, 100) + '...' + fullContent.substring(fullContent.length - 100) 
+          : fullContent;
+        console.log('Content preview:', contentPreview);
+      }
+      
       return fullContent;
     } catch (error) {
       console.error('Error processing Anthropic stream:', error);
@@ -2583,9 +2604,27 @@ REQUIREMENTS:
 5. Organize CSS with clear class naming conventions
 6. Return the HTML and CSS as separate code blocks
 
-Your output must include:
-1. An HTML code block with the complete markup (inside \`\`\`html tags)
-2. A CSS code block with all necessary styles (inside \`\`\`css tags)`;
+RESPONSE FORMAT:
+You MUST format your response exactly as follows:
+1. First, provide the HTML code wrapped in triple backticks with 'html' language identifier: \`\`\`html
+2. Then, provide the CSS code wrapped in triple backticks with 'css' language identifier: \`\`\`css
+
+Example format:
+\`\`\`html
+<div class="container">
+  <!-- HTML content here -->
+</div>
+\`\`\`
+
+\`\`\`css
+.container {
+  /* CSS styles here */
+}
+\`\`\`
+
+Do NOT include any additional text, explanations, or other formatting between or around these code blocks.
+Do NOT use HTML comments for the HTML code block markers - only use the exact \`\`\`html and \`\`\`css format.
+This is critical for proper extraction of your code.`;
 
       // User prompt with specific design details
       const userPrompt = `Please convert this Figma design into HTML and CSS.
@@ -2602,7 +2641,12 @@ I need a clean, semantic HTML implementation with precise CSS that matches this 
 - Component structure
 - Visual hierarchy
 
-Return the code as separate HTML and CSS blocks that I can directly use.`;
+IMPORTANT: Your response must be formatted exactly as follows:
+1. HTML code in a \`\`\`html code block 
+2. CSS code in a \`\`\`css code block
+
+Do not include any additional text, explanations, or comments between these blocks. 
+This format is critical for extracting your code correctly.`;
 
       // Create the content array with text and image
       const contentArray = [
@@ -2662,6 +2706,18 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
             throw new Error('Empty response from Claude API');
           }
           
+          // Add detailed logging of the response
+          console.log('==== RAW CLAUDE RESPONSE START ====');
+          console.log(result);
+          console.log('==== RAW CLAUDE RESPONSE END ====');
+          
+          // Also log the response length and check for code block indicators
+          console.log('Response length:', result.length);
+          console.log('Contains ```html:', result.includes('```html'));
+          console.log('Contains ```css:', result.includes('```css'));
+          console.log('Contains <html>:', result.includes('<html>'));
+          console.log('Contains <style>:', result.includes('<style>'));
+          
           // Extract HTML and CSS
           const htmlMatch = result.match(/```html\s*([\s\S]*?)\s*```/);
           const cssMatch = result.match(/```css\s*([\s\S]*?)\s*```/);
@@ -2685,19 +2741,80 @@ Return the code as separate HTML and CSS blocks that I can directly use.`;
               };
             }
             
+            // Try even more flexible extraction patterns
+            const flexHtmlMatch = result.match(/(?:```html|```HTML|<html>|<!DOCTYPE html>|<div class=|<body>)\s*([\s\S]*?)(?:```|<\/html>|<\/body>)/i);
+            const flexCssMatch = result.match(/(?:```css|```CSS|<style>)\s*([\s\S]*?)(?:```|<\/style>)/i);
+            
+            if (flexHtmlMatch && flexCssMatch) {
+              console.log('Extracted HTML/CSS using flexible patterns');
+              return {
+                htmlContent: flexHtmlMatch[1].trim(),
+                cssContent: flexCssMatch[1].trim(),
+                error: 'Extracted using flexible patterns'
+              };
+            }
+            
             // If we have a partial response from streaming, see if we can salvage anything
             if (progressText && progressText.length > 0) {
               console.warn('Could not find complete HTML/CSS blocks, trying to extract from partial response');
               
-              // Try to extract HTML and CSS from the progress text
-              const partialHtmlMatch = progressText.match(/```html\s*([\s\S]*?)\s*```/);
-              const partialCssMatch = progressText.match(/```css\s*([\s\S]*?)\s*```/);
+              // Try to extract HTML and CSS from the progress text with more flexible patterns
+              const partialHtmlMatch = progressText.match(/(?:```html|```HTML|<html>|<!DOCTYPE html>|<div class=|<body>)\s*([\s\S]*?)(?:```|<\/html>|<\/body>)/i);
+              const partialCssMatch = progressText.match(/(?:```css|```CSS|<style>)\s*([\s\S]*?)(?:```|<\/style>)/i);
               
               if (partialHtmlMatch && partialCssMatch) {
                 return {
                   htmlContent: partialHtmlMatch[1].trim(),
                   cssContent: partialCssMatch[1].trim(),
                   error: 'Extracted from partial response'
+                };
+              }
+            }
+            
+            // Final attempt: Try to find any code blocks and split them ourselves
+            console.warn('All standard extraction methods failed, trying last-resort extraction');
+            
+            // Look for any code blocks and try to determine if they're HTML or CSS
+            const allCodeBlocks = result.match(/```(?:html|css)?\s*([\s\S]*?)\s*```/g);
+            
+            if (allCodeBlocks && allCodeBlocks.length >= 1) {
+              console.log('Found', allCodeBlocks.length, 'potential code blocks for extraction');
+              
+              let extractedHtml = '';
+              let extractedCss = '';
+              
+              // Process each block to determine if it's HTML or CSS
+              for (const block of allCodeBlocks) {
+                const content = block.replace(/```(?:html|css)?\s*|\s*```/g, '').trim();
+                
+                // Skip empty blocks
+                if (!content) continue;
+                
+                // Simple heuristic: if it has CSS-like patterns, consider it CSS
+                if (content.includes('{') && content.includes('}') && 
+                    (content.includes(':') || content.includes(';'))) {
+                  // Looks like CSS
+                  extractedCss = content;
+                } else if (content.includes('<') && content.includes('>')) {
+                  // Looks like HTML
+                  extractedHtml = content;
+                }
+              }
+              
+              // If we found either HTML or CSS (or both), return them
+              if (extractedHtml || extractedCss) {
+                // If we only found one type, create a minimal version of the other
+                if (!extractedHtml && extractedCss) {
+                  extractedHtml = '<div class="container"></div>';
+                }
+                if (!extractedCss && extractedHtml) {
+                  extractedCss = '.container { width: 100%; }';
+                }
+                
+                return {
+                  htmlContent: extractedHtml,
+                  cssContent: extractedCss,
+                  error: 'Extracted using last-resort code block analysis'
                 };
               }
             }
@@ -2906,6 +3023,11 @@ Requirements:
 - Do not include any inline styles
 - Only provide the HTML in a \`\`\`html code block
 
+IMPORTANT FORMATTING:
+Your response MUST begin with \`\`\`html and end with \`\`\` with no other text.
+Do NOT add any explanations, comments, or text outside of the code block.
+This exact format is critical for code extraction.
+
 Focus ONLY on HTML structure in this step.`;
 
       // Progress tracking for HTML generation
@@ -2951,7 +3073,26 @@ Focus ONLY on HTML structure in this step.`;
             htmlContent = progressHtmlMatch[1].trim();
             console.log('Extracted HTML from progress text, length:', htmlContent.length);
           } else {
-            throw new Error('Failed to extract HTML from response');
+            // Try more flexible patterns
+            console.log('Standard HTML extraction failed, trying flexible patterns');
+            console.log('htmlResult length:', htmlResult.length);
+            console.log('Contains ```html:', htmlResult.includes('```html'));
+            
+            // Try flexible extraction patterns
+            const flexHtmlMatch = htmlResult.match(/(?:```html|```HTML|<html>|<!DOCTYPE html>|<div class=|<body>)\s*([\s\S]*?)(?:```|<\/html>|<\/body>)/i);
+            if (flexHtmlMatch && flexHtmlMatch[1]) {
+              htmlContent = flexHtmlMatch[1].trim();
+              console.log('Extracted HTML using flexible patterns, length:', htmlContent.length);
+            } else {
+              // Try to find any HTML-like content
+              const anyHtmlMatch = htmlResult.match(/<[a-z][^>]*>([\s\S]*?)<\/[a-z][^>]*>/i);
+              if (anyHtmlMatch && anyHtmlMatch[0]) {
+                htmlContent = anyHtmlMatch[0].trim();
+                console.log('Extracted HTML using any-match pattern, length:', htmlContent.length);
+              } else {
+                throw new Error('Failed to extract HTML from response');
+              }
+            }
           }
         } else {
           throw new Error('Failed to extract HTML from response');
@@ -2997,7 +3138,11 @@ Requirements:
 - Create only the necessary CSS to match the basic design
 - Keep the code clean and minimal
 - Focus on layout, colors, and typography
-- Only provide the CSS in a \`\`\`css code block`
+- Only provide the CSS in a \`\`\`css code block
+
+IMPORTANT FORMATTING:
+Your response MUST begin with \`\`\`css and end with \`\`\` with no other text.
+Do NOT add any explanations, comments, or text outside of the code block.`
         : `You are an expert UI developer. Create CSS for this HTML structure based on the design analysis:
 
 DESIGN ANALYSIS:
@@ -3016,7 +3161,10 @@ Requirements:
 - Use modern CSS practices (flexbox, grid, etc.)
 - Only provide the CSS in a \`\`\`css code block
 
-Make sure your CSS works with the provided HTML structure.`;
+IMPORTANT FORMATTING:
+Your response MUST begin with \`\`\`css and end with \`\`\` with no other text.
+Do NOT add any explanations, comments, or text outside of the code block.
+This exact format is critical for code extraction.`;
 
       // Progress tracking for CSS generation
       let cssProgressText = '';
@@ -3060,7 +3208,26 @@ Make sure your CSS works with the provided HTML structure.`;
             cssContent = progressCssMatch[1].trim();
             console.log('Extracted CSS from progress text, length:', cssContent.length);
           } else {
-            throw new Error('Failed to extract CSS from response');
+            // Try more flexible patterns
+            console.log('Standard CSS extraction failed, trying flexible patterns');
+            console.log('cssResult length:', cssResult.length);
+            console.log('Contains ```css:', cssResult.includes('```css'));
+            
+            // Try flexible extraction patterns
+            const flexCssMatch = cssResult.match(/(?:```css|```CSS|<style>)\s*([\s\S]*?)(?:```|<\/style>)/i);
+            if (flexCssMatch && flexCssMatch[1]) {
+              cssContent = flexCssMatch[1].trim();
+              console.log('Extracted CSS using flexible patterns, length:', cssContent.length);
+            } else {
+              // Try to find any CSS-like content (looking for patterns like selectors and declarations)
+              const anyCssMatch = cssResult.match(/([a-z#\.\[\*][^{]*\{[^}]*\})/i);
+              if (anyCssMatch && anyCssMatch[0]) {
+                cssContent = anyCssMatch[0].trim();
+                console.log('Extracted CSS using any-match pattern, length:', cssContent.length);
+              } else {
+                throw new Error('Failed to extract CSS from response');
+              }
+            }
           }
         } else {
           throw new Error('Failed to extract CSS from response');
