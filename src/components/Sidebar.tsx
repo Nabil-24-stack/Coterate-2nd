@@ -206,7 +206,7 @@ const UserProfileSection = styled.div`
   gap: 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   width: 100%;
-  margin: 16px;
+  margin: 0;
 `;
 
 const UserInfo = styled.div`
@@ -243,7 +243,8 @@ const SignOutButton = styled.button`
 // Add a new styled component for the bottom section
 const BottomSection = styled.div`
   margin-top: auto;
-  padding-bottom: 16px;
+  padding: 0 16px 16px 16px;
+  width: 100%;
 `;
 
 interface DropdownProps {
