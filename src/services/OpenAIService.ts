@@ -115,7 +115,7 @@ class OpenAIService {
   }
   
   // Main method to analyze design image and generate improved version
-  async analyzeDesignAndGenerateHTML(imageUrl: string, linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
+  async analyzeDesignAndGenerateHTML(imageUrl: string, userPrompt: string = '', linkedInsights: any[] = []): Promise<DesignAnalysisResponse> {
     if (!this.apiKey) {
       console.error('OpenAI API key not configured, cannot generate design iteration');
       
@@ -163,7 +163,7 @@ class OpenAIService {
                 const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
                 if (dataUrl) {
                   base64Image = dataUrl.split(',')[1];
-                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
+                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
                 }
               }
               throw corsError;
@@ -186,7 +186,7 @@ class OpenAIService {
             const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
             if (dataUrl) {
               base64Image = dataUrl.split(',')[1];
-              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights);
+              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
             }
           } catch (fallbackError) {
             console.error('Fallback attempt also failed:', fallbackError);
@@ -209,6 +209,9 @@ class OpenAIService {
         });
         insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
       }
+      
+      // Add the user prompt if provided
+      const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
       
       const requestBody = {
         model: 'gpt-4o',
@@ -316,64 +319,36 @@ class OpenAIService {
             5. Add a subtle 1px border to the div to indicate it's an image placeholder
             6. You can add a simple CSS pattern or gradient if appropriate
             
-            Your analysis MUST be organized into these specific sections:
-            1. Design System Extraction - Detailed documentation of colors, typography, and component styles
-            2. Visual Hierarchy - Issues and recommended improvements
-            3. Color Contrast and Accessibility - Issues and recommended improvements
-            4. Component Selection and Placement - Issues and recommended improvements
-            5. Text Legibility - Issues and recommended improvements
-            6. Overall Usability - Issues and recommended improvements
-            7. Accessibility Considerations - Issues and recommended improvements
-            8. General Strengths - What the design does well
-            9. General Weaknesses - Overall issues with the design
-            10. Specific Changes Made - Detailed before/after descriptions of all changes implemented
-            11. Color Palette - Exact hex codes for all colors used, noting that these are preserved from the original
-            12. Typography - Font families, sizes, weights used, noting that these are preserved from the original
-            13. UI Components - List of all components identified in the design, noting any that were swapped and how their styling was preserved`
+            OUTPUT FORMAT:
+            Your response MUST be structured as follows:
+            
+            1. DESIGN SYSTEM:
+               Document the extracted design system in detail (colors, typography, components)
+            
+            2. ANALYSIS:
+               Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
+            
+            3. HTML CODE:
+               Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
+            
+            4. CSS CODE:
+               Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
+            
+            5. IMPROVEMENTS SUMMARY:
+               List the specific improvements made to the design and explain the rationale behind each one
+            ${insightsPrompt}${userPromptContent}`
           },
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains the original design system while addressing specific issues.
-
-                THIS IS VERY IMPORTANT: 
-                - The improved version should look like an ITERATION of the original design, not a completely new design.
-                - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
-                - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
-                - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
-                
-                Perform a detailed analysis focusing specifically on:
-                1. Visual hierarchy
-                2. Color contrast and accessibility
-                3. Component selection and placement
-                4. Text legibility
-                5. Overall usability
-                6. Accessibility considerations
-                
-                Then create an improved version that:
-                - Uses the EXACT SAME colors, typography, and UI component styles as the original
-                - Maintains at least 85% of the original design's structure
-                - Makes targeted improvements through better component arrangement or more appropriate component selection
-                - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
-                
-                For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
-                
-                Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented, with special attention to how you preserved the original design system.
-                ${linkedInsights.length > 0 ? insightsPrompt : ''}`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`
-                }
+            content: [{
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`
               }
-            ]
+            }]
           }
         ],
-        max_tokens: 4000,
-        temperature: 0.5
+        max_tokens: 4000
       };
       
       console.log('Sending request to OpenAI API for design analysis...');
@@ -1288,7 +1263,7 @@ footer {
   }
 
   // Add this method to continue with the OpenAI analysis once we have the base64 image
-  private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[]): Promise<DesignAnalysisResponse> {
+  private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[], userPrompt: string): Promise<DesignAnalysisResponse> {
     // Process linked insights if available
     let insightsPrompt = '';
     if (linkedInsights && linkedInsights.length > 0) {
@@ -1299,6 +1274,9 @@ footer {
       });
       insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
     }
+    
+    // Add the user prompt if provided
+    const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
     
     const requestBody = {
       model: 'gpt-4o',
@@ -1406,64 +1384,36 @@ footer {
           5. Add a subtle 1px border to the div to indicate it's an image placeholder
           6. You can add a simple CSS pattern or gradient if appropriate
           
-          Your analysis MUST be organized into these specific sections:
-          1. Design System Extraction - Detailed documentation of colors, typography, and component styles
-          2. Visual Hierarchy - Issues and recommended improvements
-          3. Color Contrast and Accessibility - Issues and recommended improvements
-          4. Component Selection and Placement - Issues and recommended improvements
-          5. Text Legibility - Issues and recommended improvements
-          6. Overall Usability - Issues and recommended improvements
-          7. Accessibility Considerations - Issues and recommended improvements
-          8. General Strengths - What the design does well
-          9. General Weaknesses - Overall issues with the design
-          10. Specific Changes Made - Detailed before/after descriptions of all changes implemented
-          11. Color Palette - Exact hex codes for all colors used, noting that these are preserved from the original
-          12. Typography - Font families, sizes, weights used, noting that these are preserved from the original
-          13. UI Components - List of all components identified in the design, noting any that were swapped and how their styling was preserved`
+          OUTPUT FORMAT:
+          Your response MUST be structured as follows:
+          
+          1. DESIGN SYSTEM:
+             Document the extracted design system in detail (colors, typography, components)
+          
+          2. ANALYSIS:
+             Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
+          
+          3. HTML CODE:
+             Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
+          
+          4. CSS CODE:
+             Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
+          
+          5. IMPROVEMENTS SUMMARY:
+             List the specific improvements made to the design and explain the rationale behind each one
+          ${insightsPrompt}${userPromptContent}`
         },
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Analyze this UI design according to UI/UX best practices and create an IMPROVED ITERATION that maintains the original design system while addressing specific issues.
-
-              THIS IS VERY IMPORTANT: 
-              - The improved version should look like an ITERATION of the original design, not a completely new design.
-              - You MUST use the EXACT SAME colors, fonts, and component styles from the original design.
-              - You can improve the layout by rearranging components or swapping components for more appropriate ones (e.g., radio button to checkbox if multi-select is needed).
-              - When swapping components, you MUST style the new component using the exact same design system (colors, borders, etc.) as the original.
-              
-              Perform a detailed analysis focusing specifically on:
-              1. Visual hierarchy
-              2. Color contrast and accessibility
-              3. Component selection and placement
-              4. Text legibility
-              5. Overall usability
-              6. Accessibility considerations
-              
-              Then create an improved version that:
-              - Uses the EXACT SAME colors, typography, and UI component styles as the original
-              - Maintains at least 85% of the original design's structure
-              - Makes targeted improvements through better component arrangement or more appropriate component selection
-              - Has the exact dimensions of ${dimensions.width}px × ${dimensions.height}px
-              
-              For any images in the design, replace them with colored div elements that match the dimensions and positioning of the original images.
-              
-              Organize your analysis into the specific sections outlined in your instructions, and provide detailed before/after descriptions for each change implemented, with special attention to how you preserved the original design system.
-              ${linkedInsights.length > 0 ? insightsPrompt : ''}`
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
-              }
+          content: [{
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${base64Image}`
             }
-          ]
+          }]
         }
       ],
-      max_tokens: 4000,
-      temperature: 0.5
+      max_tokens: 4000
     };
     
     console.log('Sending request to OpenAI API for design analysis...');

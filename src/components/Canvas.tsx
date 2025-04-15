@@ -966,6 +966,77 @@ const DesignWithActionsContainer = styled.div`
   }
 `;
 
+// Prompt Dialog for iterations
+const PromptDialog = styled.div<{ visible: boolean, position: { x: number, y: number } }>`
+  position: absolute;
+  top: ${props => props.position.y}px;
+  left: ${props => props.position.x}px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  width: 320px;
+  z-index: 100;
+  opacity: ${props => props.visible ? 1 : 0};
+  pointer-events: ${props => props.visible ? 'all' : 'none'};
+  transition: opacity 0.2s ease;
+  transform: translateY(-50%);
+`;
+
+const PromptInput = styled.input`
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s ease;
+  
+  &:focus {
+    border-color: #4f46e5;
+    outline: none;
+  }
+  
+  &::placeholder {
+    color: #aaa;
+  }
+`;
+
+const PromptButtonContainer = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+`;
+
+const PromptButton = styled.button`
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &.cancel {
+    background: transparent;
+    border: 1px solid #e0e0e0;
+    color: #666;
+    
+    &:hover {
+      background-color: #f5f5f5;
+    }
+  }
+  
+  &.apply {
+    background-color: #4f46e5;
+    border: 1px solid #4f46e5;
+    color: white;
+    
+    &:hover {
+      background-color: #4338ca;
+    }
+  }
+`;
+
 // Icons for the buttons
 const IterateIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1421,40 +1492,15 @@ export const Canvas: React.FC = () => {
   
   // Add the handleDesignMouseDown function back
   const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
-    e.stopPropagation();
-    
-    // Check if this is an iteration
-    const isIteration = designs.some(design => 
-      design.iterations?.some(iteration => iteration.id === designId)
-    );
-    
-    // If this design is already selected, start dragging
-    if (selectedDesignId === designId) {
-      setIsDesignDragging(true);
+    // If we already have a design selected, just focus on this one
+    if (selectedDesignId) {
+      setSelectedDesignId(designId);
       
-      // Find the position based on whether it's a design or iteration
-      let position;
-      if (isIteration) {
-        // Find the iteration position
-        for (const design of designs) {
-          if (!design.iterations) continue;
-          
-          const foundIteration = design.iterations.find(it => it.id === designId);
-          if (foundIteration) {
-            position = foundIteration.position;
-            break;
-          }
-        }
-      } else {
-        // Find the design position
-        const design = designs.find(d => d.id === designId);
-        if (design) {
-          position = design.position;
-        }
-      }
-      
-      if (position) {
-        setDesignDragStart({
+      // If this is a left-click, start dragging the design
+      if (e.button === 0) {
+        e.stopPropagation(); // Stop event propagation
+        setIsDesignDragging(true);
+        setDragStart({
           x: e.clientX,
           y: e.clientY
         });
@@ -1469,10 +1515,67 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Modify the handleIterationClick function to handle both original designs and iterations
-  const handleIterationClick = async (e: React.MouseEvent, designId: string) => {
+  // State for prompt dialog
+  const [promptDialogVisible, setPromptDialogVisible] = useState(false);
+  const [promptValue, setPromptValue] = useState('');
+  const [promptDialogPosition, setPromptDialogPosition] = useState({ x: 0, y: 0 });
+  const [designIdForPrompt, setDesignIdForPrompt] = useState<string | null>(null);
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  
+  // Function to open the prompt dialog
+  const openPromptDialog = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation(); // Prevent propagation to avoid selecting/deselecting
-    LogManager.log('iteration-request', `Iteration requested for design: ${designId}`, true);
+    
+    // Get the position of the clicked button to position the dialog next to it
+    const buttonRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const canvasRect = canvasRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+    
+    // Calculate position relative to the canvas
+    const posX = buttonRect.right + 20 - canvasRect.left; // Add some margin
+    const posY = buttonRect.top + buttonRect.height / 2 - canvasRect.top;
+    
+    // Set the dialog position and make it visible
+    setPromptDialogPosition({ x: posX, y: posY });
+    setDesignIdForPrompt(designId);
+    setPromptValue('');
+    setPromptDialogVisible(true);
+    
+    // Focus the input field after the dialog is visible
+    setTimeout(() => {
+      promptInputRef.current?.focus();
+    }, 100);
+  };
+  
+  // Function to close the prompt dialog
+  const closePromptDialog = () => {
+    setPromptDialogVisible(false);
+    setDesignIdForPrompt(null);
+  };
+  
+  // Handle the prompt submission
+  const handlePromptSubmit = async () => {
+    if (!designIdForPrompt) return;
+    
+    // Close the dialog
+    setPromptDialogVisible(false);
+    
+    // Process the iteration with the prompt
+    await processIteration(designIdForPrompt, promptValue);
+  };
+  
+  // Handle keydown in the prompt input field
+  const handlePromptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handlePromptSubmit();
+    } else if (e.key === 'Escape') {
+      closePromptDialog();
+    }
+  };
+  
+  // Function to process the actual iteration based on the design ID and prompt
+  const processIteration = async (designId: string, prompt: string) => {
+    LogManager.log('iteration-request', `Iteration requested for design: ${designId} with prompt: ${prompt || 'none'}`, true);
     
     // First determine if the selected ID is for a base design or an iteration
     const isIteration = designs.some(design => 
@@ -1585,10 +1688,10 @@ export const Canvas: React.FC = () => {
         // For iterations, we need to call a specialized method that can analyze HTML/CSS
         // For now, we'll use the same method with the parent's image URL
         // This is a temporary solution until we implement proper HTML/CSS analysis
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
       } else {
         // For base designs, we use the existing method with the image URL
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl);
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
       }
       
       // Update the processing step to "Generating Improved Design"
@@ -1783,7 +1886,12 @@ export const Canvas: React.FC = () => {
       alert('Error generating iteration: ' + (error as Error).message);
     }
   };
-  
+
+  // Modify the handleIterationClick function to use the prompt dialog
+  const handleIterationClick = (e: React.MouseEvent, designId: string) => {
+    openPromptDialog(e, designId);
+  };
+
   // Add a helper function to get image dimensions
   const getImageDimensions = (src: string): Promise<{width: number, height: number}> => {
     return new Promise((resolve, reject) => {
@@ -2794,6 +2902,28 @@ export const Canvas: React.FC = () => {
           </AnalysisPanelContent>
         </AnalysisPanel>
       </CanvasContainer>
+      
+      {/* Add the Prompt Dialog component */}
+      <PromptDialog 
+        visible={promptDialogVisible} 
+        position={promptDialogPosition}
+      >
+        <PromptInput
+          ref={promptInputRef}
+          placeholder="How would you like to improve this design?"
+          value={promptValue}
+          onChange={(e) => setPromptValue(e.target.value)}
+          onKeyDown={handlePromptKeyDown}
+        />
+        <PromptButtonContainer>
+          <PromptButton className="cancel" onClick={closePromptDialog}>
+            Cancel
+          </PromptButton>
+          <PromptButton className="apply" onClick={handlePromptSubmit}>
+            Apply
+          </PromptButton>
+        </PromptButtonContainer>
+      </PromptDialog>
     </>
   );
 }; 
