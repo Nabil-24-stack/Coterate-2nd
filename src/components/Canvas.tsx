@@ -904,14 +904,16 @@ const ActionButtonsContainer = styled.div`
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: 12px;
   background-color: white;
-  padding: 8px;
+  padding: 8px 16px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 20;
   opacity: 0;
   transition: opacity 0.2s ease;
+  min-width: 420px;
+  justify-content: space-between;
 `;
 
 // Individual action button style
@@ -928,6 +930,7 @@ const ActionButton = styled.button`
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-width: 120px;
   
   &:hover {
     background-color: #f5f5f5;
