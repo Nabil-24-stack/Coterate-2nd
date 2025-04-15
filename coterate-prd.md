@@ -102,7 +102,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 
 #### 2.4.2 AI Analysis of Designs
 - Upon clicking the "+" button, trigger an AI analysis of the selected design
-- Use OpenAI's GPT-4o to analyze the design for improvements in:
+- Use OpenAI's GPT-4.1 to analyze the design for improvements in:
   - Visual hierarchy
   - Color contrast and accessibility
   - Component selection and placement
@@ -110,7 +110,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
   - Overall usability
   - Alignment with design best practices
 - Integrate linked user insights from the Insights tab into the analysis
-- Provide GPT-4o with context about UI/UX best practices to inform its analysis
+- Provide GPT-4.1 with context about UI/UX best practices to inform its analysis
 - Store analysis results for reference
 
 #### 2.4.3 Optional User Prompting
@@ -281,7 +281,7 @@ Coterate isn't just another AI design tool. It's your co-designer — one that l
 #### 3.3.3 Design Analysis and Generation Pipeline
 1. **Retrieval**: Fetch the Figma design data via API
 2. **Insights Integration**: Compile relevant user insights from linked folders
-3. **Combined Analysis**: Send design and insights to GPT-4o for holistic evaluation
+3. **Combined Analysis**: Send design and insights to GPT-4.1 for holistic evaluation
 4. **Suggestions**: Generate actionable design modifications informed by both design principles and user feedback
 5. **Generation**: Create new design version that addresses both visual improvement needs and user pain points
 6. **Rendering**: Render the modified design on the canvas
@@ -382,7 +382,7 @@ The core functionality is already partially implemented with the following featu
 4. **Design Import**: User copies a selection link from Figma and pastes it into Coterate
 5. **Linking Insights**: User optionally links relevant user research from the Insights tab
 6. **Iteration**: User clicks the "+" button, optionally adds a prompt
-7. **AI Analysis**: GPT-4o analyzes the design along with any linked user insights
+7. **AI Analysis**: GPT-4.1 analyzes the design along with any linked user insights
 8. **Review**: User reviews the suggested iteration alongside the original
 9. **Refinement**: User provides feedback or triggers additional iterations
 10. **Export**: User exports the final design back to Figma
