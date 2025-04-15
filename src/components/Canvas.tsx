@@ -2560,7 +2560,7 @@ export const Canvas: React.FC = () => {
                 </>
               ) : (
                 <EmptyCanvasMessage>
-                  <h2>Paste a Figma frame</h2>
+                  <h2>Paste a Figma frame selection</h2>
                   <p>Select a frame and press Command+L on your keyboard</p>
                 </EmptyCanvasMessage>
               )}
