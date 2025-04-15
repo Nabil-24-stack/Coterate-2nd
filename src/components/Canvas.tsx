@@ -897,6 +897,89 @@ const DesignCardContainer = styled.div`
   }
 `;
 
+// New Action Buttons container that appears on hover
+const ActionButtonsContainer = styled.div`
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  background-color: white;
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+`;
+
+// Individual action button style
+const ActionButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  &.primary {
+    background-color: #4f46e5;
+    color: white;
+    border-color: #4f46e5;
+    
+    &:hover {
+      background-color: #4338ca;
+    }
+  }
+`;
+
+// New hover container with the action buttons
+const DesignWithActionsContainer = styled.div`
+  position: relative;
+  
+  &:hover ${ActionButtonsContainer} {
+    opacity: 1;
+  }
+`;
+
+// Icons for the buttons
+const IterateIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 2V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M2 8H14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const RetryIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M1.333 8C1.333 4.32 4.32 1.333 8 1.333C11.68 1.333 14.666 4.32 14.666 8C14.666 11.68 11.68 14.667 8 14.667C6.12 14.667 4.44 13.853 3.293 12.56" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M1.333 8L3.999 10.667L6.666 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const ViewIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 3C4.5 3 1.5 8 1.5 8C1.5 8 4.5 13 8 13C11.5 13 14.5 8 14.5 8C14.5 8 11.5 3 8 3Z" stroke="currentColor" strokeWidth="1.5"/>
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
+  </svg>
+);
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -2026,7 +2109,7 @@ export const Canvas: React.FC = () => {
   // Update the render part to include the processing overlay with steps
   const renderDesign = (design: ExtendedDesign) => {
     return (
-      <DesignCardContainer key={design.id}>
+      <DesignWithActionsContainer key={design.id}>
         <DesignCard 
           isSelected={selectedDesignId === design.id}
           onClick={(e) => handleDesignClick(e, design.id)}
@@ -2070,39 +2153,55 @@ export const Canvas: React.FC = () => {
           )}
         </DesignCard>
         
-        {/* Show the iteration button on hover instead of on selection */}
-        <IterationButton onClick={(e) => handleIterationClick(e, design.id)}>
-          <PlusIcon />
-        </IterationButton>
-      </DesignCardContainer>
+        {/* New action buttons component */}
+        <ActionButtonsContainer>
+          <ActionButton className="primary" onClick={(e) => handleIterationClick(e, design.id)}>
+            <IterateIcon />
+            Iterate
+          </ActionButton>
+          <ActionButton>
+            <RetryIcon />
+            Retry
+          </ActionButton>
+          <ActionButton onClick={(e) => {
+            e.stopPropagation();
+            // We can't directly set the design as the currentAnalysis due to type differences
+            // Create a compatible object that matches the DesignIteration type
+            const analysisData = {
+              id: design.id,
+              parentId: '', // No parent for original design
+              htmlContent: design.htmlContent || '',
+              cssContent: design.cssContent || '',
+              analysis: {
+                strengths: [],
+                weaknesses: [],
+                improvementAreas: []
+              }, // Default empty analysis if not available
+              position: design.position,
+              dimensions: design.dimensions,
+              imageUrl: design.imageUrl
+            } as DesignIteration;
+            
+            setCurrentAnalysis(analysisData);
+            setAnalysisVisible(true);
+          }}>
+            <ViewIcon />
+            View Analysis
+          </ActionButton>
+        </ActionButtonsContainer>
+      </DesignWithActionsContainer>
     );
   };
 
   // Render an iteration separate from the original design
   const renderIteration = (iteration: ExtendedDesignIteration, index: number, parentDesign: Design) => {
-    // Function to handle showing analysis when button is clicked
-    const handleShowAnalysis = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setCurrentAnalysis(iteration);
-      setAnalysisVisible(true);
-    };
-
     return (
       <DesignContainer 
         key={`iteration-container-${iteration.id}`}
         x={iteration.position.x}
         y={iteration.position.y}
       >
-        <HoverContainer>
-          {/* The View Analysis button that appears on hover */}
-          <ViewAnalysisButton onClick={handleShowAnalysis}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 3C4.5 3 1.5 8 1.5 8C1.5 8 4.5 13 8 13C11.5 13 14.5 8 14.5 8C14.5 8 11.5 3 8 3Z" stroke="white" strokeWidth="1.5"/>
-              <circle cx="8" cy="8" r="2" stroke="white" strokeWidth="1.5"/>
-            </svg>
-            View Analysis
-          </ViewAnalysisButton>
-          
+        <DesignWithActionsContainer>
           <div style={{ position: 'relative' }}>
             {/* The iteration badge */}
             <IterationLabel>Iteration {index + 1}</IterationLabel>
@@ -2115,69 +2214,81 @@ export const Canvas: React.FC = () => {
               Improved
             </NewDesignBadge>
             
-            {/* Wrap the iteration design in a container that shows the plus button on hover */}
-            <IterationCardContainer>
-              {/* The iteration design itself */}
-              <IterationDesignCard 
-                isSelected={selectedDesignId === iteration.id}
-                onClick={(e) => handleDesignClick(e, iteration.id)}
-                onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-                style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
-              >
-                <HtmlDesignRenderer
-                  ref={(el: HtmlDesignRendererHandle | null) => {
-                    if (el) {
-                      designRefs.current[iteration.id] = el as any;
-                    }
-                  }}
-                  htmlContent={iteration.htmlContent} 
-                  cssContent={iteration.cssContent}
-                  width={iteration.dimensions?.width} 
-                  height={iteration.dimensions?.height}
-                  onRender={(success) => {
-                    // Only log the first successful render to avoid console clutter
-                    if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                      LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
-                      renderedIterationsRef.current.add(iteration.id);
-                    }
-                  }}
-                />
-                
-                {/* Add processing overlay for iterations */}
-                <ProcessingOverlay 
-                  visible={!!iteration.isProcessing} 
-                  step={iteration.processingStep || null}
-                >
-                  <Spinner />
-                  <h3>
-                    {iteration.processingStep === 'analyzing' && 'Analyzing Design'}
-                    {iteration.processingStep === 'recreating' && 'Generating Improved Design'}
-                    {iteration.processingStep === 'rendering' && 'Finalizing Design'}
-                  </h3>
-                  <p>
-                    {iteration.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
-                    {iteration.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
-                    {iteration.processingStep === 'rendering' && 'Preparing to display your improved design...'}
-                  </p>
-                  <ProcessingSteps step={iteration.processingStep || null} />
-                  <div className="progress-bar">
-                    <div className="progress"></div>
-                  </div>
-                  <div className="step-description">
-                    {iteration.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
-                    {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
-                    {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
-                  </div>
-                </ProcessingOverlay>
-              </IterationDesignCard>
+            {/* The iteration design itself */}
+            <IterationDesignCard 
+              isSelected={selectedDesignId === iteration.id}
+              onClick={(e) => handleDesignClick(e, iteration.id)}
+              onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+              style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
+            >
+              <HtmlDesignRenderer
+                ref={(el: HtmlDesignRendererHandle | null) => {
+                  if (el) {
+                    designRefs.current[iteration.id] = el as any;
+                  }
+                }}
+                htmlContent={iteration.htmlContent} 
+                cssContent={iteration.cssContent}
+                width={iteration.dimensions?.width} 
+                height={iteration.dimensions?.height}
+                onRender={(success) => {
+                  // Only log the first successful render to avoid console clutter
+                  if (success && !renderedIterationsRef.current.has(iteration.id)) {
+                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
+                    renderedIterationsRef.current.add(iteration.id);
+                  }
+                }}
+              />
               
-              {/* The plus button that appears on hover */}
-              <IterationButton onClick={(e) => handleIterationClick(e, iteration.id)}>
-                <PlusIcon />
-              </IterationButton>
-            </IterationCardContainer>
+              {/* Add processing overlay for iterations */}
+              <ProcessingOverlay 
+                visible={!!iteration.isProcessing} 
+                step={iteration.processingStep || null}
+              >
+                <Spinner />
+                <h3>
+                  {iteration.processingStep === 'analyzing' && 'Analyzing Design'}
+                  {iteration.processingStep === 'recreating' && 'Generating Improved Design'}
+                  {iteration.processingStep === 'rendering' && 'Finalizing Design'}
+                </h3>
+                <p>
+                  {iteration.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
+                  {iteration.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
+                  {iteration.processingStep === 'rendering' && 'Preparing to display your improved design...'}
+                </p>
+                <ProcessingSteps step={iteration.processingStep || null} />
+                <div className="progress-bar">
+                  <div className="progress"></div>
+                </div>
+                <div className="step-description">
+                  {iteration.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
+                  {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
+                  {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
+                </div>
+              </ProcessingOverlay>
+            </IterationDesignCard>
           </div>
-        </HoverContainer>
+          
+          {/* New action buttons component */}
+          <ActionButtonsContainer>
+            <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
+              <IterateIcon />
+              Iterate
+            </ActionButton>
+            <ActionButton>
+              <RetryIcon />
+              Retry
+            </ActionButton>
+            <ActionButton onClick={(e) => {
+              e.stopPropagation();
+              setCurrentAnalysis(iteration);
+              setAnalysisVisible(true);
+            }}>
+              <ViewIcon />
+              View Analysis
+            </ActionButton>
+          </ActionButtonsContainer>
+        </DesignWithActionsContainer>
       </DesignContainer>
     );
   };
