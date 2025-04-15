@@ -931,6 +931,7 @@ const ActionButton = styled.button`
   cursor: pointer;
   transition: all 0.2s ease;
   min-width: 120px;
+  white-space: nowrap;
   
   &:hover {
     background-color: #f5f5f5;
@@ -949,6 +950,10 @@ const ActionButton = styled.button`
     &:hover {
       background-color: #4338ca;
     }
+  }
+  
+  &.analysis {
+    min-width: 140px;
   }
 `;
 
@@ -2158,7 +2163,7 @@ export const Canvas: React.FC = () => {
         
         {/* New action buttons component */}
         <ActionButtonsContainer>
-          <ActionButton onClick={(e) => {
+          <ActionButton className="analysis" onClick={(e) => {
             e.stopPropagation();
             // Create a compatible object that matches the DesignIteration type
             const analysisData = {
@@ -2273,7 +2278,7 @@ export const Canvas: React.FC = () => {
           
           {/* New action buttons component */}
           <ActionButtonsContainer>
-            <ActionButton onClick={(e) => {
+            <ActionButton className="analysis" onClick={(e) => {
               e.stopPropagation();
               setCurrentAnalysis(iteration);
               setAnalysisVisible(true);
