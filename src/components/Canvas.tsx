@@ -922,8 +922,8 @@ const ActionButton = styled.button`
   gap: 6px;
   background-color: white;
   border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  padding: 6px 12px;
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -2155,17 +2155,8 @@ export const Canvas: React.FC = () => {
         
         {/* New action buttons component */}
         <ActionButtonsContainer>
-          <ActionButton className="primary" onClick={(e) => handleIterationClick(e, design.id)}>
-            <IterateIcon />
-            Iterate
-          </ActionButton>
-          <ActionButton>
-            <RetryIcon />
-            Retry
-          </ActionButton>
           <ActionButton onClick={(e) => {
             e.stopPropagation();
-            // We can't directly set the design as the currentAnalysis due to type differences
             // Create a compatible object that matches the DesignIteration type
             const analysisData = {
               id: design.id,
@@ -2187,6 +2178,14 @@ export const Canvas: React.FC = () => {
           }}>
             <ViewIcon />
             View Analysis
+          </ActionButton>
+          <ActionButton>
+            <RetryIcon />
+            Retry
+          </ActionButton>
+          <ActionButton className="primary" onClick={(e) => handleIterationClick(e, design.id)}>
+            <IterateIcon />
+            Iterate
           </ActionButton>
         </ActionButtonsContainer>
       </DesignWithActionsContainer>
@@ -2271,14 +2270,6 @@ export const Canvas: React.FC = () => {
           
           {/* New action buttons component */}
           <ActionButtonsContainer>
-            <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
-              <IterateIcon />
-              Iterate
-            </ActionButton>
-            <ActionButton>
-              <RetryIcon />
-              Retry
-            </ActionButton>
             <ActionButton onClick={(e) => {
               e.stopPropagation();
               setCurrentAnalysis(iteration);
@@ -2286,6 +2277,14 @@ export const Canvas: React.FC = () => {
             }}>
               <ViewIcon />
               View Analysis
+            </ActionButton>
+            <ActionButton>
+              <RetryIcon />
+              Retry
+            </ActionButton>
+            <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
+              <IterateIcon />
+              Iterate
             </ActionButton>
           </ActionButtonsContainer>
         </DesignWithActionsContainer>
