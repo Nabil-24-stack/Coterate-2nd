@@ -15,6 +15,7 @@ const SidebarContainer = styled.div`
   flex-direction: column;
   position: relative;
   z-index: 100; /* Lower z-index than header */
+  overflow: hidden; /* Ensure the pseudo-element doesn't overflow */
   
   &::before {
     content: "";
@@ -30,6 +31,8 @@ const SidebarContainer = styled.div`
     background-size: 200px;
     filter: url(#noise);
     mix-blend-mode: overlay;
+    width: 100%;
+    height: 100%;
   }
 `;
 

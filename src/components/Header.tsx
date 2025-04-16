@@ -28,6 +28,7 @@ const HeaderContainer = styled.header`
   align-items: center;
   padding: 0 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
   
   &::before {
     content: "";
@@ -43,6 +44,8 @@ const HeaderContainer = styled.header`
     background-size: 200px;
     filter: url(#noise);
     mix-blend-mode: overlay;
+    width: 100%;
+    height: 100%;
   }
 `;
 
