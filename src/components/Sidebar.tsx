@@ -40,8 +40,8 @@ const Title = styled.h1`
 const ButtonsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 8px;
+  gap: 16px;
+  margin: 16px 8px;
 `;
 
 const NewPageButton = styled.button`
@@ -83,7 +83,7 @@ const FigmaIcon = styled.span`
 const PageList = styled.div`
   flex: 1;
   overflow-y: auto;
-  margin-top: 8px;
+  margin-top: 0;
 `;
 
 const MoreButtonContainer = styled.div`
