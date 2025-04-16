@@ -13,8 +13,9 @@ const SidebarContainer = styled.div`
   background-color: #383838;
   background-image: url('/otis-redding 11.png');
   background-repeat: repeat;
-  background-size: 200px;
-  background-blend-mode: overlay;
+  background-size: 100px;
+  background-position: center;
+  background-blend-mode: soft-light;
   display: flex;
   flex-direction: column;
   position: relative;
