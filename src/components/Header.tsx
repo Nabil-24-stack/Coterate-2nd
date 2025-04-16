@@ -4,9 +4,9 @@ import styled from 'styled-components';
 const HeaderContainer = styled.header`
   height: 60px;
   background-color: #383838;
-  background-image: url('/Cot-bg.png');
-  background-repeat: no-repeat;
-  background-size: cover;
+  background-image: url('/otis-redding 11.png');
+  background-repeat: repeat;
+  background-size: 100px;
   background-position: center;
   background-blend-mode: soft-light;
   border-bottom: 1px solid #4D4D4D;
