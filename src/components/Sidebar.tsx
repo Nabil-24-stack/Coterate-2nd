@@ -147,7 +147,6 @@ const PageItem = styled.div<{ isActive: boolean }>`
   height: 44px;
   display: flex;
   align-items: center;
-  transition: background-color 0.2s ease;
   
   &:hover {
     background-color: ${props => props.isActive ? '#505050' : '#444444'};
