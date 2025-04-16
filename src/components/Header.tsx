@@ -1,6 +1,16 @@
 import React from 'react';
 import styled from 'styled-components';
 
+// Create an SVG noise filter
+const noiseSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0">
+  <filter id="noise">
+    <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+    <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.5 0" />
+  </filter>
+</svg>
+`;
+
 const HeaderContainer = styled.header`
   height: 60px;
   background-color: #383838;
@@ -22,13 +32,11 @@ const HeaderContainer = styled.header`
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('/otis-redding 11.png');
-    background-repeat: repeat;
-    background-size: 20px;
-    background-position: center;
-    opacity: 0.1;
+    opacity: 0.07;
     pointer-events: none;
     z-index: -1;
+    background-color: transparent;
+    filter: url(#noise);
   }
 `;
 
@@ -53,12 +61,15 @@ const LogoText = styled.span`
 
 const Header: React.FC = () => {
   return (
-    <HeaderContainer>
-      <Logo>
-        <LogoImage src="/Logo.png" alt="Coterate Logo" />
-        <LogoText>Coterate</LogoText>
-      </Logo>
-    </HeaderContainer>
+    <>
+      <div dangerouslySetInnerHTML={{ __html: noiseSvg }} />
+      <HeaderContainer>
+        <Logo>
+          <LogoImage src="/Logo.png" alt="Coterate Logo" />
+          <LogoText>Coterate</LogoText>
+        </Logo>
+      </HeaderContainer>
+    </>
   );
 };
 

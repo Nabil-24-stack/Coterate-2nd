@@ -23,13 +23,11 @@ const SidebarContainer = styled.div`
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('/otis-redding 11.png');
-    background-repeat: repeat;
-    background-size: 20px;
-    background-position: center;
-    opacity: 0.1;
+    opacity: 0.07;
     pointer-events: none;
     z-index: -1;
+    background-color: transparent;
+    filter: url(#noise);
   }
 `;
 
