@@ -23,12 +23,13 @@ const SidebarContainer = styled.div`
     left: 0;
     right: 0;
     bottom: 0;
-    opacity: 0.05;
+    opacity: 0.2;
     pointer-events: none;
     z-index: -1;
     background-color: transparent;
-    background-size: 300px;
+    background-size: 200px;
     filter: url(#noise);
+    mix-blend-mode: overlay;
   }
 `;
 

@@ -5,8 +5,8 @@ import styled from 'styled-components';
 const noiseSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0">
   <filter id="noise">
-    <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" stitchTiles="stitch" />
-    <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.5 0" />
+    <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" />
+    <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.8 0" />
   </filter>
 </svg>
 `;
@@ -36,12 +36,13 @@ const HeaderContainer = styled.header`
     left: 0;
     right: 0;
     bottom: 0;
-    opacity: 0.05;
+    opacity: 0.2;
     pointer-events: none;
     z-index: -1;
     background-color: transparent;
-    background-size: 300px;
+    background-size: 200px;
     filter: url(#noise);
+    mix-blend-mode: overlay;
   }
 `;
 
