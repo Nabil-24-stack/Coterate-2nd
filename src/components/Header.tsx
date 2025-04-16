@@ -4,6 +4,9 @@ import styled from 'styled-components';
 const HeaderContainer = styled.header`
   height: 60px;
   background-color: #383838;
+  background-image: url('/Cot-bg.png');
+  background-size: cover;
+  background-blend-mode: overlay;
   border-bottom: 1px solid #4D4D4D;
   display: flex;
   align-items: center;
