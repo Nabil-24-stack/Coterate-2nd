@@ -10,25 +10,11 @@ const SidebarContainer = styled.div`
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #4D4D4D;
-  background-color: #383838;
+  background: #383838 url('/Cot-bg.png') repeat;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 100; /* Lower z-index than header */
-  
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: url('/Cot-bg.png');
-    background-position: center;
-    background-size: cover;
-    opacity: 1;
-    z-index: -1;
-  }
 `;
 
 const SectionTitle = styled.h2`
