@@ -4,21 +4,32 @@ import styled from 'styled-components';
 const HeaderContainer = styled.header`
   height: 60px;
   background-color: #383838;
-  background-image: url('/otis-redding 11.png');
-  background-repeat: repeat;
-  background-size: 30px;
-  background-position: center;
-  background-blend-mode: overlay;
-  border-bottom: 1px solid #4D4D4D;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
+  border-bottom: 1px solid #4D4D4D;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('/otis-redding 11.png');
+    background-repeat: repeat;
+    background-size: 20px;
+    background-position: center;
+    opacity: 0.1;
+    pointer-events: none;
+    z-index: -1;
+  }
 `;
 
 const Logo = styled.div`
