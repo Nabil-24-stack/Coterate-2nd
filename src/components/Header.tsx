@@ -6,9 +6,9 @@ const HeaderContainer = styled.header`
   background-color: #383838;
   background-image: url('/otis-redding 11.png');
   background-repeat: repeat;
-  background-size: 100px;
+  background-size: 30px;
   background-position: center;
-  background-blend-mode: soft-light;
+  background-blend-mode: overlay;
   border-bottom: 1px solid #4D4D4D;
   display: flex;
   align-items: center;
