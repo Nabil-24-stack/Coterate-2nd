@@ -3,8 +3,7 @@ import styled from 'styled-components';
 
 const HeaderContainer = styled.header`
   height: 60px;
-  background: url('/Cot-bg.png');
-  background-size: cover;
+  background-color: #383838;
   border-bottom: 1px solid #4D4D4D;
   display: flex;
   align-items: center;
@@ -15,12 +14,29 @@ const HeaderContainer = styled.header`
   right: 0;
   z-index: 1000;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  position: relative;
+  
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/Cot-bg.png');
+    background-position: center;
+    background-size: cover;
+    opacity: 1;
+    z-index: -1;
+  }
 `;
 
 const Logo = styled.div`
   display: flex;
   align-items: center;
   gap: 4px;
+  position: relative;
+  z-index: 2;
 `;
 
 const LogoImage = styled.img`

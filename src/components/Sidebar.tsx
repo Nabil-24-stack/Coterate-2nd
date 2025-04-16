@@ -10,12 +10,25 @@ const SidebarContainer = styled.div`
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #4D4D4D;
-  background: url('/Cot-bg.png');
-  background-size: cover;
+  background-color: #383838;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 100; /* Lower z-index than header */
+  
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/Cot-bg.png');
+    background-position: center;
+    background-size: cover;
+    opacity: 1;
+    z-index: -1;
+  }
 `;
 
 const SectionTitle = styled.h2`
@@ -23,6 +36,8 @@ const SectionTitle = styled.h2`
   font-weight: 600;
   color: #FFFFFF;
   margin: 16px 16px 8px 16px;
+  position: relative;
+  z-index: 2;
 `;
 
 const Header = styled.div`
@@ -30,12 +45,16 @@ const Header = styled.div`
   height: 60px;
   display: flex;
   align-items: center;
+  position: relative;
+  z-index: 2;
 `;
 
 const Title = styled.h1`
   font-size: 18px;
   font-weight: 600;
   color: #FFFFFF;
+  position: relative;
+  z-index: 2;
 `;
 
 const ButtonsContainer = styled.div`
@@ -43,6 +62,8 @@ const ButtonsContainer = styled.div`
   flex-direction: column;
   gap: 16px;
   margin: 16px 8px;
+  position: relative;
+  z-index: 2;
 `;
 
 const NewPageButton = styled.button`
@@ -85,6 +106,8 @@ const PageList = styled.div`
   flex: 1;
   overflow-y: auto;
   margin-top: 0;
+  position: relative;
+  z-index: 2;
 `;
 
 const MoreButtonContainer = styled.div`
@@ -250,6 +273,8 @@ const BottomSection = styled.div`
   margin-top: auto;
   padding: 0 8px 8px 8px;
   width: 100%;
+  position: relative;
+  z-index: 2;
 `;
 
 interface DropdownProps {

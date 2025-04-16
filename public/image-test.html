@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Test</title>
+  <style>
+    .test-container {
+      width: 500px;
+      height: 300px;
+      border: 2px solid black;
+      background-image: url('./Cot-bg.png');
+      background-size: cover;
+      margin: 20px;
+    }
+    
+    .with-color {
+      background-color: #383838;
+      background-image: url('./Cot-bg.png');
+      background-size: cover;
+    }
+    
+    .direct-img {
+      max-width: 300px;
+      border: 2px solid red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Testing Image Loading</h1>
+  
+  <h2>Background Image Only:</h2>
+  <div class="test-container"></div>
+  
+  <h2>Background Image with Color:</h2>
+  <div class="test-container with-color"></div>
+  
+  <h2>Direct Image Tag:</h2>
+  <img class="direct-img" src="./Cot-bg.png" alt="Test Image" />
+</body>
+</html> 
