@@ -25,7 +25,7 @@ const CanvasContainer = styled.div`
   right: 0;
   bottom: 0;
   left: 230px; /* Sidebar width */
-  background-color: #DBDBDB;
+  background-color: #767676;
   overflow: hidden;
 `;
 
@@ -36,7 +36,7 @@ const InfiniteCanvas = styled.div<{ scale: number }>`
   right: 0;
   bottom: 0;
   left: 0;
-  background-color: #DBDBDB;
+  background-color: #767676;
   cursor: grab;
   
   &:active {
@@ -105,8 +105,8 @@ const IterationButton = styled.button`
   transform: translateY(-50%);
   width: 40px;
   height: 40px;
-  background-color: #007bff;
-  color: white;
+  background-color: #26D4C8;
+  color: #383838;
   border: none;
   border-radius: 50%;
   display: flex;
@@ -119,12 +119,12 @@ const IterationButton = styled.button`
   padding: 0;
   
   &:hover {
-    background-color: #0069d9;
+    background-color: #1fb9ae;
     transform: translateY(-50%) scale(1.05);
   }
   
   &:active {
-    background-color: #0062cc;
+    background-color: #18a79d;
     transform: translateY(-50%) scale(0.95);
   }
 `;
@@ -132,8 +132,8 @@ const IterationButton = styled.button`
 // SVG Plus icon for perfect centering
 const PlusIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8 2V14" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    <path d="M2 8H14" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M8 2V14" stroke="#383838" strokeWidth="2" strokeLinecap="round" />
+    <path d="M2 8H14" stroke="#383838" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
 
@@ -143,25 +143,25 @@ const EmptyCanvasMessage = styled.div`
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: #888;
+  color: #FFFFFF;
   text-align: center;
   max-width: 500px;
   line-height: 1.5;
-  background-color: white;
+  background-color: #383838;
   padding: 30px 40px;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid #4D4D4D;
 
   h2 {
     font-size: 28px;
     font-weight: 600;
     margin-bottom: 12px;
-    color: #333;
+    color: #FFFFFF;
   }
 
   p {
     font-size: 16px;
-    color: #666;
+    color: #CFCFCF;
   }
 `;
 
@@ -171,7 +171,7 @@ const LoadingIndicator = styled.div`
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: #007bff;
+  color: #26D4C8;
   font-size: 18px;
   display: flex;
   flex-direction: column;
@@ -200,7 +200,7 @@ const LoadingSpinner = () => (
       cy="25" 
       r="20" 
       fill="none" 
-      stroke="#007bff" 
+      stroke="#26D4C8" 
       strokeWidth="4"
       strokeDasharray="60 20"
     />
@@ -214,7 +214,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(56, 56, 56, 0.95);
   display: ${props => props.visible ? 'flex' : 'none'};
   flex-direction: column;
   align-items: center;
@@ -223,7 +223,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
   border-radius: 8px;
   padding: 20px;
   text-align: center;
-  color: #333;
+  color: #FFFFFF;
   font-size: 16px;
   line-height: 1.5;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
@@ -232,7 +232,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
     margin-top: 15px;
     margin-bottom: 5px;
     font-weight: 600;
-    color: #4f46e5;
+    color: #26D4C8;
   }
   
   p {
@@ -240,18 +240,13 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
     max-width: 300px;
     opacity: 0.8;
     font-size: 14px;
+    color: #CFCFCF;
   }
   
   svg {
     animation: rotate 1.5s ease-in-out infinite;
     width: 40px;
     height: 40px;
-    
-    @keyframes rotate {
-      100% {
-        transform: rotate(360deg);
-      }
-    }
   }
   
   .analysis-list {
@@ -905,7 +900,7 @@ const ActionButtonsContainer = styled.div`
   transform: translateX(-50%);
   display: flex;
   gap: 12px;
-  background-color: white;
+  background-color: #383838;
   padding: 8px 16px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -922,8 +917,8 @@ const ActionButton = styled.button`
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background-color: white;
-  border: 1px solid #e0e0e0;
+  background-color: #767676;
+  border: 1px solid #4D4D4D;
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 14px;
@@ -932,23 +927,29 @@ const ActionButton = styled.button`
   transition: all 0.2s ease;
   min-width: 120px;
   white-space: nowrap;
+  color: #FFFFFF;
   
   &:hover {
-    background-color: #f5f5f5;
+    background-color: #686868;
   }
   
   svg {
     width: 16px;
     height: 16px;
+    stroke: #FFFFFF;
   }
   
   &.primary {
-    background-color: #4f46e5;
-    color: white;
-    border-color: #4f46e5;
+    background-color: #26D4C8;
+    color: #383838;
+    border-color: #26D4C8;
     
     &:hover {
-      background-color: #4338ca;
+      background-color: #1fb9ae;
+    }
+    
+    svg {
+      stroke: #383838;
     }
   }
   
@@ -971,7 +972,7 @@ const PromptDialog = styled.div<{ visible: boolean, position: { x: number, y: nu
   position: absolute;
   top: ${props => props.position.y}px;
   left: ${props => props.position.x}px;
-  background-color: white;
+  background-color: #383838;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   padding: 16px;
@@ -986,19 +987,21 @@ const PromptDialog = styled.div<{ visible: boolean, position: { x: number, y: nu
 const PromptInput = styled.input`
   width: 100%;
   padding: 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #4D4D4D;
   border-radius: 6px;
   font-size: 14px;
   margin-bottom: 12px;
   transition: border-color 0.2s ease;
+  background-color: #444444;
+  color: #FFFFFF;
   
   &:focus {
-    border-color: #4f46e5;
+    border-color: #26D4C8;
     outline: none;
   }
   
   &::placeholder {
-    color: #aaa;
+    color: #CFCFCF;
   }
 `;
 
@@ -1017,22 +1020,22 @@ const PromptButton = styled.button`
   transition: all 0.2s ease;
   
   &.cancel {
-    background: transparent;
-    border: 1px solid #e0e0e0;
-    color: #666;
+    background-color: #767676;
+    border: 1px solid #4D4D4D;
+    color: #FFFFFF;
     
     &:hover {
-      background-color: #f5f5f5;
+      background-color: #686868;
     }
   }
   
   &.apply {
-    background-color: #4f46e5;
-    border: 1px solid #4f46e5;
-    color: white;
+    background-color: #26D4C8;
+    border: 1px solid #26D4C8;
+    color: #383838;
     
     &:hover {
-      background-color: #4338ca;
+      background-color: #1fb9ae;
     }
   }
 `;

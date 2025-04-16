@@ -3,8 +3,8 @@ import styled from 'styled-components';
 
 const HeaderContainer = styled.header`
   height: 60px;
-  background-color: #fff;
-  border-bottom: 1px solid #e5e5e5;
+  background-color: #383838;
+  border-bottom: 1px solid #4D4D4D;
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -31,7 +31,7 @@ const LogoImage = styled.img`
 const LogoText = styled.span`
   font-size: 24px;
   font-weight: 600;
-  color: #333;
+  color: #FFFFFF;
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 

@@ -9,8 +9,8 @@ const SidebarContainer = styled.div`
   width: 230px;
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
-  border-right: 1px solid #E3E6EA;
-  background-color: #F8F8F8;
+  border-right: 1px solid #4D4D4D;
+  background-color: #383838;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -20,7 +20,7 @@ const SidebarContainer = styled.div`
 const SectionTitle = styled.h2`
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: #FFFFFF;
   margin: 16px 16px 8px 16px;
 `;
 
@@ -34,7 +34,7 @@ const Header = styled.div`
 const Title = styled.h1`
   font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: #FFFFFF;
 `;
 
 const ButtonsContainer = styled.div`
@@ -46,32 +46,33 @@ const ButtonsContainer = styled.div`
 
 const NewPageButton = styled.button`
   padding: 10px 15px;
-  background-color: white;
-  color: #333;
+  background-color: #767676;
+  color: #FFFFFF;
   border-radius: 8px;
   font-weight: 600;
   transition: background-color 0.2s;
   width: 100%;
   text-align: center;
-  border: 1px solid #E3E6EA;
+  border: 1px solid #4D4D4D;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   font-family: 'Plus Jakarta Sans', sans-serif;
   
   &:hover {
-    background-color: #f5f5f5;
+    background-color: #686868;
   }
 `;
 
 const FigmaImportButton = styled(NewPageButton)`
-  background-color: #1E1E1E;
-  color: white;
+  background-color: #383838;
+  color: #FFFFFF;
+  border: 1px solid #26D4C8;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   
   &:hover {
-    background-color: #000;
+    background-color: #303030;
   }
 `;
 
@@ -95,7 +96,7 @@ const MoreButton = styled.button`
   border: none;
   cursor: pointer;
   font-size: 12px;
-  color: #666;
+  color: #FFFFFF;
   padding: 2px 8px;
   opacity: 0;
   position: absolute;
@@ -112,14 +113,14 @@ const MoreButton = styled.button`
 const PageItem = styled.div<{ isActive: boolean }>`
   padding: 12px 16px;
   cursor: pointer;
-  background-color: ${props => props.isActive ? '#EFEFEF' : 'transparent'};
+  background-color: ${props => props.isActive ? '#444444' : 'transparent'};
   position: relative;
   height: 44px;
   display: flex;
   align-items: center;
   
   &:hover {
-    background-color: ${props => props.isActive ? '#EFEFEF' : 'rgba(0, 0, 0, 0.03)'};
+    background-color: ${props => props.isActive ? '#444444' : '#505050'};
   }
   
   /* Show the MoreButton on hover with opacity */
@@ -134,7 +135,7 @@ const PageName = styled.div`
   align-items: center;
   justify-content: space-between;
   position: relative;
-  color: #333;
+  color: #FFFFFF;
   font-size: 14px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   width: 100%;
@@ -144,14 +145,14 @@ const DropdownMenu = styled.div`
   position: absolute;
   top: 100%;
   right: 0;
-  background-color: white;
+  background-color: #383838;
   border-radius: 4px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   z-index: 10;
   min-width: 150px;
   margin-top: 5px;
-  border: 1px solid #E3E6EA;
+  border: 1px solid #4D4D4D;
 `;
 
 const MenuItem = styled.button`
@@ -165,16 +166,17 @@ const MenuItem = styled.button`
   font-size: 14px;
   font-weight: 400;
   font-family: 'Plus Jakarta Sans', sans-serif;
+  color: #FFFFFF;
   
   &:hover {
-    background-color: #f5f5f5;
+    background-color: #505050;
   }
   
   &.delete {
-    color: #e53935;
+    color: #ff6b6b;
     
     &:hover {
-      background-color: #ffebee;
+      background-color: #5a3030;
     }
   }
 `;
@@ -183,11 +185,12 @@ const MenuItem = styled.button`
 const EditInput = styled.input`
   width: 100%;
   padding: 4px 8px;
-  border: 1px solid #4A90E2;
+  border: 1px solid #26D4C8;
   border-radius: 4px;
   font-size: 14px;
   font-weight: 500;
-  background-color: white;
+  background-color: #444444;
+  color: #FFFFFF;
   font-family: 'Plus Jakarta Sans', sans-serif;
   
   &:focus {
@@ -198,9 +201,9 @@ const EditInput = styled.input`
 // Add new styled components for the user profile section
 const UserProfileSection = styled.div`
   padding: 12px;
-  background-color: white;
+  background-color: #767676;
   border-radius: 8px;
-  border: 1px solid #E3E6EA;
+  border: 1px solid #4D4D4D;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -211,32 +214,33 @@ const UserProfileSection = styled.div`
 
 const UserInfo = styled.div`
   font-size: 14px;
-  color: #333;
+  color: #FFFFFF;
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
 const UserName = styled.div`
   font-weight: 600;
   font-size: 14px;
-  color: #333;
+  color: #FFFFFF;
 `;
 
 const UserEmail = styled.div`
   font-size: 12px;
-  color: #666;
+  color: #CFCFCF;
 `;
 
 const SignOutButton = styled.button`
   margin-top: 8px;
   padding: 4px 8px;
   font-size: 12px;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
+  background-color: #767676;
+  border: 1px solid #4A4A4A;
   border-radius: 4px;
   cursor: pointer;
+  color: #FFFFFF;
   
   &:hover {
-    background-color: #e6e6e6;
+    background-color: #686868;
   }
 `;
 
