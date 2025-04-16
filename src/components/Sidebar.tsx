@@ -41,7 +41,7 @@ const ButtonsContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 16px;
+  margin: 8px;
 `;
 
 const NewPageButton = styled.button`
@@ -247,7 +247,7 @@ const SignOutButton = styled.button`
 // Add a new styled component for the bottom section
 const BottomSection = styled.div`
   margin-top: auto;
-  padding: 0 16px 16px 16px;
+  padding: 0 8px 8px 8px;
   width: 100%;
 `;
 
