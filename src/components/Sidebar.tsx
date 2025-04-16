@@ -12,8 +12,8 @@ const SidebarContainer = styled.div`
   border-right: 1px solid #4D4D4D;
   background-color: #383838;
   background-image: url('/Cot-bg.png');
-  background-repeat: repeat;
-  background-size: 100px;
+  background-repeat: no-repeat;
+  background-size: cover;
   background-position: center;
   background-blend-mode: soft-light;
   display: flex;
