@@ -3,12 +3,12 @@
   "name": "Coterate",
   "icons": [
     {
-      "src": "favicon.ico",
+      "src": "Logo.png",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "type": "image/png"
     },
     {
-      "src": "Coterate logo.png",
+      "src": "Logo.png",
       "type": "image/png",
       "sizes": "192x192"
     }

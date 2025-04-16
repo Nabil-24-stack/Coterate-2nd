@@ -39,7 +39,7 @@ const Header: React.FC = () => {
   return (
     <HeaderContainer>
       <Logo>
-        <LogoImage src="/Coterate logo.png" alt="Coterate Logo" />
+        <LogoImage src="/Logo.png" alt="Coterate Logo" />
         <LogoText>Coterate</LogoText>
       </Logo>
     </HeaderContainer>
