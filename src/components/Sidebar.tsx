@@ -11,8 +11,9 @@ const SidebarContainer = styled.div`
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #4D4D4D;
   background-color: #383838;
-  background-image: url('/Cot-bg.png');
-  background-size: cover;
+  background-image: url('/otis-redding 11.png');
+  background-repeat: repeat;
+  background-size: 200px;
   background-blend-mode: overlay;
   display: flex;
   flex-direction: column;
