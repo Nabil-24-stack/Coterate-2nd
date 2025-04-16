@@ -142,14 +142,15 @@ const MoreButton = styled.button`
 const PageItem = styled.div<{ isActive: boolean }>`
   padding: 12px 16px;
   cursor: pointer;
-  background-color: ${props => props.isActive ? '#444444' : 'transparent'};
+  background-color: ${props => props.isActive ? '#505050' : 'transparent'};
   position: relative;
   height: 44px;
   display: flex;
   align-items: center;
+  transition: background-color 0.2s ease;
   
   &:hover {
-    background-color: ${props => props.isActive ? '#444444' : '#505050'};
+    background-color: ${props => props.isActive ? '#505050' : '#444444'};
   }
   
   /* Show the MoreButton on hover with opacity */
