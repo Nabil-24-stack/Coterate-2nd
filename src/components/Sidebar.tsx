@@ -10,7 +10,7 @@ const SidebarContainer = styled.div`
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #4D4D4D;
-  background: #383838 url('/Cot-bg.png');
+  background: url('/Cot-bg.png');
   background-size: cover;
   display: flex;
   flex-direction: column;

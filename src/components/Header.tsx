@@ -3,7 +3,7 @@ import styled from 'styled-components';
 
 const HeaderContainer = styled.header`
   height: 60px;
-  background: #383838 url('/Cot-bg.png');
+  background: url('/Cot-bg.png');
   background-size: cover;
   border-bottom: 1px solid #4D4D4D;
   display: flex;
