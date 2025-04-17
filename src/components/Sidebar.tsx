@@ -238,7 +238,7 @@ const UserProfileSection = styled.div`
   width: 100%;
   margin: 0;
   position: relative;
-  border-top: 1px solid #4D4D4D;
+  border-top: 1px solid #6A6A6A;
   
   &:hover {
     background-color: #444444;
