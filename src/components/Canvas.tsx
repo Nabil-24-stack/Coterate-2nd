@@ -893,7 +893,7 @@ const DesignCardContainer = styled.div`
 // Container for action buttons
 const ActionButtonsContainer = styled.div`
   position: absolute;
-  bottom: -50px;
+  top: -50px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -948,6 +948,15 @@ const ActionButton = styled.button`
     
     svg {
       stroke: #383838;
+    }
+  }
+  
+  &.secondary {
+    background-color: #4D4D4D;
+    border-color: #5D5D5D;
+    
+    &:hover {
+      background-color: #5A5A5A;
     }
   }
   
@@ -2334,9 +2343,9 @@ export const Canvas: React.FC = () => {
           )}
         </DesignCard>
         
-        {/* Add the drag handle */}
-        <DragHandle 
-          onMouseDown={(e) => {
+        {/* New action buttons component */}
+        <ActionButtonsContainer>
+          <ActionButton className="secondary" onMouseDown={(e) => {
             e.stopPropagation();
             // Select the design if not already selected
             if (selectedDesignId !== design.id) {
@@ -2352,13 +2361,10 @@ export const Canvas: React.FC = () => {
             
             // Store the initial position for calculation during dragging
             setDesignInitialPosition(design.position);
-          }}
-        >
-          <DragHandleIcon />
-        </DragHandle>
-        
-        {/* New action buttons component */}
-        <ActionButtonsContainer>
+          }}>
+            <DragHandleIcon />
+            Move
+          </ActionButton>
           <ActionButton className="analysis" onClick={(e) => {
             e.stopPropagation();
             // Create a compatible object that matches the DesignIteration type
@@ -2417,29 +2423,6 @@ export const Canvas: React.FC = () => {
               Improved
             </NewDesignBadge>
             
-            {/* Add the drag handle */}
-            <DragHandle 
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                // Select the design if not already selected
-                if (selectedDesignId !== iteration.id) {
-                  setSelectedDesignId(iteration.id);
-                }
-                
-                // Start dragging the design
-                setIsDesignDragging(true);
-                setDesignDragStart({
-                  x: e.clientX,
-                  y: e.clientY
-                });
-                
-                // Store the initial position for calculation during dragging
-                setDesignInitialPosition(iteration.position);
-              }}
-            >
-              <DragHandleIcon />
-            </DragHandle>
-            
             {/* The iteration design itself */}
             <IterationDesignCard 
               isSelected={selectedDesignId === iteration.id}
@@ -2497,6 +2480,26 @@ export const Canvas: React.FC = () => {
           
           {/* New action buttons component */}
           <ActionButtonsContainer>
+            <ActionButton className="secondary" onMouseDown={(e) => {
+              e.stopPropagation();
+              // Select the design if not already selected
+              if (selectedDesignId !== iteration.id) {
+                setSelectedDesignId(iteration.id);
+              }
+              
+              // Start dragging the design
+              setIsDesignDragging(true);
+              setDesignDragStart({
+                x: e.clientX,
+                y: e.clientY
+              });
+              
+              // Store the initial position for calculation during dragging
+              setDesignInitialPosition(iteration.position);
+            }}>
+              <DragHandleIcon />
+              Move
+            </ActionButton>
             <ActionButton className="analysis" onClick={(e) => {
               e.stopPropagation();
               setCurrentAnalysis(iteration);
