@@ -72,15 +72,14 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
   border-radius: 8px;
   overflow: visible;
   box-shadow: ${props => props.isSelected 
-    ? '0 0 0 2px #4f46e5, 0 4px 12px rgba(0, 0, 0, 0.15)' 
+    ? '0 0 0 2px #26D4C8, 0 4px 12px rgba(0, 0, 0, 0.15)' 
     : '0 4px 12px rgba(0, 0, 0, 0.08)'};
   background: white;
-  transition: box-shadow 0.2s ease-in-out;
   cursor: ${props => props.isSelected ? 'move' : 'pointer'};
   
   &:hover {
     box-shadow: ${props => props.isSelected 
-      ? '0 0 0 2px #4f46e5, 0 6px 16px rgba(0, 0, 0, 0.18)' 
+      ? '0 0 0 2px #26D4C8, 0 6px 16px rgba(0, 0, 0, 0.18)' 
       : '0 6px 16px rgba(0, 0, 0, 0.12)'};
   }
 `;
@@ -336,7 +335,7 @@ const Spinner = () => (
       cy="25" 
       r="20" 
       fill="none" 
-      stroke="#4f46e5" 
+      stroke="#26D4C8" 
       strokeWidth="5"
       strokeDasharray="80 50" 
     />
@@ -448,9 +447,8 @@ const Tab = styled.button<{ active: boolean }>`
   font-size: 14px;
   font-weight: ${props => props.active ? '600' : '400'};
   color: ${props => props.active ? '#333' : '#666'};
-  border-bottom: 2px solid ${props => props.active ? '#4f46e5' : 'transparent'};
+  border-bottom: 2px solid ${props => props.active ? '#26D4C8' : 'transparent'};
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
   
   &:hover {
     color: ${props => props.active ? '#333' : '#444'};
@@ -575,7 +573,7 @@ const AnalysisPanelContent = styled.div`
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background-color: #4f46e5;
+          background-color: #26D4C8;
         }
       }
       
@@ -591,7 +589,7 @@ const AnalysisPanelContent = styled.div`
       padding: 10px;
       border-radius: 6px;
       margin-bottom: 10px;
-      border-left: 3px solid #4f46e5;
+      border-left: 3px solid #26D4C8;
     }
   }
 `;
@@ -610,7 +608,7 @@ const IterationDisplayContainer = styled.div`
 const ConnectionLine = styled.div`
   position: absolute;
   height: 2px;
-  background-color: #4f46e5;
+  background-color: #26D4C8;
   top: 50%;
   z-index: 3;
   transform: translateY(-50%);
@@ -621,7 +619,7 @@ const ConnectionLine = styled.div`
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background-color: #4f46e5;
+    background-color: #26D4C8;
     top: 50%;
     transform: translateY(-50%);
   }
@@ -821,7 +819,7 @@ const ViewAnalysisButton = styled.button`
   top: -40px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: #4f46e5;
+  background-color: #26D4C8;
   color: white;
   border: none;
   border-radius: 4px;
@@ -838,7 +836,7 @@ const ViewAnalysisButton = styled.button`
   gap: 6px;
   
   &:hover {
-    background-color: #4338ca;
+    background-color: #1fb9ae;
   }
   
   svg {
@@ -2674,7 +2672,7 @@ export const Canvas: React.FC = () => {
                     
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M14.06 9L15 9.94L5.92 19H5v-0.92L14.06 9M17.66 3c-0.25 0-0.51 0.1-0.7 0.29l-1.83 1.83 3.75 3.75 1.83-1.83c0.39-0.39 0.39-1.02 0-1.41l-2.34-2.34c-0.2-0.2-0.45-0.29-0.71-0.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z" fill="#4f46e5"/>
+                        <path d="M14.06 9L15 9.94L5.92 19H5v-0.92L14.06 9M17.66 3c-0.25 0-0.51 0.1-0.7 0.29l-1.83 1.83 3.75 3.75 1.83-1.83c0.39-0.39 0.39-1.02 0-1.41l-2.34-2.34c-0.2-0.2-0.45-0.29-0.71-0.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z" fill="#26D4C8"/>
                       </svg>
                       Specific Changes Made
                     </h4>
@@ -2736,7 +2734,7 @@ export const Canvas: React.FC = () => {
                   <>
                     <h4>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14l-6-6z" fill="#4f46e5"/>
+                        <path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14l-6-6z" fill="#26D4C8"/>
                       </svg>
                       Visual Hierarchy
                     </h4>
