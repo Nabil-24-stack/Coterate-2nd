@@ -17,7 +17,7 @@ const NoiseContainer = styled.div`
 
 const HeaderContainer = styled.header`
   height: 60px;
-  background-color: #383838;
+  background-color: #161616;
   position: fixed;
   top: 0;
   left: 0;

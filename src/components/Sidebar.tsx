@@ -10,7 +10,7 @@ const SidebarContainer = styled.div`
   height: calc(100% - 60px);
   margin-top: 60px; /* Start below the header */
   border-right: 1px solid #4D4D4D;
-  background-color: #383838;
+  background-color: #161616;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -90,7 +90,7 @@ const NewPageButton = styled.button`
 `;
 
 const FigmaImportButton = styled(NewPageButton)`
-  background-color: #383838;
+  background-color: #161616;
   color: #FFFFFF;
   border: 1px solid #26D4C8;
   display: flex;
@@ -99,7 +99,7 @@ const FigmaImportButton = styled(NewPageButton)`
   gap: 8px;
   
   &:hover {
-    background-color: #303030;
+    background-color: #232323;
   }
 `;
 
@@ -174,7 +174,7 @@ const DropdownMenu = styled.div`
   position: absolute;
   top: 100%;
   right: 0;
-  background-color: #383838;
+  background-color: #161616;
   border-radius: 4px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
