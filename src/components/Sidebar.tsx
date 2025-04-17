@@ -263,9 +263,8 @@ const UserEmail = styled.div`
   color: #CFCFCF;
 `;
 
-const ChevronIcon = styled.div<{ isOpen: boolean }>`
+const ChevronIcon = styled.div`
   color: #FFFFFF;
-  transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
 `;
 
 // Dropdown menu for user profile
@@ -620,7 +619,7 @@ export const Sidebar: React.FC = () => {
                 <UserName>Authenticated with Figma</UserName>
               )}
             </UserInfo>
-            <ChevronIcon isOpen={userDropdownOpen}>
+            <ChevronIcon>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6 15L12 9L18 15" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
