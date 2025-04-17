@@ -905,15 +905,15 @@ const ActionButtonsContainer = styled.div<{ scale: number; isProcessing?: boolea
   transform-origin: center bottom;
   display: flex;
   gap: 12px;
-  background-color: #383838;
-  padding: 8px 16px;
+  background-color: ${props => props.isProcessing ? 'transparent' : '#383838'};
+  padding: ${props => props.isProcessing ? '0' : '8px 16px'};
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: ${props => props.isProcessing ? 'none' : '0 2px 8px rgba(0, 0, 0, 0.15)'};
   z-index: 20;
   opacity: ${props => props.isProcessing ? 1 : 0};
   transition: opacity 0.2s ease;
-  min-width: 420px;
-  justify-content: space-between;
+  min-width: ${props => props.isProcessing ? 'auto' : '420px'};
+  justify-content: ${props => props.isProcessing ? 'center' : 'space-between'};
 `;
 
 // Individual action button style
@@ -2463,7 +2463,7 @@ export const Canvas: React.FC = () => {
           {design.isProcessing ? (
             <ActionButton 
               className="primary" 
-              style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d', margin: '0 auto' }}
+              style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d' }}
               onClick={() => cancelIteration(design.id)}
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
@@ -2602,7 +2602,7 @@ export const Canvas: React.FC = () => {
             {iteration.isProcessing ? (
               <ActionButton 
                 className="primary" 
-                style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d', margin: '0 auto' }}
+                style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d' }}
                 onClick={() => cancelIteration(iteration.id)}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
