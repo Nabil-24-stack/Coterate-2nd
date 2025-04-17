@@ -238,6 +238,11 @@ const UserProfileSection = styled.div`
   width: 100%;
   margin: 0;
   position: relative;
+  border-top: 1px solid #4D4D4D;
+  
+  &:hover {
+    background-color: #444444;
+  }
 `;
 
 const UserInfo = styled.div`
@@ -261,7 +266,6 @@ const UserEmail = styled.div`
 const ChevronIcon = styled.div<{ isOpen: boolean }>`
   color: #FFFFFF;
   transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
-  transition: transform 0.2s ease;
 `;
 
 // Dropdown menu for user profile
