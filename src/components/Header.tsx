@@ -23,7 +23,7 @@ const HeaderContainer = styled.header`
   left: 0;
   right: 0;
   z-index: 1000;
-  border-bottom: 1px solid #6A6A6A;
+  border-bottom: 1px solid #5F5F5F;
   display: flex;
   align-items: center;
   padding: 0 16px;
