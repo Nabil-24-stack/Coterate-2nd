@@ -1727,7 +1727,7 @@ export const Canvas: React.FC = () => {
       if (isIteration) {
         // For iterations, we use the dimensions from the iteration
         originalDimensions = (designToIterate as DesignIteration).dimensions || 
-          { width: 500, height: 400 }; // Default dimensions
+          { width: 400, height: 320 }; // Reduced from 500x400
         
         // For an iteration, we need to use the parent design's image URL
         if (parentDesign && parentDesign.imageUrl) {
@@ -2171,7 +2171,7 @@ export const Canvas: React.FC = () => {
               ...design,
               imageUrl: importResult.imageUrl,
               name: importResult.name,
-              dimensions: { width: 500, height: 400 } // Default dimensions
+              dimensions: { width: 400, height: 320 } // Reduced from 500x400
             }
           : design
       ));

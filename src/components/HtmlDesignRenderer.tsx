@@ -19,7 +19,7 @@ const RendererContainer = styled.div<{ width?: number; height?: number; showBord
   position: relative;
   width: ${props => props.width ? `${props.width}px` : 'auto'};
   height: ${props => props.height ? `${props.height}px` : 'auto'};
-  min-width: 320px;
+  min-width: 280px;
   overflow: hidden;
   background-color: white;
   box-shadow: ${props => props.showBorder ? '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)' : 'none'};
