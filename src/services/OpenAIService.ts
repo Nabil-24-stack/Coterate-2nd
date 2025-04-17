@@ -561,6 +561,7 @@ class OpenAIService {
       console.log('Searching for CSS in response of length:', response.length);
       console.log('Response preview:', response.substring(0, 100) + '...');
       
+      // Step 1: Try standard patterns first
       const cssRegexPatterns = [
         /```css\n([\s\S]*?)```/,       // Standard format
         /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
@@ -584,55 +585,116 @@ class OpenAIService {
         }
       }
       
-      // If we couldn't find CSS with the patterns, try a more direct approach
+      // Step 2: Check for the specific format in the screenshot - structured Markdown/text format
       if (!cssContent) {
-        console.log('No CSS found with standard patterns, trying alternative approach');
+        console.log('No CSS found with standard patterns, checking for markdown format');
         
-        // Look for CSS section headers
-        const cssHeaders = [
-          "CSS CODE:",
-          "CSS:",
-          "```css",
-          "<style>"
+        // This handles the case where CSS is presented in a markdown structure like:
+        // ```css
+        // body {
+        //   ...
+        // }
+        // ```
+        
+        // Look for any markdown code blocks
+        const markdownCodeBlocks = response.match(/```(?:css)?\s*\n([\s\S]*?)```/g);
+        if (markdownCodeBlocks && markdownCodeBlocks.length > 0) {
+          // Find a CSS-like block among these
+          for (const block of markdownCodeBlocks) {
+            if (block.includes('{') && 
+                (block.includes('body') || 
+                 block.includes('div') || 
+                 block.includes('color') || 
+                 block.includes('margin'))) {
+              // Extract the content between triple backticks
+              const cleanBlock = block.replace(/```(?:css)?\s*\n/, '').replace(/\n```$/, '').trim();
+              if (cleanBlock && cleanBlock.length > 0) {
+                cssContent = cleanBlock;
+                console.log('Found CSS in markdown block, length:', cssContent.length);
+                console.log('CSS preview:', cssContent.substring(0, 50) + '...');
+                break;
+              }
+            }
+          }
+        }
+      }
+      
+      // Step 3: If still no CSS, look for CSS section markers in the text
+      if (!cssContent) {
+        console.log('No CSS found in markdown blocks, scanning for CSS section');
+        
+        // Looking for section headers like "CSS CODE:" or "### CSS:"
+        const cssSectionMarkers = [
+          /CSS CODE:[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
+          /### CSS[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
+          /## [0-9.]+[^#\n]*CSS[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
+          /\n[0-9]+\.\s+CSS[\r\n]+([\s\S]+?)(?=\n+[0-9]+\.|\n+#|\n+[A-Z]{2,}|$)/i
         ];
         
-        for (const header of cssHeaders) {
-          const headerIndex = response.indexOf(header);
-          
-          if (headerIndex !== -1) {
-            // Found a CSS header, now find where it ends
-            let startIndex = headerIndex + header.length;
-            let endIndex;
+        for (const marker of cssSectionMarkers) {
+          const match = response.match(marker);
+          if (match && match[1]) {
+            // If we found a potential CSS section, look for actual CSS content within it
+            const potentialCssSection = match[1].trim();
             
-            // Different end markers based on the header
-            if (header === "```css") {
-              endIndex = response.indexOf("```", startIndex);
-            } else if (header === "<style>") {
-              endIndex = response.indexOf("</style>", startIndex);
-            } else {
-              // For CSS CODE: or CSS:, find the next section header or end of text
-              const possibleEndMarkers = [
-                "\n\nHTML", 
-                "\n\nIMPROVEMENTS", 
-                "\n\n```", 
-                "\n\nANALYSIS",
-                "\n\n5.",  // Numbered section that might follow
-                "\n\n4."   // In case CSS is section 3
-              ];
+            if (potentialCssSection.includes('{') && potentialCssSection.includes('}')) {
+              // This looks like CSS content
+              cssContent = potentialCssSection;
+              console.log('Found CSS in section marker, length:', cssContent.length);
+              console.log('CSS preview:', cssContent.substring(0, 50) + '...');
+              break;
+            }
+          }
+        }
+      }
+      
+      // Step 4: Last resort - direct pattern search
+      if (!cssContent) {
+        console.log('No CSS found in sections, trying direct pattern extraction');
+        
+        // Look directly for CSS-like patterns in the entire response
+        const cssBlocks = [];
+        const cssRules = /([.#]?[a-zA-Z][\w-]*(?:\s*[,>+~]\s*[.#]?[a-zA-Z][\w-]*)*)\s*\{[^}]*\}/g;
+        let match;
+        
+        while ((match = cssRules.exec(response)) !== null) {
+          cssBlocks.push(match[0]);
+        }
+        
+        if (cssBlocks.length > 0) {
+          cssContent = cssBlocks.join('\n\n');
+          console.log('Found CSS through direct pattern extraction, rules count:', cssBlocks.length);
+          console.log('CSS preview:', cssContent.substring(0, 50) + '...');
+        }
+      }
+      
+      // Step 5: Handle the case from the screenshot - try to extract raw content
+      if (!cssContent) {
+        console.log('Attempting extraction as last resort');
+        const sections = response.split(/\n+#{2,}\s+/); // Split by markdown headers
+        
+        for (const section of sections) {
+          if (section.toLowerCase().includes('css') && !section.toLowerCase().includes('html')) {
+            // This section likely contains CSS
+            const lines = section.split('\n');
+            let collecting = false;
+            const cssLines = [];
+            
+            for (const line of lines) {
+              if (line.includes('```css') || line.includes('```')) {
+                collecting = !collecting;
+                continue;
+              }
               
-              endIndex = response.length;
-              for (const marker of possibleEndMarkers) {
-                const markerIndex = response.indexOf(marker, startIndex);
-                if (markerIndex !== -1 && markerIndex < endIndex) {
-                  endIndex = markerIndex;
-                }
+              if (collecting || line.includes('{') && line.includes('}')) {
+                cssLines.push(line);
               }
             }
             
-            if (endIndex > startIndex) {
-              cssContent = response.substring(startIndex, endIndex).trim();
-              console.log('CSS found using direct extraction. Length:', cssContent.length);
-              console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
+            if (cssLines.length > 0) {
+              cssContent = cssLines.join('\n');
+              console.log('Extracted CSS from section parsing, length:', cssContent.length);
+              console.log('CSS preview:', cssContent.substring(0, 50) + '...');
               break;
             }
           }
@@ -641,8 +703,23 @@ class OpenAIService {
       
       // Final check - remove any triple backticks if they're still in the content
       if (cssContent.includes('```')) {
-        cssContent = cssContent.replace(/```/g, '');
+        cssContent = cssContent.replace(/```(?:css)?\s*\n?|```/g, '').trim();
         console.log('Removed remaining backticks from CSS content');
+      }
+      
+      // Track and log detailed information about CSS extraction
+      if (cssContent && cssContent.length > 0) {
+        console.log('Successfully extracted CSS, final length:', cssContent.length);
+      } else {
+        console.error('FAILED TO EXTRACT CSS from response');
+        // Log sample fragments from the response to help debug
+        const fragments = [];
+        // Try to find any CSS-like fragments for debugging
+        const potentialCssFragments = response.match(/[^{]*{[^}]*}/g);
+        if (potentialCssFragments && potentialCssFragments.length > 0) {
+          fragments.push(...potentialCssFragments.slice(0, 3));
+          console.log('Potential CSS fragments found:', fragments);
+        }
       }
       
       result.cssCode = cssContent || '';
