@@ -890,10 +890,10 @@ const DesignCardContainer = styled.div`
   }
 `;
 
-// New Action Buttons container that appears on hover
+// Container for action buttons
 const ActionButtonsContainer = styled.div`
   position: absolute;
-  top: -50px;
+  bottom: -50px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1059,6 +1059,50 @@ const ViewIcon = () => (
     <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
   </svg>
 );
+
+// Drag handle icon for moving designs
+const DragHandleIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 11C8.10457 11 9 10.1046 9 9C9 7.89543 8.10457 7 7 7C5.89543 7 5 7.89543 5 9C5 10.1046 5.89543 11 7 11Z" fill="white"/>
+    <path d="M17 7C15.8954 7 15 7.89543 15 9C15 10.1046 15.8954 11 17 11C18.1046 11 19 10.1046 19 9C19 7.89543 18.1046 7 17 7Z" fill="white"/>
+    <path d="M7 13C5.89543 13 5 13.8954 5 15C5 16.1046 5.89543 17 7 17C8.10457 17 9 16.1046 9 15C9 13.8954 8.10457 13 7 13Z" fill="white"/>
+    <path d="M17 13C15.8954 13 15 13.8954 15 15C15 16.1046 15.8954 17 17 17C18.1046 17 19 16.1046 19 15C19 13.8954 18.1046 13 17 13Z" fill="white"/>
+  </svg>
+);
+
+// DragHandle for moving designs
+const DragHandle = styled.button`
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 32px;
+  height: 32px;
+  background-color: #26D4C8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 30;
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background-color: #1fb9ae;
+  }
+  
+  &:active {
+    cursor: grabbing;
+    background-color: #18a79d;
+  }
+  
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+`;
 
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
@@ -2290,6 +2334,29 @@ export const Canvas: React.FC = () => {
           )}
         </DesignCard>
         
+        {/* Add the drag handle */}
+        <DragHandle 
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            // Select the design if not already selected
+            if (selectedDesignId !== design.id) {
+              setSelectedDesignId(design.id);
+            }
+            
+            // Start dragging the design
+            setIsDesignDragging(true);
+            setDesignDragStart({
+              x: e.clientX,
+              y: e.clientY
+            });
+            
+            // Store the initial position for calculation during dragging
+            setDesignInitialPosition(design.position);
+          }}
+        >
+          <DragHandleIcon />
+        </DragHandle>
+        
         {/* New action buttons component */}
         <ActionButtonsContainer>
           <ActionButton className="analysis" onClick={(e) => {
@@ -2349,6 +2416,29 @@ export const Canvas: React.FC = () => {
               </svg>
               Improved
             </NewDesignBadge>
+            
+            {/* Add the drag handle */}
+            <DragHandle 
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                // Select the design if not already selected
+                if (selectedDesignId !== iteration.id) {
+                  setSelectedDesignId(iteration.id);
+                }
+                
+                // Start dragging the design
+                setIsDesignDragging(true);
+                setDesignDragStart({
+                  x: e.clientX,
+                  y: e.clientY
+                });
+                
+                // Store the initial position for calculation during dragging
+                setDesignInitialPosition(iteration.position);
+              }}
+            >
+              <DragHandleIcon />
+            </DragHandle>
             
             {/* The iteration design itself */}
             <IterationDesignCard 
