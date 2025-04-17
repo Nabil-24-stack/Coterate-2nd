@@ -1503,14 +1503,34 @@ export const Canvas: React.FC = () => {
       if (e.button === 0) {
         e.stopPropagation(); // Stop event propagation
         setIsDesignDragging(true);
-        setDragStart({
+        setDesignDragStart({
           x: e.clientX,
           y: e.clientY
         });
-        setDesignInitialPosition({
-          x: position.x,
-          y: position.y
-        });
+        
+        // Find the initial position of the selected design
+        const isIteration = designs.some(design => 
+          design.iterations?.some(iteration => iteration.id === designId)
+        );
+        
+        if (isIteration) {
+          // Find the iteration's position
+          for (const design of designs) {
+            if (!design.iterations) continue;
+            
+            const iteration = design.iterations.find(it => it.id === designId);
+            if (iteration && iteration.position) {
+              setDesignInitialPosition(iteration.position);
+              break;
+            }
+          }
+        } else {
+          // Find the design's position
+          const design = designs.find(d => d.id === designId);
+          if (design && design.position) {
+            setDesignInitialPosition(design.position);
+          }
+        }
       }
     } else {
       // Otherwise just select it (this will also trigger the analysis panel if needed)
@@ -2467,6 +2487,12 @@ export const Canvas: React.FC = () => {
     // Check if we were dragging the canvas (panning)
     if (isDragging && currentPage?.id) {
       saveCanvasPosition(currentPage.id, position, scale);
+    }
+    
+    // Check if we were dragging a design and save its new position
+    if (isDesignDragging && selectedDesignId) {
+      // Position is already saved in the designs state, no extra save needed
+      console.log(`Design dragging ended for design: ${selectedDesignId}`);
     }
     
     setIsDragging(false);
