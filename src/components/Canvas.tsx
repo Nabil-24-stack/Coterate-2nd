@@ -897,7 +897,7 @@ const DesignCardContainer = styled.div`
 `;
 
 // Container for action buttons
-const ActionButtonsContainer = styled.div<{ scale: number }>`
+const ActionButtonsContainer = styled.div<{ scale: number; isProcessing?: boolean }>`
   position: absolute;
   top: -50px;
   left: 50%;
@@ -910,7 +910,7 @@ const ActionButtonsContainer = styled.div<{ scale: number }>`
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 20;
-  opacity: 0;
+  opacity: ${props => props.isProcessing ? 1 : 0};
   transition: opacity 0.2s ease;
   min-width: 420px;
   justify-content: space-between;
@@ -976,7 +976,7 @@ const ActionButton = styled.button`
 const DesignWithActionsContainer = styled.div`
   position: relative;
   
-  &:hover ${ActionButtonsContainer} {
+  &:hover ${ActionButtonsContainer}:not([isProcessing="true"]) {
     opacity: 1;
   }
 `;
@@ -2452,68 +2452,81 @@ export const Canvas: React.FC = () => {
                   {design.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
                   {design.processingStep === 'rendering' && 'Final touches and optimizations...'}
                 </div>
-                <CancelButton onClick={() => cancelIteration(design.id)}>
-                  Cancel
-                </CancelButton>
               </ProcessingOverlay>
             </>
           )}
         </DesignCard>
         
         {/* New action buttons component */}
-        <ActionButtonsContainer scale={scale}>
-          <ActionButton className="secondary" onMouseDown={(e) => {
-            e.stopPropagation();
-            // Select the design if not already selected
-            if (selectedDesignId !== design.id) {
-              setSelectedDesignId(design.id);
-            }
-            
-            // Start dragging the design
-            setIsDesignDragging(true);
-            setDesignDragStart({
-              x: e.clientX,
-              y: e.clientY
-            });
-            
-            // Store the initial position for calculation during dragging
-            setDesignInitialPosition(design.position);
-          }}>
-            <DragHandleIcon />
-            Drag
-          </ActionButton>
-          <ActionButton className="analysis" onClick={(e) => {
-            e.stopPropagation();
-            // Create a compatible object that matches the DesignIteration type
-            const analysisData = {
-              id: design.id,
-              parentId: '', // No parent for original design
-              htmlContent: design.htmlContent || '',
-              cssContent: design.cssContent || '',
-              analysis: {
-                strengths: [],
-                weaknesses: [],
-                improvementAreas: []
-              }, // Default empty analysis if not available
-              position: design.position,
-              dimensions: design.dimensions,
-              imageUrl: design.imageUrl
-            } as DesignIteration;
-            
-            setCurrentAnalysis(analysisData);
-            setAnalysisVisible(true);
-          }}>
-            <ViewIcon />
-            View Analysis
-          </ActionButton>
-          <ActionButton>
-            <RetryIcon />
-            Retry
-          </ActionButton>
-          <ActionButton className="primary" onClick={(e) => handleIterationClick(e, design.id)}>
-            <IterateIcon />
-            Iterate
-          </ActionButton>
+        <ActionButtonsContainer scale={scale} isProcessing={design.isProcessing}>
+          {/* Show only Cancel button when processing */}
+          {design.isProcessing ? (
+            <ActionButton 
+              className="primary" 
+              style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d', margin: '0 auto' }}
+              onClick={() => cancelIteration(design.id)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Cancel
+            </ActionButton>
+          ) : (
+            <>
+              <ActionButton className="secondary" onMouseDown={(e) => {
+                e.stopPropagation();
+                // Select the design if not already selected
+                if (selectedDesignId !== design.id) {
+                  setSelectedDesignId(design.id);
+                }
+                
+                // Start dragging the design
+                setIsDesignDragging(true);
+                setDesignDragStart({
+                  x: e.clientX,
+                  y: e.clientY
+                });
+                
+                // Store the initial position for calculation during dragging
+                setDesignInitialPosition(design.position);
+              }}>
+                <DragHandleIcon />
+                Drag
+              </ActionButton>
+              <ActionButton className="analysis" onClick={(e) => {
+                e.stopPropagation();
+                // Create a compatible object that matches the DesignIteration type
+                const analysisData = {
+                  id: design.id,
+                  parentId: '', // No parent for original design
+                  htmlContent: design.htmlContent || '',
+                  cssContent: design.cssContent || '',
+                  analysis: {
+                    strengths: [],
+                    weaknesses: [],
+                    improvementAreas: []
+                  }, // Default empty analysis if not available
+                  position: design.position,
+                  dimensions: design.dimensions,
+                  imageUrl: design.imageUrl
+                } as DesignIteration;
+                
+                setCurrentAnalysis(analysisData);
+                setAnalysisVisible(true);
+              }}>
+                <ViewIcon />
+                View Analysis
+              </ActionButton>
+              <ActionButton>
+                <RetryIcon />
+                Retry
+              </ActionButton>
+              <ActionButton className="primary" onClick={(e) => handleIterationClick(e, design.id)}>
+                <IterateIcon />
+                Iterate
+              </ActionButton>
+            </>
+          )}
         </ActionButtonsContainer>
       </DesignWithActionsContainer>
     );
@@ -2580,51 +2593,63 @@ export const Canvas: React.FC = () => {
                   {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
                   {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
                 </div>
-                <CancelButton onClick={() => cancelIteration(iteration.id)}>
-                  Cancel
-                </CancelButton>
               </ProcessingOverlay>
             </IterationDesignCard>
           </div>
           
-          {/* New action buttons component */}
-          <ActionButtonsContainer scale={scale}>
-            <ActionButton className="secondary" onMouseDown={(e) => {
-              e.stopPropagation();
-              // Select the design if not already selected
-              if (selectedDesignId !== iteration.id) {
-                setSelectedDesignId(iteration.id);
-              }
-              
-              // Start dragging the design
-              setIsDesignDragging(true);
-              setDesignDragStart({
-                x: e.clientX,
-                y: e.clientY
-              });
-              
-              // Store the initial position for calculation during dragging
-              setDesignInitialPosition(iteration.position);
-            }}>
-              <DragHandleIcon />
-              Drag
-            </ActionButton>
-            <ActionButton className="analysis" onClick={(e) => {
-              e.stopPropagation();
-              setCurrentAnalysis(iteration);
-              setAnalysisVisible(true);
-            }}>
-              <ViewIcon />
-              View Analysis
-            </ActionButton>
-            <ActionButton>
-              <RetryIcon />
-              Retry
-            </ActionButton>
-            <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
-              <IterateIcon />
-              Iterate
-            </ActionButton>
+          <ActionButtonsContainer scale={scale} isProcessing={iteration.isProcessing}>
+            {/* Show only Cancel button when processing */}
+            {iteration.isProcessing ? (
+              <ActionButton 
+                className="primary" 
+                style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d', margin: '0 auto' }}
+                onClick={() => cancelIteration(iteration.id)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                  <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Cancel
+              </ActionButton>
+            ) : (
+              <>
+                <ActionButton className="secondary" onMouseDown={(e) => {
+                  e.stopPropagation();
+                  // Select the design if not already selected
+                  if (selectedDesignId !== iteration.id) {
+                    setSelectedDesignId(iteration.id);
+                  }
+                  
+                  // Start dragging the design
+                  setIsDesignDragging(true);
+                  setDesignDragStart({
+                    x: e.clientX,
+                    y: e.clientY
+                  });
+                  
+                  // Store the initial position for calculation during dragging
+                  setDesignInitialPosition(iteration.position);
+                }}>
+                  <DragHandleIcon />
+                  Drag
+                </ActionButton>
+                <ActionButton className="analysis" onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentAnalysis(iteration);
+                  setAnalysisVisible(true);
+                }}>
+                  <ViewIcon />
+                  View Analysis
+                </ActionButton>
+                <ActionButton>
+                  <RetryIcon />
+                  Retry
+                </ActionButton>
+                <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
+                  <IterateIcon />
+                  Iterate
+                </ActionButton>
+              </>
+            )}
           </ActionButtonsContainer>
         </DesignWithActionsContainer>
       </DesignContainer>
