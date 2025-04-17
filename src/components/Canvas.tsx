@@ -1072,10 +1072,12 @@ const ViewIcon = () => (
 // Drag handle icon for moving designs
 const DragHandleIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M7 11C8.10457 11 9 10.1046 9 9C9 7.89543 8.10457 7 7 7C5.89543 7 5 7.89543 5 9C5 10.1046 5.89543 11 7 11Z" fill="white"/>
-    <path d="M17 7C15.8954 7 15 7.89543 15 9C15 10.1046 15.8954 11 17 11C18.1046 11 19 10.1046 19 9C19 7.89543 18.1046 7 17 7Z" fill="white"/>
-    <path d="M7 13C5.89543 13 5 13.8954 5 15C5 16.1046 5.89543 17 7 17C8.10457 17 9 16.1046 9 15C9 13.8954 8.10457 13 7 13Z" fill="white"/>
-    <path d="M17 13C15.8954 13 15 13.8954 15 15C15 16.1046 15.8954 17 17 17C18.1046 17 19 16.1046 19 15C19 13.8954 18.1046 13 17 13Z" fill="white"/>
+    <path d="M9 6C10.1046 6 11 5.10457 11 4C11 2.89543 10.1046 2 9 2C7.89543 2 7 2.89543 7 4C7 5.10457 7.89543 6 9 6Z" fill="white"/>
+    <path d="M15 6C16.1046 6 17 5.10457 17 4C17 2.89543 16.1046 2 15 2C13.8954 2 13 2.89543 13 4C13 5.10457 13.8954 6 15 6Z" fill="white"/>
+    <path d="M9 13C10.1046 13 11 12.1046 11 11C11 9.89543 10.1046 9 9 9C7.89543 9 7 9.89543 7 11C7 12.1046 7.89543 13 9 13Z" fill="white"/>
+    <path d="M15 13C16.1046 13 17 12.1046 17 11C17 9.89543 16.1046 9 15 9C13.8954 9 13 9.89543 13 11C13 12.1046 13.8954 13 15 13Z" fill="white"/>
+    <path d="M9 20C10.1046 20 11 19.1046 11 18C11 16.8954 10.1046 16 9 16C7.89543 16 7 16.8954 7 18C7 19.1046 7.89543 20 9 20Z" fill="white"/>
+    <path d="M15 20C16.1046 20 17 19.1046 17 18C17 16.8954 16.1046 16 15 16C13.8954 16 13 16.8954 13 18C13 19.1046 13.8954 20 15 20Z" fill="white"/>
   </svg>
 );
 
@@ -2363,7 +2365,7 @@ export const Canvas: React.FC = () => {
             setDesignInitialPosition(design.position);
           }}>
             <DragHandleIcon />
-            Move
+            Drag
           </ActionButton>
           <ActionButton className="analysis" onClick={(e) => {
             e.stopPropagation();
@@ -2498,7 +2500,7 @@ export const Canvas: React.FC = () => {
               setDesignInitialPosition(iteration.position);
             }}>
               <DragHandleIcon />
-              Move
+              Drag
             </ActionButton>
             <ActionButton className="analysis" onClick={(e) => {
               e.stopPropagation();
