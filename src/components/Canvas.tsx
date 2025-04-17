@@ -1436,43 +1436,60 @@ export const Canvas: React.FC<{}> = () => {
     const zoomSensitivity = 0.1;
     const minScale = 0.1;
     const maxScale = 4;
+    const scrollSensitivity = 1;
     
-    // Calculate new scale
-    let newScale = scale;
-    
-    if (e.deltaY < 0) {
-      // Zoom in
-      newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+    // Command (Mac) or Control (Windows) key for zooming
+    if (e.metaKey || e.ctrlKey) {
+      // Calculate new scale
+      let newScale = scale;
+      
+      if (e.deltaY < 0) {
+        // Zoom in
+        newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+      } else {
+        // Zoom out
+        newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+      }
+      
+      // Get canvas element and its rectangle
+      const canvasElement = canvasRef.current;
+      if (!canvasElement) return;
+      
+      const rect = canvasElement.getBoundingClientRect();
+      
+      // Get cursor position relative to canvas
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      // Calculate the point on the original content where the cursor is
+      const originX = mouseX / scale - position.x / scale;
+      const originY = mouseY / scale - position.y / scale;
+      
+      // Calculate the new position to keep cursor point fixed
+      const newPositionX = mouseX - originX * newScale;
+      const newPositionY = mouseY - originY * newScale;
+      
+      // Update state
+      setScale(newScale);
+      setPosition({ x: newPositionX, y: newPositionY });
+      
+      // Save position immediately after zooming
+      if (currentPage?.id) {
+        saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+      }
     } else {
-      // Zoom out
-      newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
-    }
-    
-    // Get canvas element and its rectangle
-    const canvasElement = canvasRef.current;
-    if (!canvasElement) return;
-    
-    const rect = canvasElement.getBoundingClientRect();
-    
-    // Get cursor position relative to canvas
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    // Calculate the point on the original content where the cursor is
-    const originX = mouseX / scale - position.x / scale;
-    const originY = mouseY / scale - position.y / scale;
-    
-    // Calculate the new position to keep cursor point fixed
-    const newPositionX = mouseX - originX * newScale;
-    const newPositionY = mouseY - originY * newScale;
-    
-    // Update state
-    setScale(newScale);
-    setPosition({ x: newPositionX, y: newPositionY });
-    
-    // Save position immediately after zooming
-    if (currentPage?.id) {
-      saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+      // Regular scrolling (horizontal and vertical)
+      const newPosition = {
+        x: position.x - e.deltaX * scrollSensitivity,
+        y: position.y - e.deltaY * scrollSensitivity,
+      };
+      
+      setPosition(newPosition);
+      
+      // Save position after scrolling
+      if (currentPage?.id) {
+        saveCanvasPosition(currentPage.id, newPosition, scale);
+      }
     }
   };
   
@@ -2315,38 +2332,55 @@ export const Canvas: React.FC<{}> = () => {
       const zoomSensitivity = 0.1;
       const minScale = 0.1;
       const maxScale = 4;
+      const scrollSensitivity = 1;
       
-      // Calculate new scale
-      let newScale = scale;
-      
-      if (e.deltaY < 0) {
-        // Zoom in
-        newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+      // Command (Mac) or Control (Windows) key for zooming
+      if (e.metaKey || e.ctrlKey) {
+        // Calculate new scale
+        let newScale = scale;
+        
+        if (e.deltaY < 0) {
+          // Zoom in
+          newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
+        } else {
+          // Zoom out
+          newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
+        }
+        
+        // Get cursor position relative to canvas
+        const rect = canvasElement.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Calculate the point on the original content where the cursor is
+        const originX = mouseX / scale - position.x / scale;
+        const originY = mouseY / scale - position.y / scale;
+        
+        // Calculate the new position to keep cursor point fixed
+        const newPositionX = mouseX - originX * newScale;
+        const newPositionY = mouseY - originY * newScale;
+        
+        // Apply the new scale and position
+        setScale(newScale);
+        setPosition({ x: newPositionX, y: newPositionY });
+        
+        // Save position immediately after wheel zoom
+        if (currentPage?.id) {
+          saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+        }
       } else {
-        // Zoom out
-        newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
-      }
-      
-      // Get cursor position relative to canvas
-      const rect = canvasElement.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      // Calculate the point on the original content where the cursor is
-      const originX = mouseX / scale - position.x / scale;
-      const originY = mouseY / scale - position.y / scale;
-      
-      // Calculate the new position to keep cursor point fixed
-      const newPositionX = mouseX - originX * newScale;
-      const newPositionY = mouseY - originY * newScale;
-      
-      // Apply the new scale and position
-      setScale(newScale);
-      setPosition({ x: newPositionX, y: newPositionY });
-      
-      // Save position immediately after wheel zoom
-      if (currentPage?.id) {
-        saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
+        // Regular scrolling (horizontal and vertical)
+        const newPosition = {
+          x: position.x - e.deltaX * scrollSensitivity,
+          y: position.y - e.deltaY * scrollSensitivity,
+        };
+        
+        setPosition(newPosition);
+        
+        // Save position after scrolling
+        if (currentPage?.id) {
+          saveCanvasPosition(currentPage.id, newPosition, scale);
+        }
       }
     };
 
