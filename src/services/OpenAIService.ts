@@ -557,32 +557,96 @@ class OpenAIService {
       result.htmlCode = htmlContent || '';
       
       // Extract CSS code between ```css and ``` tags with more flexible pattern matching
+      // First, let's log the entire response for debugging
+      console.log('Searching for CSS in response of length:', response.length);
+      console.log('Response preview:', response.substring(0, 100) + '...');
+      
       const cssRegexPatterns = [
         /```css\n([\s\S]*?)```/,       // Standard format
         /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
+        /```css([\s\S]*?)```/,         // No space or newline after css
         /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
+        /```\n<style>([\s\S]*?)<\/style>\n```/, // Code block with style tags
+        /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS SUMMARY:|$)/ // CSS section with heading
       ];
       
       let cssContent = '';
+      let matchedPattern = '';
+      
       for (const pattern of cssRegexPatterns) {
         const match = response.match(pattern);
         if (match && match[1]) {
           cssContent = match[1].trim();
+          matchedPattern = pattern.toString();
+          console.log('CSS match found with pattern:', matchedPattern);
+          console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
           break;
         }
       }
       
-      // If no full match found but there are CSS properties in the response, try to extract style block
-      if (!cssContent && response.includes('style>')) {
-        const styleIndex = response.indexOf('<style>');
-        const endIndex = response.indexOf('</style>', styleIndex);
-        if (endIndex > styleIndex && styleIndex !== -1) {
-          cssContent = response.substring(styleIndex + 7, endIndex).trim();
+      // If we couldn't find CSS with the patterns, try a more direct approach
+      if (!cssContent) {
+        console.log('No CSS found with standard patterns, trying alternative approach');
+        
+        // Look for CSS section headers
+        const cssHeaders = [
+          "CSS CODE:",
+          "CSS:",
+          "```css",
+          "<style>"
+        ];
+        
+        for (const header of cssHeaders) {
+          const headerIndex = response.indexOf(header);
+          
+          if (headerIndex !== -1) {
+            // Found a CSS header, now find where it ends
+            let startIndex = headerIndex + header.length;
+            let endIndex;
+            
+            // Different end markers based on the header
+            if (header === "```css") {
+              endIndex = response.indexOf("```", startIndex);
+            } else if (header === "<style>") {
+              endIndex = response.indexOf("</style>", startIndex);
+            } else {
+              // For CSS CODE: or CSS:, find the next section header or end of text
+              const possibleEndMarkers = [
+                "\n\nHTML", 
+                "\n\nIMPROVEMENTS", 
+                "\n\n```", 
+                "\n\nANALYSIS",
+                "\n\n5.",  // Numbered section that might follow
+                "\n\n4."   // In case CSS is section 3
+              ];
+              
+              endIndex = response.length;
+              for (const marker of possibleEndMarkers) {
+                const markerIndex = response.indexOf(marker, startIndex);
+                if (markerIndex !== -1 && markerIndex < endIndex) {
+                  endIndex = markerIndex;
+                }
+              }
+            }
+            
+            if (endIndex > startIndex) {
+              cssContent = response.substring(startIndex, endIndex).trim();
+              console.log('CSS found using direct extraction. Length:', cssContent.length);
+              console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
+              break;
+            }
+          }
         }
       }
       
+      // Final check - remove any triple backticks if they're still in the content
+      if (cssContent.includes('```')) {
+        cssContent = cssContent.replace(/```/g, '');
+        console.log('Removed remaining backticks from CSS content');
+      }
+      
       result.cssCode = cssContent || '';
+      console.log('Final CSS content length:', result.cssCode.length);
       
       // Extract design system information
       result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');

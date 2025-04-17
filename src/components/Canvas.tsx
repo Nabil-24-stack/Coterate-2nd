@@ -1159,7 +1159,7 @@ const CancelButton = styled.button`
   }
 `;
 
-export const Canvas: React.FC = () => {
+export const Canvas: React.FC<{}> = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
   // Canvas state
@@ -1929,6 +1929,15 @@ export const Canvas: React.FC = () => {
         created_at: new Date().toISOString()
       };
       
+      // Log debug information about the CSS content
+      console.log(`Iteration ${newIteration.id} - CSS content length: ${newIteration.cssContent?.length || 0}`);
+      if (!newIteration.cssContent || newIteration.cssContent.length === 0) {
+        console.error(`Error: Empty CSS content for iteration ${newIteration.id}`);
+        // Log the raw response for debugging
+        const responsePreview = JSON.stringify(result).substring(0, 200);
+        console.log(`Response preview: ${responsePreview}...`);
+      }
+      
       // Check if the process has been aborted
       if (signal.aborted) {
         console.log('Iteration process was aborted after creating the new iteration object');
@@ -2575,9 +2584,25 @@ export const Canvas: React.FC = () => {
                 height={iteration.dimensions?.height}
                 onRender={(success) => {
                   // Only log the first successful render to avoid console clutter
-                  if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
+                  if (renderedIterationsRef.current.has(iteration.id)) {
+                    return;
+                  }
+                  
+                  if (success) {
+                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully`);
                     renderedIterationsRef.current.add(iteration.id);
+                  } else {
+                    // Log failure with more detail
+                    LogManager.log(`iteration-${iteration.id}-error`, 
+                      `Iteration ${iteration.id} render failed. HTML length: ${iteration.htmlContent?.length || 0}, CSS length: ${iteration.cssContent?.length || 0}`
+                    );
+                    
+                    // Add additional debug for failed render
+                    if (!iteration.cssContent || iteration.cssContent.length < 10) {
+                      LogManager.log(`iteration-${iteration.id}-css-issue`, 
+                        `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`
+                      );
+                    }
                   }
                 }}
               />

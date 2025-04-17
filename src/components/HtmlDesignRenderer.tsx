@@ -90,6 +90,13 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     }
     if (!cssContent) {
       console.warn('HtmlDesignRenderer: Empty CSS content received');
+      console.log('Debugging CSS issues:', {
+        cssContentType: typeof cssContent,
+        cssLength: cssContent?.length || 0,
+        cssContentPrefix: cssContent?.substring(0, 20)
+      });
+    } else if (cssContent.length < 20) {
+      console.warn('HtmlDesignRenderer: Very short CSS content received:', cssContent);
     }
   }, [htmlContent, cssContent]);
 
