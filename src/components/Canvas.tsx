@@ -1064,8 +1064,7 @@ const IterateIcon = () => (
 
 const RetryIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M1.333 8C1.333 4.32 4.32 1.333 8 1.333C11.68 1.333 14.666 4.32 14.666 8C14.666 11.68 11.68 14.667 8 14.667C6.12 14.667 4.44 13.853 3.293 12.56" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M1.333 8L3.999 10.667L6.666 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M13.65 2.35C12.2 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C11.73 16 14.84 13.45 15.74 10H13.65C12.83 12.33 10.61 14 8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35Z" fill="currentColor"/>
   </svg>
 );
 
