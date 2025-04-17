@@ -1121,6 +1121,29 @@ const DragHandle = styled.button`
   }
 `;
 
+// Add a cancel button component
+const CancelButton = styled.button`
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 15px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: white;
+  }
+
+  &:active {
+    transform: translateY(1px);
+  }
+`;
+
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
   
@@ -1655,8 +1678,16 @@ export const Canvas: React.FC = () => {
     }
   };
   
+  // Add a ref to track abort controllers for each design
+  const abortControllersRef = useRef<Record<string, AbortController>>({});
+
   // Function to process the actual iteration based on the design ID and prompt
   const processIteration = async (designId: string, prompt: string) => {
+    // Create a new AbortController for this iteration
+    const controller = new AbortController();
+    abortControllersRef.current[designId] = controller;
+    const signal = controller.signal;
+
     LogManager.log('iteration-request', `Iteration requested for design: ${designId} with prompt: ${prompt || 'none'}`, true);
     
     // First determine if the selected ID is for a base design or an iteration
@@ -1719,6 +1750,12 @@ export const Canvas: React.FC = () => {
     );
     
     try {
+      // Check if the process has been aborted
+      if (signal.aborted) {
+        console.log('Iteration process was aborted before analysis started');
+        return;
+      }
+
       // Get the original dimensions depending on whether we have an original or iteration
       let originalDimensions;
       let sourceImageUrl: string;
@@ -1742,6 +1779,12 @@ export const Canvas: React.FC = () => {
       }
       
       // Update the processing step to show "AI Analyzing Design"
+      // Check if the process has been aborted
+      if (signal.aborted) {
+        console.log('Iteration process was aborted during dimension calculation');
+        return;
+      }
+
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
           if (design.id === designId) {
@@ -1766,92 +1809,100 @@ export const Canvas: React.FC = () => {
       
       // Step 1: AI Analysis - Call OpenAI service to analyze the design according to PRD 2.4.2
       let result;
-      if (isIteration) {
-        // For iterations, we need to call a specialized method that can analyze HTML/CSS
-        // For now, we'll use the same method with the parent's image URL
-        // This is a temporary solution until we implement proper HTML/CSS analysis
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
-      } else {
-        // For base designs, we use the existing method with the image URL
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
+      
+      try {
+        // Use the signal with the OpenAI service call
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt || '');
+
+        // Check if the process has been aborted
+        if (signal.aborted) {
+          console.log('Iteration process was aborted during AI analysis');
+          return;
+        }
+
+        // Update to the next processing step
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => {
+            if (design.id === designId) {
+              // If it's a base design
+              return { ...design, processingStep: 'recreating' };
+            } else if (design.iterations) {
+              // Check if the designId matches any of this design's iterations
+              const updatedIterations = design.iterations.map(iteration => 
+                iteration.id === designId
+                  ? { ...iteration, processingStep: 'recreating' }
+                  : iteration
+              );
+              
+              // Only return a new design object if one of its iterations changed
+              if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+                return { ...design, iterations: updatedIterations };
+              }
+            }
+            return design;
+          })
+        );
+        
+        // Short delay to show the recreating step
+        if (!signal.aborted) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        // Check if the process has been aborted
+        if (signal.aborted) {
+          console.log('Iteration process was aborted during the recreating step');
+          return;
+        }
+      } catch (error) {
+        if (signal.aborted) {
+          console.log('AI analysis was aborted');
+          return;
+        }
+        console.error('Error analyzing design:', error);
+        throw new Error(`Failed to analyze design: ${(error as Error).message}`);
       }
       
-      // Update the processing step to "Generating Improved Design"
-      setDesigns(prevDesigns => 
-        prevDesigns.map(design => {
-          if (design.id === designId) {
-            // If it's a base design
-            return { ...design, processingStep: 'recreating' };
-          } else if (design.iterations) {
-            // Check if the designId matches any of this design's iterations
-            const updatedIterations = design.iterations.map(iteration => 
-              iteration.id === designId
-                ? { ...iteration, processingStep: 'recreating' }
-                : iteration
-            );
-            
-            // Only return a new design object if one of its iterations changed
-            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
-              return { ...design, iterations: updatedIterations };
-            }
-          }
-          return design;
-        })
-      );
-      
-      // Generate a unique ID for the iteration
-      const iterationId = crypto.randomUUID();
-      
-      // Calculate the position for the new iteration (positioned to the right of the original)
-      const xOffset = originalDimensions?.width || 400;
-      const marginBetween = 50;
-      
-      // Get the position of the design we're iterating on
-      const designPosition = isIteration
-        ? (designToIterate as DesignIteration).position
-        : (designToIterate as Design).position;
-      
+      // Get the closest design to determine relative position coordinates
       const iterationPosition = {
-        x: designPosition.x + xOffset + marginBetween,
-        y: designPosition.y
+        x: designToIterate.position.x + 20, // Slightly offset from the original
+        y: designToIterate.position.y + 20
       };
       
-      // Create the new iteration with enhanced analysis data according to PRD 2.4.4
+      // Create the new iteration with a unique ID and current timestamp
       const newIteration: DesignIteration = {
-        id: iterationId,
+        id: `iteration-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         parentId: isIteration ? (designToIterate as DesignIteration).parentId : designId,
+        position: iterationPosition,
         htmlContent: result.htmlCode,
         cssContent: result.cssCode,
-        position: iterationPosition, // Store absolute position instead of relative
         analysis: {
           strengths: result.analysis.strengths,
           weaknesses: result.analysis.weaknesses,
           improvementAreas: result.analysis.improvementAreas,
-          specificChanges: result.analysis.specificChanges,
-          // Add the enhanced UX analysis categories
+          specificChanges: result.analysis.specificChanges || [],
           visualHierarchy: {
-            issues: result.analysis.visualHierarchy?.issues || [],
-            improvements: result.analysis.visualHierarchy?.improvements || []
+            issues: result.analysis.visualHierarchy.issues,
+            improvements: result.analysis.visualHierarchy.improvements
           },
           colorContrast: {
-            issues: result.analysis.colorContrast?.issues || [],
-            improvements: result.analysis.colorContrast?.improvements || []
+            issues: result.analysis.colorContrast.issues,
+            improvements: result.analysis.colorContrast.improvements
           },
           componentSelection: {
-            issues: result.analysis.componentSelection?.issues || [],
-            improvements: result.analysis.componentSelection?.improvements || []
+            issues: result.analysis.componentSelection.issues,
+            improvements: result.analysis.componentSelection.improvements
           },
           textLegibility: {
-            issues: result.analysis.textLegibility?.issues || [],
-            improvements: result.analysis.textLegibility?.improvements || []
+            issues: result.analysis.textLegibility.issues,
+            improvements: result.analysis.textLegibility.improvements
           },
           usability: {
-            issues: result.analysis.usability?.issues || [],
-            improvements: result.analysis.usability?.improvements || []
+            issues: result.analysis.usability.issues,
+            improvements: result.analysis.usability.improvements
           },
           accessibility: {
-            issues: result.analysis.accessibility?.issues || [],
-            improvements: result.analysis.accessibility?.improvements || []
+            issues: result.analysis.accessibility.issues,
+            improvements: result.analysis.accessibility.improvements
           },
           metadata: {
             colors: result.metadata.colors,
@@ -1863,6 +1914,12 @@ export const Canvas: React.FC = () => {
         created_at: new Date().toISOString()
       };
       
+      // Check if the process has been aborted
+      if (signal.aborted) {
+        console.log('Iteration process was aborted after creating the new iteration object');
+        return;
+      }
+
       // Update the processing step
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
@@ -1887,7 +1944,18 @@ export const Canvas: React.FC = () => {
       );
       
       // Short delay to show the rendering step
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Check if the process has been aborted
+      if (signal.aborted) {
+        console.log('Iteration process was aborted during the rendering step');
+        return;
+      }
+
+      // Clear the abort controller since we're done
+      delete abortControllersRef.current[designId];
       
       // Update designs with a properly immutable state update
       setDesigns(prevDesigns => {
@@ -1940,6 +2008,9 @@ export const Canvas: React.FC = () => {
       setAnalysisVisible(true);
     } catch (error) {
       console.error('Error generating iteration:', error);
+      
+      // Clean up the abort controller
+      delete abortControllersRef.current[designId];
       
       // Reset the processing state on error
       setDesigns(prevDesigns => 
@@ -2304,6 +2375,41 @@ export const Canvas: React.FC = () => {
   // Add state for active tab
   const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'uxanalysis' | 'colors'>('changes');
   
+  // Add a function to cancel an iteration
+  const cancelIteration = (designId: string) => {
+    // Abort any in-progress fetch requests
+    if (abortControllersRef.current[designId]) {
+      abortControllersRef.current[designId].abort();
+      // Remove the abort controller from the ref
+      delete abortControllersRef.current[designId];
+    }
+
+    // Reset the processing state for the specified design or iteration
+    setDesigns(prevDesigns => 
+      prevDesigns.map(design => {
+        if (design.id === designId) {
+          // Reset if it's a base design
+          return { ...design, isProcessing: false, processingStep: null };
+        } else if (design.iterations) {
+          // Check if the designId matches any of this design's iterations
+          const updatedIterations = design.iterations.map(iteration => 
+            iteration.id === designId
+              ? { ...iteration, isProcessing: false, processingStep: null }
+              : iteration
+          );
+          
+          // Only return a new design object if one of its iterations changed
+          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+            return { ...design, iterations: updatedIterations };
+          }
+        }
+        return design;
+      })
+    );
+    
+    console.log('Iteration canceled for design:', designId);
+  };
+  
   // Update the render part to include the processing overlay with steps
   const renderDesign = (design: ExtendedDesign) => {
     return (
@@ -2346,6 +2452,9 @@ export const Canvas: React.FC = () => {
                   {design.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
                   {design.processingStep === 'rendering' && 'Final touches and optimizations...'}
                 </div>
+                <CancelButton onClick={() => cancelIteration(design.id)}>
+                  Cancel
+                </CancelButton>
               </ProcessingOverlay>
             </>
           )}
@@ -2471,6 +2580,9 @@ export const Canvas: React.FC = () => {
                   {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
                   {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
                 </div>
+                <CancelButton onClick={() => cancelIteration(iteration.id)}>
+                  Cancel
+                </CancelButton>
               </ProcessingOverlay>
             </IterationDesignCard>
           </div>
