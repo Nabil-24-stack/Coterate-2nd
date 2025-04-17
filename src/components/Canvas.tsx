@@ -634,7 +634,7 @@ const ConnectionLine = styled.div`
 `;
 
 // Label for iteration number
-const IterationLabel = styled.div`
+const IterationLabel = styled.div<{ scale: number }>`
   position: absolute;
   top: -20px;
   left: 0;
@@ -645,10 +645,12 @@ const IterationLabel = styled.div`
   font-size: 12px;
   font-weight: 500;
   z-index: 10;
+  transform: scale(${props => 1 / props.scale});
+  transform-origin: bottom left;
 `;
 
 // Badge for new/improved design
-const NewDesignBadge = styled.div`
+const NewDesignBadge = styled.div<{ scale: number }>`
   position: absolute;
   top: -10px;
   right: -10px;
@@ -663,6 +665,8 @@ const NewDesignBadge = styled.div`
   align-items: center;
   gap: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: scale(${props => 1 / props.scale});
+  transform-origin: bottom right;
 `;
 
 // Container for an iteration design
@@ -711,7 +715,7 @@ const DebugButton = styled.button`
 `;
 
 // Add a styled component for the Figma badge
-const FigmaBadge = styled.div`
+const FigmaBadge = styled.div<{ scale: number }>`
   position: absolute;
   top: -10px;
   left: -10px;
@@ -725,6 +729,8 @@ const FigmaBadge = styled.div`
   gap: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   z-index: 5;
+  transform: scale(${props => 1 / props.scale});
+  transform-origin: bottom left;
 `;
 
 // Add a styled component for Figma metadata tooltip
@@ -891,11 +897,12 @@ const DesignCardContainer = styled.div`
 `;
 
 // Container for action buttons
-const ActionButtonsContainer = styled.div`
+const ActionButtonsContainer = styled.div<{ scale: number }>`
   position: absolute;
   top: -50px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(${props => 1 / props.scale});
+  transform-origin: center bottom;
   display: flex;
   gap: 12px;
   background-color: #383838;
@@ -2346,7 +2353,7 @@ export const Canvas: React.FC = () => {
         </DesignCard>
         
         {/* New action buttons component */}
-        <ActionButtonsContainer>
+        <ActionButtonsContainer scale={scale}>
           <ActionButton className="secondary" onMouseDown={(e) => {
             e.stopPropagation();
             // Select the design if not already selected
@@ -2415,10 +2422,10 @@ export const Canvas: React.FC = () => {
         <DesignWithActionsContainer>
           <div style={{ position: 'relative' }}>
             {/* The iteration badge */}
-            <IterationLabel>Iteration {index + 1}</IterationLabel>
+            <IterationLabel scale={scale}>Iteration {index + 1}</IterationLabel>
             
             {/* The improved design badge */}
-            <NewDesignBadge>
+            <NewDesignBadge scale={scale}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="white"/>
               </svg>
@@ -2481,7 +2488,7 @@ export const Canvas: React.FC = () => {
           </div>
           
           {/* New action buttons component */}
-          <ActionButtonsContainer>
+          <ActionButtonsContainer scale={scale}>
             <ActionButton className="secondary" onMouseDown={(e) => {
               e.stopPropagation();
               // Select the design if not already selected
