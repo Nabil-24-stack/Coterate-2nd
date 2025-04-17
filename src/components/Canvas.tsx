@@ -927,10 +927,10 @@ const ActionButton = styled.button`
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 120px;
+  width: fit-content;
   white-space: nowrap;
   color: #FFFFFF;
   
@@ -969,6 +969,20 @@ const ActionButton = styled.button`
   
   &.analysis {
     min-width: 140px;
+  }
+  
+  &.cancel {
+    background-color: #ff4d4d;
+    border-color: #ff4d4d;
+    color: #FFFFFF;
+    
+    &:hover {
+      background-color: #ff3333;
+    }
+    
+    svg {
+      stroke: #FFFFFF;
+    }
   }
 `;
 
@@ -1026,12 +1040,13 @@ const PromptButtonContainer = styled.div`
 `;
 
 const PromptButton = styled.button`
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-radius: 6px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  width: fit-content;
   
   &.cancel {
     background-color: #767676;
@@ -2462,8 +2477,7 @@ export const Canvas: React.FC = () => {
           {/* Show only Cancel button when processing */}
           {design.isProcessing ? (
             <ActionButton 
-              className="primary" 
-              style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d' }}
+              className="cancel"
               onClick={() => cancelIteration(design.id)}
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
@@ -2601,8 +2615,7 @@ export const Canvas: React.FC = () => {
             {/* Show only Cancel button when processing */}
             {iteration.isProcessing ? (
               <ActionButton 
-                className="primary" 
-                style={{ backgroundColor: '#ff4d4d', borderColor: '#ff4d4d' }}
+                className="cancel"
                 onClick={() => cancelIteration(iteration.id)}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
