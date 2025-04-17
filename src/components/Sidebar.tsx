@@ -229,21 +229,20 @@ const EditInput = styled.input`
 
 // Add new styled components for the user profile section
 const UserProfileSection = styled.div`
-  padding: 12px;
-  background-color: #767676;
-  border-radius: 8px;
-  border: 1px solid #4D4D4D;
+  padding: 16px;
+  background-color: #393A3A;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
   width: 100%;
   margin: 0;
+  position: relative;
 `;
 
 const UserInfo = styled.div`
-  font-size: 14px;
-  color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
@@ -255,28 +254,27 @@ const UserName = styled.div`
 
 const UserEmail = styled.div`
   font-size: 12px;
+  font-weight: 500;
   color: #CFCFCF;
 `;
 
-const SignOutButton = styled.button`
-  margin-top: 8px;
-  padding: 4px 8px;
-  font-size: 12px;
-  background-color: #767676;
-  border: 1px solid #4A4A4A;
-  border-radius: 4px;
-  cursor: pointer;
+const ChevronIcon = styled.div<{ isOpen: boolean }>`
   color: #FFFFFF;
-  
-  &:hover {
-    background-color: #686868;
-  }
+  transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
+  transition: transform 0.2s ease;
+`;
+
+// Dropdown menu for user profile
+const UserDropdownMenu = styled(DropdownMenu)`
+  right: 8px;
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 5px;
 `;
 
 // Add a new styled component for the bottom section
 const BottomSection = styled.div`
   margin-top: auto;
-  padding: 0 8px 8px 8px;
   width: 100%;
   position: relative;
   z-index: 2;
@@ -328,6 +326,42 @@ const Dropdown: React.FC<DropdownProps> = ({ pageId, pageName, onClose, onRename
   );
 };
 
+// Modified the existing Dropdown component to be reusable
+interface UserDropdownProps {
+  onClose: () => void;
+  onSignOut: () => void;
+}
+
+const UserDropdown: React.FC<UserDropdownProps> = ({ onClose, onSignOut }) => {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
+  
+  const handleSignOut = () => {
+    onSignOut();
+    onClose();
+  };
+  
+  return (
+    <UserDropdownMenu ref={dropdownRef}>
+      <MenuItem onClick={handleSignOut}>
+        Sign Out
+      </MenuItem>
+    </UserDropdownMenu>
+  );
+};
+
 export const Sidebar: React.FC = () => {
   const { pages, addPage, setCurrentPage, currentPage, updatePage, deletePage } = usePageContext();
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
@@ -338,6 +372,7 @@ export const Sidebar: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [figmaUser, setFigmaUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [userDropdownOpen, setUserDropdownOpen] = useState<boolean>(false);
   
   const editInputRef = useRef<HTMLInputElement>(null);
   const figmaModalRef = useRef<HTMLDivElement>(null);
@@ -403,6 +438,14 @@ export const Sidebar: React.FC = () => {
   
   const closeMenu = () => {
     setActiveDropdown(null);
+  };
+  
+  const toggleUserDropdown = () => {
+    setUserDropdownOpen(!userDropdownOpen);
+  };
+  
+  const closeUserDropdown = () => {
+    setUserDropdownOpen(false);
   };
   
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, page: Page) => {
@@ -562,16 +605,25 @@ export const Sidebar: React.FC = () => {
       {/* Add the user profile section at the bottom */}
       {isAuthenticated && (
         <BottomSection>
-          <UserProfileSection>
-            {figmaUser ? (
-              <>
-                <UserName>{figmaUser.handle || 'Figma User'}</UserName>
-                <UserEmail>{figmaUser.email || ''}</UserEmail>
-              </>
-            ) : (
-              <UserName>Authenticated with Figma</UserName>
+          <UserProfileSection onClick={toggleUserDropdown}>
+            <UserInfo>
+              {figmaUser ? (
+                <>
+                  <UserName>{figmaUser.handle || 'Figma User'}</UserName>
+                  <UserEmail>{figmaUser.email || ''}</UserEmail>
+                </>
+              ) : (
+                <UserName>Authenticated with Figma</UserName>
+              )}
+            </UserInfo>
+            <ChevronIcon isOpen={userDropdownOpen}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 15L12 9L18 15" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </ChevronIcon>
+            {userDropdownOpen && (
+              <UserDropdown onClose={closeUserDropdown} onSignOut={handleSignOut} />
             )}
-            <SignOutButton onClick={handleSignOut}>Sign Out</SignOutButton>
           </UserProfileSection>
         </BottomSection>
       )}
