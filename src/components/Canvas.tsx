@@ -2572,7 +2572,7 @@ export const Canvas: React.FC<{}> = () => {
                 setAnalysisVisible(true);
               }}>
                 <ViewIcon />
-                View Analysis
+                Analysis
               </ActionButton>
               <ActionButton>
                 <RetryIcon />
@@ -2710,7 +2710,7 @@ export const Canvas: React.FC<{}> = () => {
                   setAnalysisVisible(true);
                 }}>
                   <ViewIcon />
-                  View Analysis
+                  Analysis
                 </ActionButton>
                 <ActionButton>
                   <RetryIcon />
