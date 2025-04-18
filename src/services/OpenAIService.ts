@@ -568,7 +568,12 @@ class OpenAIService {
         /```css([\s\S]*?)```/,         // No space or newline after css
         /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
         /```\n<style>([\s\S]*?)<\/style>\n```/, // Code block with style tags
-        /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS SUMMARY:|$)/ // CSS section with heading
+        /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS SUMMARY:|$)/, // CSS section with heading
+        /4\.\s*CSS\s*CODE:[\r\n]+([\s\S]*?)(?=\n\n|\d+\.\s|IMPROVEMENTS|$)/i, // Numbered CSS section
+        /CSS:[\r\n]+([\s\S]*?)(?=\n\n|HTML:|IMPROVEMENTS:|$)/i, // Simple CSS: heading
+        /```\s*([\s\S]*?:root\s*{[\s\S]*?})[\s\S]*?```/, // CSS with :root selector in a code block
+        /```\s*(body\s*{[\s\S]*?})[\s\S]*?```/, // CSS starting with body selector
+        /```\s*([\s\S]*?\.[\w-]+\s*{[\s\S]*?})[\s\S]*?```/ // CSS with any class selector
       ];
       
       let cssContent = '';
@@ -585,16 +590,14 @@ class OpenAIService {
         }
       }
       
-      // Step 2: Check for the specific format in the screenshot - structured Markdown/text format
+      // Step 2: Check for the case where CSS is presented in a markdown structure like:
+      // ```css
+      // body {
+      //   ...
+      // }
+      // ```
       if (!cssContent) {
         console.log('No CSS found with standard patterns, checking for markdown format');
-        
-        // This handles the case where CSS is presented in a markdown structure like:
-        // ```css
-        // body {
-        //   ...
-        // }
-        // ```
         
         // Look for any markdown code blocks
         const markdownCodeBlocks = response.match(/```(?:css)?\s*\n([\s\S]*?)```/g);
@@ -654,7 +657,8 @@ class OpenAIService {
         
         // Look directly for CSS-like patterns in the entire response
         const cssBlocks = [];
-        const cssRules = /([.#]?[a-zA-Z][\w-]*(?:\s*[,>+~]\s*[.#]?[a-zA-Z][\w-]*)*)\s*\{[^}]*\}/g;
+        // More comprehensive CSS rule regex - captures more valid CSS patterns
+        const cssRules = /([.#]?[a-zA-Z0-9*][\w-]*(?:\s*[,>+~:]\s*[.#]?[a-zA-Z0-9*][\w-]*)*(?:\[[^\]]+\])?(?:::[a-z-]+)?)\s*\{[^}]*\}/g;
         let match;
         
         while ((match = cssRules.exec(response)) !== null) {
@@ -668,40 +672,61 @@ class OpenAIService {
         }
       }
       
-      // Step 5: Handle the case from the screenshot - try to extract raw content
-      if (!cssContent) {
-        console.log('Attempting extraction as last resort');
-        const sections = response.split(/\n+#{2,}\s+/); // Split by markdown headers
-        
-        for (const section of sections) {
-          if (section.toLowerCase().includes('css') && !section.toLowerCase().includes('html')) {
-            // This section likely contains CSS
-            const lines = section.split('\n');
-            let collecting = false;
-            const cssLines = [];
-            
-            for (const line of lines) {
-              if (line.includes('```css') || line.includes('```')) {
-                collecting = !collecting;
-                continue;
-              }
-              
-              if (collecting || line.includes('{') && line.includes('}')) {
-                cssLines.push(line);
-              }
-            }
-            
-            if (cssLines.length > 0) {
-              cssContent = cssLines.join('\n');
-              console.log('Extracted CSS from section parsing, length:', cssContent.length);
-              console.log('CSS preview:', cssContent.substring(0, 50) + '...');
-              break;
-            }
+      // Final CSS fallback - if we still have no CSS content after all extraction attempts,
+      // generate minimal fallback CSS
+      if (!cssContent || cssContent.length < 10) {
+        console.log('All CSS extraction methods failed, using minimal fallback CSS');
+        cssContent = `
+          body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #ffffff;
+            color: #333333;
           }
-        }
+          
+          h1, h2, h3, h4, h5, h6 {
+            margin-bottom: 1rem;
+            font-weight: 600;
+          }
+          
+          p {
+            margin-bottom: 1rem;
+            line-height: 1.5;
+          }
+          
+          button, .button {
+            background-color: #4a6cf7;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+          }
+          
+          a {
+            color: #4a6cf7;
+            text-decoration: none;
+          }
+          
+          input, select, textarea {
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            width: 100%;
+            margin-bottom: 1rem;
+          }
+          
+          .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+          }
+        `;
       }
       
-      // Final check - remove any triple backticks if they're still in the content
+      // Remove any triple backticks if they're still in the content
       if (cssContent.includes('```')) {
         cssContent = cssContent.replace(/```(?:css)?\s*\n?|```/g, '').trim();
         console.log('Removed remaining backticks from CSS content');
