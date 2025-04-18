@@ -142,56 +142,42 @@ class OpenAIService {
           // Get image dimensions first - we need these regardless of fetch method
           const dimensions = await this.getImageDimensions(imageUrl);
           
-          // Try to handle CORS issues with Figma images
-          let fetchResponse;
-          try {
-            // First attempt: direct fetch
-            fetchResponse = await fetch(imageUrl, { mode: 'cors' });
-          } catch (directFetchError) {
-            console.log('Direct fetch failed, trying with proxy or CORS mode: no-cors');
-            try {
-              // Second attempt: try with no-cors mode
-              fetchResponse = await fetch(imageUrl, { mode: 'no-cors' });
-            } catch (corsError) {
-              // If both failed, try with a proxy if we have one, otherwise rethrow
-              console.error('Both fetch attempts failed:', corsError);
-              // If the image URL is a Figma URL, try to create a placeholder or use a cached version
-              if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
-                // For Figma images that fail with CORS, use a hardcoded data URL as fallback
-                console.log('Figma image detected, using data URL fallback');
-                // Convert the design to a basic data URL by drawing it on a canvas
-                const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-                if (dataUrl) {
-                  base64Image = dataUrl.split(',')[1];
-                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
-                }
-              }
-              throw corsError;
-            }
-          }
-          
-          if (!fetchResponse.ok) {
-            throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
-          }
-          
-          const blob = await fetchResponse.blob();
-          base64Image = await this.blobToBase64(blob);
-        } catch (error: any) {
-          console.error('Error fetching image:', error);
-          
-          // Try to create a data URL from the image as a last resort
-          try {
-            console.log('Attempting to create data URL from image as fallback');
-            const dimensions = await this.getImageDimensions(imageUrl);
+          // Skip direct fetch attempts for Figma images that have CORS issues
+          if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
+            console.log('Figma image detected, using data URL approach directly');
+            // Convert the design to a data URL by drawing it on a canvas
             const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
             if (dataUrl) {
               base64Image = dataUrl.split(',')[1];
               return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
+            } else {
+              throw new Error('Failed to create data URL from Figma image');
             }
-          } catch (fallbackError) {
-            console.error('Fallback attempt also failed:', fallbackError);
           }
           
+          // For non-Figma images, try a normal fetch
+          try {
+            const fetchResponse = await fetch(imageUrl);
+            if (!fetchResponse.ok) {
+              throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
+            }
+            const blob = await fetchResponse.blob();
+            base64Image = await this.blobToBase64(blob);
+          } catch (fetchError) {
+            console.error('Error fetching image:', fetchError);
+            
+            // Always fall back to data URL method for any image that fails to fetch normally
+            console.log('Attempting to create data URL as fallback for all images');
+            const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
+            if (dataUrl) {
+              base64Image = dataUrl.split(',')[1];
+              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
+            } else {
+              throw new Error('All image fetching methods failed');
+            }
+          }
+        } catch (error: any) {
+          console.error('Error processing image:', error);
           throw new Error(`Failed to process image: ${error.message}`);
         }
       }
@@ -1385,46 +1371,72 @@ footer {
     };
   }
 
-  // Add this helper method to create a data URL from an image
+  // Method to create a data URL from an image using canvas
   private async createDataUrlFromFigmaImage(imageUrl: string): Promise<string | null> {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       
-      // Set a timeout to avoid hanging
+      // Set a more generous timeout to avoid premature failure
       const timeoutId = setTimeout(() => {
-        console.log('Image load timed out, resolving with null');
+        console.log('Image load timed out after 8 seconds, resolving with null');
         resolve(null);
-      }, 5000);
+      }, 8000);
       
       img.onload = () => {
         clearTimeout(timeoutId);
         try {
           const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth || 800;
-          canvas.height = img.naturalHeight || 600;
+          const width = img.naturalWidth || 800;
+          const height = img.naturalHeight || 600;
+          
+          // Log successful dimensions
+          console.log(`Successfully loaded image: ${width}x${height}`);
+          
+          canvas.width = width;
+          canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            resolve(dataUrl);
+            
+            // Try JPEG first, fallback to PNG if needed
+            try {
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+              console.log('Successfully created JPEG data URL');
+              resolve(dataUrl);
+            } catch (jpegError) {
+              console.warn('JPEG conversion failed, trying PNG:', jpegError);
+              try {
+                const pngDataUrl = canvas.toDataURL('image/png');
+                console.log('Successfully created PNG data URL');
+                resolve(pngDataUrl);
+              } catch (pngError) {
+                console.error('All data URL formats failed:', pngError);
+                resolve(null);
+              }
+            }
           } else {
+            console.error('Failed to get canvas 2D context');
             resolve(null);
           }
         } catch (error) {
-          console.error('Error creating data URL:', error);
+          console.error('Error creating data URL from canvas:', error);
           resolve(null);
         }
       };
       
-      img.onerror = () => {
+      img.onerror = (err) => {
         clearTimeout(timeoutId);
-        console.error('Error loading image for data URL creation');
+        console.error('Error loading image for data URL creation:', err);
         resolve(null);
       };
       
-      // Add a random query parameter to bypass cache
-      img.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      // Add a random query parameter to bypass cache and use a timestamp
+      const timestamp = Date.now();
+      const cacheBuster = `t=${timestamp}&nocache=${Math.random().toString(36).substring(2, 15)}`;
+      img.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}${cacheBuster}`;
+      
+      console.log(`Attempting to load image with URL: ${img.src.substring(0, 100)}...`);
     });
   }
 
