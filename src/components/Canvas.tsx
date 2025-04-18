@@ -968,7 +968,7 @@ const ActionButton = styled.button`
   }
   
   &.analysis {
-    min-width: 140px;
+    /* min-width property removed entirely to allow the button to hug content */
   }
   
   &.cancel {
