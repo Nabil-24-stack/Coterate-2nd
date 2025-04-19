@@ -2636,6 +2636,18 @@ export const Canvas: React.FC<{}> = () => {
                       LogManager.log(`iteration-${iteration.id}-css-issue`, 
                         `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`
                       );
+                    } else {
+                      // Log CSS content sample for debugging
+                      LogManager.log(`iteration-${iteration.id}-css-debug`, 
+                        `CSS content sample: ${iteration.cssContent?.substring(0, 200)}...`
+                      );
+                    }
+                    
+                    // Log HTML content sample as well
+                    if (iteration.htmlContent) {
+                      LogManager.log(`iteration-${iteration.id}-html-debug`, 
+                        `HTML content sample: ${iteration.htmlContent?.substring(0, 200)}...`
+                      );
                     }
                   }
                 }}

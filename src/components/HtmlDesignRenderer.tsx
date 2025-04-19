@@ -39,6 +39,71 @@ const IsolatedFrame = styled.iframe`
   display: block;
 `;
 
+// Helper function to validate and fix CSS syntax issues
+const validateAndFixCss = (css: string): string => {
+  if (!css) return '';
+  
+  try {
+    // Basic CSS validation and fixing
+    
+    // 1. Fix unbalanced braces
+    let braceCount = 0;
+    let inComment = false;
+    let fixedCss = '';
+    
+    for (let i = 0; i < css.length; i++) {
+      const char = css[i];
+      
+      // Handle comments
+      if (i < css.length - 1 && char === '/' && css[i + 1] === '*') {
+        inComment = true;
+        fixedCss += '/*';
+        i++;
+        continue;
+      }
+      
+      if (i > 0 && char === '/' && css[i - 1] === '*') {
+        inComment = false;
+        continue;
+      }
+      
+      if (!inComment) {
+        if (char === '{') {
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+        }
+      }
+      
+      fixedCss += char;
+    }
+    
+    // Add missing closing braces
+    while (braceCount > 0) {
+      fixedCss += '}';
+      braceCount--;
+    }
+    
+    // 2. Ensure each rule ends with a semicolon
+    fixedCss = fixedCss.replace(/([^{};])}/g, '$1;}');
+    
+    // 3. Remove any CSS comments
+    fixedCss = fixedCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    
+    // 4. Remove empty rules
+    fixedCss = fixedCss.replace(/[^{}]+\{\s*\}/g, '');
+    
+    // 5. Remove trailing whitespace
+    fixedCss = fixedCss.trim();
+    
+    console.log('CSS validated and fixed, length:', fixedCss.length);
+    return fixedCss;
+  } catch (error) {
+    console.error('Error validating CSS:', error);
+    return css; // Return original if validation fails
+  }
+};
+
 export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesignRendererProps>(({
   htmlContent,
   cssContent,
@@ -76,8 +141,36 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
 
   // Process CSS to remove background-image properties
   const preprocessCss = (css: string): string => {
+    // Check if CSS is empty or invalid
+    if (!css || css.trim().length === 0) {
+      console.warn('HtmlDesignRenderer: Empty CSS content received for processing');
+      return '';
+    }
+    
+    // Log CSS characteristics for debugging
+    console.log(`Processing CSS with length: ${css.length}, first 50 chars: ${css.substring(0, 50)}`);
+    
+    // Remove any remaining triple backticks if they're still in the content
+    let processedCss = css;
+    if (processedCss.includes('```')) {
+      processedCss = processedCss.replace(/```(?:css)?\s*\n?|```/g, '').trim();
+      console.log('Removed remaining backticks from CSS content');
+    }
+    
     // Replace background-image properties
-    return css.replace(/background-image\s*:\s*url\(['"]?([^'"\)]+)['"]?\)/gi, 'background-color:#e0e0e0;border:1px solid #ccc;');
+    processedCss = processedCss.replace(/background-image\s*:\s*url\(['"]?([^'"\)]+)['"]?\)/gi, 'background-color:#e0e0e0;border:1px solid #ccc;');
+    
+    // Fix any malformed CSS
+    processedCss = processedCss.replace(/([^{}])\s*}/g, '$1;}'); // Add missing semicolons before closing braces
+    processedCss = processedCss.replace(/({[^{}]*?)[;]\s*}/g, '$1}'); // Remove trailing semicolons before closing braces
+    
+    // Validate and fix CSS syntax
+    processedCss = validateAndFixCss(processedCss);
+    
+    // Log processed CSS length
+    console.log(`Processed CSS length: ${processedCss.length}`);
+    
+    return processedCss;
   };
   
   // Process the CSS content
@@ -154,7 +247,8 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
       <!-- Font Awesome for icons -->
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       
-      <style>
+      <!-- Base styles -->
+      <style id="base-styles">
         /* CSS Reset - more comprehensive for better rendering */
         *, *::before, *::after {
           margin: 0;
@@ -250,8 +344,11 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           shape-rendering: geometricPrecision;
           text-rendering: optimizeLegibility;
         }
-        
-        /* Custom CSS */
+      </style>
+      
+      <!-- Custom CSS - separated for better visibility and debugging -->
+      <style id="custom-css">
+        /* Custom CSS - This is the user's CSS content - ensure it's AFTER our base styles */
         ${processedCssContent}
       </style>
       
@@ -336,6 +433,28 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           processPositionedElements();
           processFormElements();
           
+          // Check for custom CSS application
+          const checkCssApplied = () => {
+            const customStyle = document.getElementById('custom-css');
+            if (customStyle) {
+              const cssLength = customStyle.textContent?.length || 0;
+              console.log('Custom CSS length:', cssLength);
+              
+              if (cssLength === 0) {
+                console.warn('Empty custom CSS detected, attempting to reapply');
+                try {
+                  // Try to inject custom CSS again if it's empty
+                  customStyle.textContent = \`${processedCssContent.replace(/`/g, '\\`')}\`;
+                } catch (error) {
+                  console.error('Error reapplying custom CSS:', error);
+                }
+              }
+            }
+          };
+          
+          // Run CSS check
+          checkCssApplied();
+          
           // Signal that content is loaded and ready
           if (window.parent) {
             window.parent.postMessage('design-rendered', '*');
@@ -368,12 +487,77 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         iframeDoc.write(combinedContent);
         iframeDoc.close();
         
+        // Add a retry mechanism for CSS not applying correctly
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        const checkCssLoaded = () => {
+          try {
+            // Check if styles are applied by checking computed style of body
+            const iframeBody = iframeDoc.body;
+            if (!iframeBody) {
+              console.error('Could not access iframe body');
+              if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(checkCssLoaded, 50);
+              } else {
+                console.error('Max retries reached, giving up');
+                onRender?.(false);
+              }
+              return;
+            }
+            
+            // Inject a small script to ensure CSS is applied
+            const cssFixScript = iframeDoc.createElement('script');
+            cssFixScript.textContent = `
+              // Force style recalculation
+              document.body.style.visibility = 'hidden';
+              setTimeout(() => { document.body.style.visibility = 'visible'; }, 0);
+              
+              // Check if any styles were applied
+              const stylesApplied = () => {
+                const allElements = document.querySelectorAll('*');
+                let hasStyles = false;
+                
+                for (let i = 0; i < Math.min(allElements.length, 10); i++) {
+                  const style = getComputedStyle(allElements[i]);
+                  if (style.cssText && style.cssText.length > 20) {
+                    hasStyles = true;
+                    break;
+                  }
+                }
+                
+                return hasStyles;
+              };
+              
+              // Signal ready state
+              if (window.parent) {
+                window.parent.postMessage(
+                  stylesApplied() ? 'design-rendered' : 'design-rendered-no-styles', 
+                  '*'
+                );
+              }
+            `;
+            iframeBody.appendChild(cssFixScript);
+          } catch (error) {
+            console.error('Error checking CSS loaded state:', error);
+            onRender?.(false);
+          }
+        };
+        
+        // Start the CSS check after a short delay to allow iframe to initialize
+        setTimeout(checkCssLoaded, 50);
+        
         // Add event listener for message from iframe
         const handleMessage = (event: MessageEvent) => {
           if (event.data === 'design-rendered') {
             // Mark render as successful
             setError(null);
             onRender?.(true);
+          } else if (event.data === 'design-rendered-no-styles') {
+            // Styles didn't apply correctly
+            console.warn('Design rendered but no styles were applied');
+            onRender?.(false);
           }
         };
         
