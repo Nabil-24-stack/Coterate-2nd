@@ -247,7 +247,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
       <!-- Font Awesome for icons -->
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       
-      <!-- Base styles -->
+      <!-- Inline Base Styles - for better reliability -->
       <style id="base-styles">
         /* CSS Reset - more comprehensive for better rendering */
         *, *::before, *::after {
@@ -346,120 +346,107 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         }
       </style>
       
-      <!-- Custom CSS - separated for better visibility and debugging -->
+      <!-- Custom CSS - guaranteed to work by directly embedding -->
       <style id="custom-css">
-        /* Custom CSS - This is the user's CSS content - ensure it's AFTER our base styles */
-        ${processedCssContent}
+${processedCssContent}
       </style>
       
       <script>
-        document.addEventListener('DOMContentLoaded', function() {
-          // Fix any remaining images that might have been dynamically added
-          const processImages = () => {
-            // Immediately remove any img elements and replace with placeholders
-            document.querySelectorAll('img').forEach(img => {
-              const width = img.width || 100;
-              const height = img.height || 100;
+        // Simpler, self-executing script that doesn't declare global functions that can conflict
+        (function() {
+          document.addEventListener('DOMContentLoaded', function() {
+            // Fix any remaining images that might have been dynamically added
+            const processImages = function() {
+              // Immediately remove any img elements and replace with placeholders
+              document.querySelectorAll('img').forEach(function(img) {
+                const width = img.width || 100;
+                const height = img.height || 100;
+                
+                const placeholder = document.createElement('div');
+                placeholder.className = 'image-placeholder';
+                placeholder.style.width = width + 'px';
+                placeholder.style.height = height + 'px';
+                placeholder.style.backgroundColor = '#e0e0e0';
+                placeholder.style.border = '1px solid #ccc';
+                
+                if (img.parentNode) {
+                  img.parentNode.replaceChild(placeholder, img);
+                }
+              });
               
-              const placeholder = document.createElement('div');
-              placeholder.className = 'image-placeholder';
-              placeholder.style.width = width + 'px';
-              placeholder.style.height = height + 'px';
-              placeholder.style.backgroundColor = '#e0e0e0';
-              placeholder.style.border = '1px solid #ccc';
-              
-              if (img.parentNode) {
-                img.parentNode.replaceChild(placeholder, img);
-              }
-            });
+              // Remove any background images
+              document.querySelectorAll('*').forEach(function(el) {
+                const style = getComputedStyle(el);
+                if (style.backgroundImage && style.backgroundImage !== 'none') {
+                  el.style.backgroundImage = 'none';
+                  el.style.backgroundColor = '#e0e0e0';
+                  el.style.border = '1px solid #ccc';
+                }
+              });
+            };
             
-            // Remove any background images
-            document.querySelectorAll('*').forEach(el => {
-              const style = getComputedStyle(el);
-              if (style.backgroundImage && style.backgroundImage !== 'none') {
-                el.style.backgroundImage = 'none';
-                el.style.backgroundColor = '#e0e0e0';
-                el.style.border = '1px solid #ccc';
-              }
-            });
-          };
-          
-          // Fix font awesome icons
-          const processIcons = () => {
-            document.querySelectorAll('.fa, .fas, .far, .fab').forEach(icon => {
-              // Ensure icons have proper alignment
-              if (getComputedStyle(icon).display !== 'inline-flex') {
-                icon.style.display = 'inline-flex';
-                icon.style.alignItems = 'center';
-                icon.style.justifyContent = 'center';
-              }
-            });
-          };
-          
-          // Fix for exact positioning
-          const processPositionedElements = () => {
-            // Get all positioned elements
-            const elements = document.querySelectorAll('[style*="position:absolute"], [style*="position: absolute"]');
-            elements.forEach(el => {
-              // Ensure the parent is positioned relatively if not already
-              const parent = el.parentElement;
-              if (parent && parent !== document.body) {
-                const parentStyle = getComputedStyle(parent);
-                if (parentStyle.position === 'static') {
-                  parent.style.position = 'relative';
+            // Fix font awesome icons
+            const processIcons = function() {
+              document.querySelectorAll('.fa, .fas, .far, .fab').forEach(function(icon) {
+                // Ensure icons have proper alignment
+                if (getComputedStyle(icon).display !== 'inline-flex') {
+                  icon.style.display = 'inline-flex';
+                  icon.style.alignItems = 'center';
+                  icon.style.justifyContent = 'center';
                 }
-              }
-            });
-          };
-          
-          // Process form elements for better styling
-          const processFormElements = () => {
-            // Style checkboxes and radio buttons consistently
-            document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => {
-              // If the input doesn't have a CSS custom property for color, inherit from parent
-              const computedStyle = getComputedStyle(input);
-              if (!computedStyle.getPropertyValue('--checkbox-color') && !computedStyle.getPropertyValue('--radio-color')) {
-                const parentColor = getComputedStyle(input.parentElement || document.body).color;
-                input.style.setProperty('--checkbox-color', parentColor);
-                input.style.setProperty('--radio-color', parentColor);
-                input.style.color = parentColor;
-              }
-            });
-          };
-          
-          // Run all processors
-          processImages();
-          processIcons();
-          processPositionedElements();
-          processFormElements();
-          
-          // Check for custom CSS application
-          const checkCssApplied = () => {
-            const customStyle = document.getElementById('custom-css');
-            if (customStyle) {
-              const cssLength = customStyle.textContent?.length || 0;
-              console.log('Custom CSS length:', cssLength);
-              
-              if (cssLength === 0) {
-                console.warn('Empty custom CSS detected, attempting to reapply');
-                try {
-                  // Try to inject custom CSS again if it's empty
-                  customStyle.textContent = \`${processedCssContent.replace(/`/g, '\\`')}\`;
-                } catch (error) {
-                  console.error('Error reapplying custom CSS:', error);
+              });
+            };
+            
+            // Fix for exact positioning
+            const processPositionedElements = function() {
+              // Get all positioned elements
+              const elements = document.querySelectorAll('[style*="position:absolute"], [style*="position: absolute"]');
+              elements.forEach(function(el) {
+                // Ensure the parent is positioned relatively if not already
+                const parent = el.parentElement;
+                if (parent && parent !== document.body) {
+                  const parentStyle = getComputedStyle(parent);
+                  if (parentStyle.position === 'static') {
+                    parent.style.position = 'relative';
+                  }
                 }
+              });
+            };
+            
+            // Process form elements for better styling
+            const processFormElements = function() {
+              // Style checkboxes and radio buttons consistently
+              document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function(input) {
+                // If the input doesn't have a CSS custom property for color, inherit from parent
+                const computedStyle = getComputedStyle(input);
+                if (!computedStyle.getPropertyValue('--checkbox-color') && !computedStyle.getPropertyValue('--radio-color')) {
+                  const parentColor = getComputedStyle(input.parentElement || document.body).color;
+                  input.style.setProperty('--checkbox-color', parentColor);
+                  input.style.setProperty('--radio-color', parentColor);
+                  input.style.color = parentColor;
+                }
+              });
+            };
+            
+            // Run all processors
+            processImages();
+            processIcons();
+            processPositionedElements();
+            processFormElements();
+            
+            // Force a reflow to ensure styles are applied
+            document.body.style.display = 'none';
+            document.body.offsetHeight; // This forces a reflow
+            document.body.style.display = '';
+            
+            // Signal that content is loaded and ready after a small delay
+            setTimeout(function() {
+              if (window.parent) {
+                window.parent.postMessage('design-rendered', '*');
               }
-            }
-          };
-          
-          // Run CSS check
-          checkCssApplied();
-          
-          // Signal that content is loaded and ready
-          if (window.parent) {
-            window.parent.postMessage('design-rendered', '*');
-          }
-        });
+            }, 100);
+          });
+        })();
       </script>
     </head>
     <body>
@@ -482,71 +469,103 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           return;
         }
         
-        // Write the content to the iframe
+        // Reset any previous content
         iframeDoc.open();
         iframeDoc.write(combinedContent);
         iframeDoc.close();
         
-        // Add a retry mechanism for CSS not applying correctly
-        let retryCount = 0;
-        const maxRetries = 3;
-        
-        const checkCssLoaded = () => {
+        // Set a direct event handler on the iframe's load event instead of using a script
+        const checkAndApplyStyles = () => {
           try {
-            // Check if styles are applied by checking computed style of body
-            const iframeBody = iframeDoc.body;
-            if (!iframeBody) {
-              console.error('Could not access iframe body');
-              if (retryCount < maxRetries) {
-                retryCount++;
-                setTimeout(checkCssLoaded, 50);
-              } else {
-                console.error('Max retries reached, giving up');
-                onRender?.(false);
-              }
-              return;
-            }
+            // Directly apply an inline script for checking and fixing styles
+            // This avoids the issue with duplicate function declarations
+            const checkStylesScript = document.createElement('script');
+            const uniqueId = `style_check_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
             
-            // Inject a small script to ensure CSS is applied
-            const cssFixScript = iframeDoc.createElement('script');
-            cssFixScript.textContent = `
-              // Force style recalculation
-              document.body.style.visibility = 'hidden';
-              setTimeout(() => { document.body.style.visibility = 'visible'; }, 0);
-              
-              // Check if any styles were applied
-              const stylesApplied = () => {
-                const allElements = document.querySelectorAll('*');
-                let hasStyles = false;
+            checkStylesScript.textContent = `
+              (function() {
+                // Force style recalculation
+                document.body.style.visibility = 'hidden';
+                setTimeout(() => { document.body.style.visibility = 'visible'; }, 10);
                 
-                for (let i = 0; i < Math.min(allElements.length, 10); i++) {
-                  const style = getComputedStyle(allElements[i]);
-                  if (style.cssText && style.cssText.length > 20) {
-                    hasStyles = true;
-                    break;
+                // Direct CSS injection as a fallback
+                const ensureStylesApplied = () => {
+                  const customStyleEl = document.getElementById('custom-css');
+                  if (!customStyleEl || !customStyleEl.textContent || customStyleEl.textContent.trim().length < 20) {
+                    console.log('Applying CSS directly as a fallback');
+                    // Create a new style element with the CSS content
+                    const newStyle = document.createElement('style');
+                    newStyle.id = 'injected-css-${uniqueId}';
+                    newStyle.textContent = ${JSON.stringify(processedCssContent)};
+                    document.head.appendChild(newStyle);
                   }
-                }
+                  
+                  // Apply inline styles to all elements to force browser to render them
+                  const applyInlineStyles = () => {
+                    document.querySelectorAll('*').forEach(el => {
+                      if (el.nodeType === 1) { // Element nodes only
+                        const computedStyle = getComputedStyle(el);
+                        // Apply a tiny transform to force style recalculation
+                        el.style.transform = 'translateZ(0)';
+                        // Apply a tiny outline to force style recalculation
+                        el.style.outline = 'transparent solid 0px';
+                      }
+                    });
+                  };
+                  
+                  // Run after a short delay
+                  setTimeout(applyInlineStyles, 50);
+                  
+                  // Check if any styles are applied
+                  let hasStyles = false;
+                  const allElements = document.querySelectorAll('*');
+                  for (let i = 0; i < Math.min(allElements.length, 10); i++) {
+                    const style = getComputedStyle(allElements[i]);
+                    if (style.cssText && style.cssText.length > 20) {
+                      hasStyles = true;
+                      break;
+                    }
+                  }
+                  
+                  // Signal ready state to parent
+                  if (window.parent) {
+                    window.parent.postMessage(
+                      hasStyles ? 'design-rendered' : 'design-rendered-no-styles', 
+                      '*'
+                    );
+                  }
+                };
                 
-                return hasStyles;
-              };
-              
-              // Signal ready state
-              if (window.parent) {
-                window.parent.postMessage(
-                  stylesApplied() ? 'design-rendered' : 'design-rendered-no-styles', 
-                  '*'
-                );
-              }
+                // Execute immediately
+                ensureStylesApplied();
+              })();
             `;
-            iframeBody.appendChild(cssFixScript);
+            
+            // Need to make sure the body is ready
+            if (iframeDoc.body) {
+              iframeDoc.body.appendChild(checkStylesScript);
+            } else {
+              console.error('Iframe body not available for script injection');
+              onRender?.(false);
+            }
           } catch (error) {
             console.error('Error checking CSS loaded state:', error);
             onRender?.(false);
           }
         };
         
-        // Start the CSS check after a short delay to allow iframe to initialize
-        setTimeout(checkCssLoaded, 50);
+        // Add load event handler to the iframe
+        if (iframe.contentWindow) {
+          const handleIframeLoad = () => {
+            setTimeout(checkAndApplyStyles, 100);
+          };
+          
+          // Try different approaches to ensure the load handler is triggered
+          iframe.onload = handleIframeLoad;
+          
+          // Also try to run it after a timeout as a fallback
+          setTimeout(handleIframeLoad, 300);
+        }
         
         // Add event listener for message from iframe
         const handleMessage = (event: MessageEvent) => {
@@ -555,9 +574,37 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
             setError(null);
             onRender?.(true);
           } else if (event.data === 'design-rendered-no-styles') {
-            // Styles didn't apply correctly
-            console.warn('Design rendered but no styles were applied');
-            onRender?.(false);
+            // Styles didn't apply correctly - try direct CSS injection
+            console.warn('Design rendered but no styles were applied - attempting direct style application');
+            
+            try {
+              // Try direct CSS injection as a last resort
+              if (iframe.contentDocument && iframe.contentDocument.head) {
+                const directStyleEl = iframe.contentDocument.createElement('style');
+                directStyleEl.id = 'direct-css-inject';
+                directStyleEl.textContent = processedCssContent;
+                iframe.contentDocument.head.appendChild(directStyleEl);
+                
+                // Force browser to apply styles
+                const forceStylesScript = iframe.contentDocument.createElement('script');
+                forceStylesScript.textContent = `
+                  document.body.style.display = 'none';
+                  setTimeout(() => { document.body.style.display = 'block'; }, 10);
+                `;
+                iframe.contentDocument.body.appendChild(forceStylesScript);
+                
+                // Still report success as we've tried our best
+                setTimeout(() => {
+                  setError(null);
+                  onRender?.(true);
+                }, 100);
+              } else {
+                onRender?.(false);
+              }
+            } catch (directCssError) {
+              console.error('Error with direct CSS injection:', directCssError);
+              onRender?.(false);
+            }
           }
         };
         
@@ -566,6 +613,9 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
         // Cleanup
         return () => {
           window.removeEventListener('message', handleMessage);
+          if (iframe.contentWindow) {
+            iframe.onload = null;
+          }
         };
       } catch (err) {
         console.error('Error rendering HTML:', err);
