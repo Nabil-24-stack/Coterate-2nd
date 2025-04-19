@@ -2643,21 +2643,34 @@ export const Canvas: React.FC<{}> = () => {
                       LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully`);
                       renderedIterationsRef.current.add(iteration.id);
                     } else {
-                      // Log failure with more detail
+                      // Enhanced error logging for SVG rendering failures
+                      const svgLength = iteration.svgContent?.length || 0;
                       LogManager.log(`iteration-${iteration.id}-error`, 
-                        `Iteration ${iteration.id} render failed. SVG length: ${iteration.svgContent?.length || 0}`
-                      );
+                        `Iteration ${iteration.id} SVG render failed. SVG content length: ${svgLength}`, true);
                       
-                      // Add additional debug for failed render
-                      if (!iteration.svgContent || iteration.svgContent.length < 10) {
+                      if (!iteration.svgContent || svgLength < 100) {
                         LogManager.log(`iteration-${iteration.id}-svg-issue`, 
-                          `SVG content appears invalid. SVG: ${iteration.svgContent?.substring(0, 100) || 'empty'}`
-                        );
+                          `SVG content appears invalid or too short. Content: ${iteration.svgContent?.substring(0, 100) || 'empty'}`, true);
                       } else {
-                        // Log SVG content sample for debugging
+                        const svgPreview = iteration.svgContent.substring(0, 300).replace(/\n/g, ' ');
                         LogManager.log(`iteration-${iteration.id}-svg-debug`, 
-                          `SVG content sample: ${iteration.svgContent?.substring(0, 200)}...`
-                        );
+                          `SVG content preview: ${svgPreview}...`, true);
+                        
+                        // Try to diagnose common issues
+                        if (!iteration.svgContent.includes('xmlns=')) {
+                          LogManager.log(`iteration-${iteration.id}-svg-xmlns`, 
+                            `SVG missing xmlns attribute`, true);
+                        }
+                        
+                        if (iteration.svgContent.includes('<style>') && !iteration.svgContent.includes('CDATA')) {
+                          LogManager.log(`iteration-${iteration.id}-svg-cdata`, 
+                            `SVG has style tag without CDATA section`, true);
+                        }
+                        
+                        if (iteration.svgContent.includes('<rect') && !iteration.svgContent.includes('</rect>') && !iteration.svgContent.includes('/>')) {
+                          LogManager.log(`iteration-${iteration.id}-svg-unclosed`, 
+                            `SVG has unclosed rect tags`, true);
+                        }
                       }
                     }
                   }}
@@ -2686,34 +2699,46 @@ export const Canvas: React.FC<{}> = () => {
                     } else {
                       // Log failure with more detail
                       LogManager.log(`iteration-${iteration.id}-error`, 
-                        `Iteration ${iteration.id} render failed. HTML length: ${iteration.htmlContent?.length || 0}, CSS length: ${iteration.cssContent?.length || 0}`
-                      );
+                        `Iteration ${iteration.id} render failed. HTML length: ${iteration.htmlContent?.length || 0}, CSS length: ${iteration.cssContent?.length || 0}`);
                       
                       // Add additional debug for failed render
                       if (!iteration.cssContent || iteration.cssContent.length < 10) {
                         LogManager.log(`iteration-${iteration.id}-css-issue`, 
-                          `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`
-                        );
+                          `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`);
                       } else {
                         // Log CSS content sample for debugging
                         LogManager.log(`iteration-${iteration.id}-css-debug`, 
-                          `CSS content sample: ${iteration.cssContent?.substring(0, 200)}...`
-                        );
+                          `CSS content sample: ${iteration.cssContent?.substring(0, 200)}...`);
                       }
                       
                       // Log HTML content sample as well
                       if (iteration.htmlContent) {
                         LogManager.log(`iteration-${iteration.id}-html-debug`, 
-                          `HTML content sample: ${iteration.htmlContent?.substring(0, 200)}...`
-                        );
+                          `HTML content sample: ${iteration.htmlContent?.substring(0, 200)}...`);
                       }
                     }
                   }}
                 />
               ) : (
                 // Error fallback for missing content
-                <div style={{ padding: '20px', color: 'red', fontSize: '14px' }}>
-                  Error: No renderable content available
+                <div style={{ 
+                  padding: '20px', 
+                  color: '#e53e3e', 
+                  fontSize: '14px', 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  background: '#f8f9fa' 
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>No Renderable Content</div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    The design iteration could not be displayed due to missing content.
+                    <br />
+                    Try generating a new iteration.
+                  </div>
                 </div>
               )}
               

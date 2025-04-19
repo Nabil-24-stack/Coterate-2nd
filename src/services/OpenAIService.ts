@@ -466,58 +466,91 @@ class OpenAIService {
         }
       };
       
-      // Extract SVG code - improved extraction logic
+      // IMPROVED SVG EXTRACTION LOGIC
       console.log('Extracting SVG from response...');
       
-      // First attempt: Try to find SVG content with more aggressive pattern matching
+      // More robust SVG content extraction
       let svgContent = '';
       
-      // First try to extract SVG from code blocks
-      const codeBlockMatch = response.match(/```(?:svg|html)?\s*([\s\S]*?<svg[\s\S]*?<\/svg>)[\s\S]*?```/i);
-      if (codeBlockMatch && codeBlockMatch[1]) {
+      // Method 1: Look for SVG in code blocks (most structured approach)
+      const svgCodeBlockPattern = /```(?:svg|html)?\s*([\s\S]*?<svg[\s\S]*?<\/svg>)[\s\S]*?```/i;
+      const codeBlockMatch = response.match(svgCodeBlockPattern);
+      if (codeBlockMatch && codeBlockMatch[1] && codeBlockMatch[1].includes('<svg')) {
         svgContent = codeBlockMatch[1].trim();
-        console.log('Found SVG in code block with length:', svgContent.length);
+        console.log('Method 1: Found SVG in code block, length:', svgContent.length);
       }
       
-      // If no match, look for SVG tags directly
+      // Method 2: Look for complete SVG tags
       if (!svgContent || !svgContent.includes('<svg')) {
-        const svgTagMatch = response.match(/<svg[^>]*>[\s\S]*?<\/svg>/);
-        if (svgTagMatch) {
-          svgContent = svgTagMatch[0].trim();
-          console.log('Found direct SVG tag with length:', svgContent.length);
+        const svgTagPattern = /<svg[\s\S]*?<\/svg>/g;
+        const svgMatches = Array.from(response.matchAll(svgTagPattern));
+        
+        if (svgMatches.length > 0) {
+          // Use the longest SVG content found (most likely to be complete)
+          svgContent = svgMatches.reduce((longest, current) => 
+            current[0].length > longest.length ? current[0] : longest, svgMatches[0][0]);
+          console.log('Method 2: Found complete SVG tag, length:', svgContent.length);
         }
       }
       
-      // If still no match, try looking in sections with SVG: or SVG CODE: labels
+      // Method 3: Look for SVG content in specific sections
       if (!svgContent || !svgContent.includes('<svg')) {
-        const svgSectionMatch = response.match(/(?:SVG(?:\s*CODE)?:)\s*([\s\S]*?)(?=\n\n(?:\d+\.|\#|IMPROVEMENTS|$))/i);
-        if (svgSectionMatch && svgSectionMatch[1]) {
-          const sectionContent = svgSectionMatch[1].trim();
-          const svgInSectionMatch = sectionContent.match(/<svg[\s\S]*?<\/svg>/);
-          if (svgInSectionMatch) {
-            svgContent = svgInSectionMatch[0].trim();
-            console.log('Found SVG in labeled section with length:', svgContent.length);
+        const sectionHeaders = [
+          'SVG CODE:', 'SVG:', 'SVG CONTENT:', 
+          '3. SVG CODE:', '3. SVG CONTENT:', 
+          'SVG MARKUP:', '3. SVG MARKUP:'
+        ];
+        
+        for (const header of sectionHeaders) {
+          if (svgContent && svgContent.includes('<svg')) break;
+          
+          const sectionPattern = new RegExp(`${header}\\s*([\\s\\S]*?)(?=\\n\\s*\\n\\s*(?:[0-9]+\\.|#|IMPROVEMENTS|$))`, 'i');
+          const sectionMatch = response.match(sectionPattern);
+          
+          if (sectionMatch && sectionMatch[1]) {
+            const sectionContent = sectionMatch[1].trim();
+            const svgInSectionMatch = sectionContent.match(/<svg[\s\S]*?<\/svg>/);
+            
+            if (svgInSectionMatch) {
+              svgContent = svgInSectionMatch[0].trim();
+              console.log(`Method 3: Found SVG in "${header}" section, length:`, svgContent.length);
+              break;
+            } else if (sectionContent.includes('<svg')) {
+              // If we have <svg> but not a complete tag, try to extract what we can
+              const svgStart = sectionContent.indexOf('<svg');
+              if (svgStart !== -1) {
+                let extractedContent = sectionContent.substring(svgStart);
+                // If there's no closing tag, add one
+                if (!extractedContent.includes('</svg>')) {
+                  extractedContent += '</svg>';
+                }
+                svgContent = extractedContent;
+                console.log(`Method 3b: Extracted partial SVG from "${header}" section, length:`, svgContent.length);
+                break;
+              }
+            }
           }
         }
       }
       
-      // Last resort - scan the entire response for the longest SVG tag content
+      // Method 4: Scan for SVG content outside of expected structures
       if (!svgContent || !svgContent.includes('<svg')) {
-        console.log('No SVG found with direct pattern matching, trying full response scan...');
-        const allSvgTags = Array.from(response.matchAll(/<svg[\s\S]*?<\/svg>/g)).map(m => m[0]);
-        
-        if (allSvgTags.length > 0) {
-          // Use the longest SVG content found
-          svgContent = allSvgTags.reduce((longest, current) => 
-            current.length > longest.length ? current : longest, allSvgTags[0]);
-          console.log('Found SVG in full scan with length:', svgContent.length);
+        // Look for SVG opening tag
+        const svgStartIndex = response.indexOf('<svg');
+        if (svgStartIndex !== -1) {
+          // Find the matching closing tag
+          const svgEndIndex = response.indexOf('</svg>', svgStartIndex);
+          if (svgEndIndex !== -1) {
+            svgContent = response.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
+            console.log('Method 4: Extracted SVG content from raw response, length:', svgContent.length);
+          }
         }
       }
       
-      // If we have SVG content, clean it up
+      // If we have SVG content, clean it up with improved methods
       if (svgContent && svgContent.includes('<svg')) {
-        // Remove code block markers if present
-        svgContent = svgContent.replace(/```svg\n?|```/g, '').trim();
+        // Remove code block markers and other non-SVG content
+        svgContent = svgContent.replace(/```(?:svg|html)?\n?|```/g, '').trim();
         
         // Make sure SVG content begins with <svg
         const svgTagStart = svgContent.indexOf('<svg');
@@ -533,7 +566,7 @@ class OpenAIService {
           console.log('Trimmed content after </svg> tag');
         }
         
-        // Add xmlns attribute if missing
+        // Add xmlns attribute if missing (crucial for SVG rendering)
         if (!svgContent.includes('xmlns=')) {
           svgContent = svgContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
           console.log('Added missing xmlns attribute');
@@ -541,51 +574,73 @@ class OpenAIService {
         
         // Make sure we have proper viewBox and dimensions
         if (!svgContent.includes('viewBox=')) {
-          const widthMatch = svgContent.match(/width=["']([^"']+)["']/);
-          const heightMatch = svgContent.match(/height=["']([^"']+)["']/);
+          const widthMatch = svgContent.match(/width=["']([^"']*)["']/);
+          const heightMatch = svgContent.match(/height=["']([^"']*)["']/);
           
           if (widthMatch && heightMatch) {
             const width = widthMatch[1].replace('px', '');
             const height = heightMatch[1].replace('px', '');
             svgContent = svgContent.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
             console.log('Added viewBox attribute based on dimensions');
+          } else {
+            // Default viewBox if dimensions not found
+            svgContent = svgContent.replace('<svg', '<svg viewBox="0 0 800 600"');
+            console.log('Added default viewBox attribute');
           }
         }
         
         // Enhanced SVG cleaning for critical tag structure issues
-        svgContent = this.fixSvgStructure(svgContent);
+        svgContent = this.enhancedSvgRepair(svgContent);
         
-        // Validate with DOMParser
+        // Parse SVG with DOMParser to validate and potentially fix issues
         try {
           const parser = new DOMParser();
           const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
           const parserError = svgDoc.querySelector('parsererror');
           
           if (parserError) {
-            console.warn('SVG parsing error detected, applying aggressive repair');
+            console.warn('SVG parsing error detected, applying enhanced repairs');
             
             const errorText = parserError.textContent || '';
             console.warn('SVG parsing error:', errorText);
             
-            // Try more aggressive fixes based on common error patterns
+            // Apply targeted fixes based on the specific error
             if (errorText.includes('tag mismatch')) {
               svgContent = this.repairTagMismatch(svgContent, errorText);
               console.log('Applied tag mismatch repairs');
+            }
+            
+            // Force CDATA for style tags
+            if (svgContent.includes('<style>') && !svgContent.includes('CDATA')) {
+              svgContent = svgContent.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
+              console.log('Added CDATA to style tag');
             }
             
             // Force self-closing tags for elements that should be self-closing
             svgContent = this.forceSelfClosingTags(svgContent);
             console.log('Applied self-closing tag fixes');
             
-            // Validate the fixes
+            // Check if we've fixed the issue
             const fixedDoc = parser.parseFromString(svgContent, 'image/svg+xml');
             if (fixedDoc.querySelector('parsererror')) {
-              // If still broken, use the fallback SVG
-              console.error('SVG still has parsing errors after repairs, will use fallback');
-              svgContent = '';
+              console.error('SVG still has parsing errors after repairs');
+              
+              // Last resort: try a more aggressive structure repair
+              svgContent = this.aggressiveSvgRepair(svgContent);
+              
+              // Final validation
+              const finalDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+              if (finalDoc.querySelector('parsererror')) {
+                console.error('Failed to repair SVG after aggressive attempts, will use fallback');
+                svgContent = ''; // Will trigger fallback
+              } else {
+                console.log('SVG successfully repaired with aggressive method!');
+              }
             } else {
               console.log('SVG successfully repaired!');
             }
+          } else {
+            console.log('SVG validated successfully with DOMParser');
           }
         } catch (parseError) {
           console.warn('SVG validation error:', parseError);
@@ -744,58 +799,159 @@ class OpenAIService {
     }
   }
   
-  // Helper method to fix SVG structure
-  private fixSvgStructure(svg: string): string {
+  // Enhanced SVG repair function with more targeted fixes
+  private enhancedSvgRepair(svg: string): string {
     let fixedSvg = svg;
     
-    // Fix unclosed tags
-    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
+    // Check if SVG is malformed - doesn't have both opening and closing tags
+    if (!fixedSvg.includes('<svg') || !fixedSvg.includes('</svg>')) {
+      console.error('SVG is severely malformed, missing basic structure');
+      return this.createBasicSvgFallback({ width: 800, height: 600 });
+    }
     
-    // First convert non-self-closing empty tags to self-closing
+    // ESSENTIAL FIX: Ensure style tags have CDATA sections to avoid XML parsing issues
+    if (fixedSvg.includes('<style>') && !fixedSvg.includes('CDATA')) {
+      // Check for CSS syntax in style tag
+      const styleMatch = fixedSvg.match(/<style>([\s\S]*?)<\/style>/);
+      if (styleMatch && (styleMatch[1].includes('{') || styleMatch[1].includes(':'))) {
+        // Add CDATA wrapper
+        fixedSvg = fixedSvg.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
+        console.log('Added CDATA to style tag containing CSS');
+      }
+    }
+    
+    // Fix malformed style tags (missing closing tag)
+    if (fixedSvg.includes('<style>') && !fixedSvg.includes('</style>')) {
+      fixedSvg = fixedSvg.replace('</svg>', '</style></svg>');
+      console.log('Fixed missing style closing tag');
+    }
+    
+    // Fix self-closing tags
+    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
     selfClosingElements.forEach(tagName => {
+      // Fix unclosed tags 
+      const unclosedTagPattern = new RegExp(`<${tagName}([^>]*[^/])>(?![\\s\\S]*?</${tagName}>)`, 'g');
+      if (fixedSvg.match(unclosedTagPattern)) {
+        fixedSvg = fixedSvg.replace(unclosedTagPattern, `<${tagName}$1/>`);
+        console.log(`Fixed unclosed ${tagName} tag`);
+      }
+      
+      // Convert empty tags to self-closing
       const emptyTagPattern = new RegExp(`<${tagName}([^>]*)></\\s*${tagName}\\s*>`, 'g');
       fixedSvg = fixedSvg.replace(emptyTagPattern, `<${tagName}$1/>`);
-      console.log(`Fixed empty ${tagName} tags`);
-      
-      // Then ensure proper handling of tags that should be self-closing but aren't
-      const nonClosedPattern = new RegExp(`<${tagName}([^/>][^>]*)>(?![\\s\\S]*?</${tagName}>)`, 'g');
-      if (fixedSvg.match(nonClosedPattern)) {
-        fixedSvg = fixedSvg.replace(nonClosedPattern, `<${tagName}$1/>`);
-        console.log(`Fixed unclosed ${tagName} tag`);
+    });
+    
+    // Fix improper nesting of elements before </svg>
+    const endingPatterns = [
+      { pattern: /<(rect|circle|path|line)([^>]*?)>([^<]*?)<\/svg>/g, replacement: '<$1$2/>$3</svg>' },
+      { pattern: /<g([^>]*?)>([^<]*?)<\/svg>/g, replacement: '<g$1>$2</g></svg>' },
+      { pattern: /<text([^>]*?)>([^<]*?)<\/svg>/g, replacement: '<text$1>$2</text></svg>' }
+    ];
+    
+    endingPatterns.forEach(({ pattern, replacement }) => {
+      if (fixedSvg.match(pattern)) {
+        fixedSvg = fixedSvg.replace(pattern, replacement);
+        console.log('Fixed improper nesting before </svg>');
       }
     });
     
-    // Fix rect tags with missing closing tags
-    if (fixedSvg.includes('<rect') && !fixedSvg.includes('</rect>') && !fixedSvg.includes('/>')) {
-      fixedSvg = fixedSvg.replace(/<rect([^>]*[^\/])>/g, '<rect$1/>');
-      console.log('Fixed unclosed rect tag');
+    // Fix missing g tag closures - count g tags
+    const openGTags = (fixedSvg.match(/<g\b[^>]*>/g) || []).length;
+    const closeGTags = (fixedSvg.match(/<\/g>/g) || []).length;
+    
+    if (openGTags > closeGTags) {
+      const missingClosures = openGTags - closeGTags;
+      fixedSvg = fixedSvg.replace('</svg>', '</g>'.repeat(missingClosures) + '</svg>');
+      console.log(`Added ${missingClosures} missing </g> tags`);
     }
     
-    // Fix g tags that are opened but never closed
-    const gTagPattern = new RegExp('<g[^>]*>(?![\\s\\S]*?</g>)', 'g');
-    const gTagsCount = (fixedSvg.match(/<g/g) || []).length;
-    const gCloseTagsCount = (fixedSvg.match(/<\/g>/g) || []).length;
-    
-    if (gTagsCount > gCloseTagsCount) {
-      fixedSvg = fixedSvg.replace('</svg>', '</g></svg>'.repeat(gTagsCount - gCloseTagsCount));
-      console.log(`Fixed unclosed g tag by adding ${gTagsCount - gCloseTagsCount} closing tags`);
-    }
-    
-    // Fix CDATA sections in style elements
-    if (fixedSvg.includes('<style>') && !fixedSvg.includes('CDATA') && fixedSvg.includes('{')) {
-      fixedSvg = fixedSvg.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
-      console.log('Added CDATA to style tag');
-    }
-    
-    // Fix missing style closing tag
-    if (fixedSvg.includes('<style>') && !fixedSvg.includes('</style>')) {
-      fixedSvg = fixedSvg.replace('<style>', '<style><![CDATA[').replace('</svg>', ']]></style></svg>');
-      console.log('Fixed missing style closing tag');
+    // Ensure text elements have proper closure
+    if (fixedSvg.includes('<text') && !fixedSvg.includes('</text>')) {
+      // Find unclosed text tags
+      const textTagPattern = /<text\b[^>]*>([^<]*?)(?=<(?!\/text>))/g;
+      fixedSvg = fixedSvg.replace(textTagPattern, '<text$1</text><');
+      console.log('Fixed unclosed text tags');
     }
     
     return fixedSvg;
   }
   
+  // Add a more aggressive SVG repair method as a last resort
+  private aggressiveSvgRepair(svg: string): string {
+    let fixedSvg = svg;
+    
+    // Extract just the SVG root elements and its attributes
+    const svgRootMatch = fixedSvg.match(/<svg([^>]*)>/);
+    if (!svgRootMatch) {
+      return this.createBasicSvgFallback({ width: 800, height: 600 });
+    }
+    
+    // Extract essential attributes
+    const attrsMatch = svgRootMatch[1];
+    const viewBoxMatch = attrsMatch.match(/viewBox=["']([^"']*)["']/);
+    const viewBox = viewBoxMatch ? viewBoxMatch[1] : "0 0 800 600";
+    
+    const widthMatch = attrsMatch.match(/width=["']([^"']*)["']/);
+    const width = widthMatch ? widthMatch[1].replace('px', '') : "800";
+    
+    const heightMatch = attrsMatch.match(/height=["']([^"']*)["']/);
+    const height = heightMatch ? heightMatch[1].replace('px', '') : "600";
+    
+    // Extract style section if it exists
+    let styleContent = '';
+    const styleMatch = fixedSvg.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+    if (styleMatch) {
+      styleContent = styleMatch[1];
+      // Ensure CDATA wrapping
+      if (!styleContent.includes('CDATA')) {
+        styleContent = `<![CDATA[${styleContent}]]>`;
+      }
+    }
+    
+    // Extract all valid elements we can find
+    const elements: string[] = [];
+    
+    // Safe elements to extract
+    const elementTypes = ['rect', 'circle', 'path', 'text', 'g', 'ellipse', 'line', 'polygon', 'polyline', 'image'];
+    
+    // Extract self-closing elements
+    const selfClosingPattern = /<(rect|circle|path|ellipse|line|polygon|polyline|image)([^>]*?)\/>/g;
+    let match;
+    while ((match = selfClosingPattern.exec(fixedSvg)) !== null) {
+      elements.push(`<${match[1]}${match[2]}/>`);
+    }
+    
+    // Try to extract properly closed elements (harder to do reliably)
+    elementTypes.forEach(type => {
+      if (type === 'g') return; // Skip g elements for now - harder to match reliably
+      
+      const pattern = new RegExp(`<${type}([^>]*)>([^<]*?)<\\/${type}>`, 'g');
+      let elemMatch;
+      while ((elemMatch = pattern.exec(fixedSvg)) !== null) {
+        elements.push(`<${type}${elemMatch[1]}>${elemMatch[2]}</${type}>`);
+      }
+    });
+    
+    // Build a clean, minimal SVG
+    let cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${height}">`;
+    
+    // Add style if we found any
+    if (styleContent) {
+      cleanSvg += `<style>${styleContent}</style>`;
+    }
+    
+    // Add all the extracted elements
+    elements.forEach(element => {
+      cleanSvg += element;
+    });
+    
+    // Close the SVG
+    cleanSvg += '</svg>';
+    
+    console.log('Created clean SVG with aggressive repair method');
+    return cleanSvg;
+  }
+
   // Helper to repair tag mismatch errors with specific context of the error
   private repairTagMismatch(svg: string, errorText: string): string {
     let fixedSvg = svg;
@@ -869,7 +1025,7 @@ class OpenAIService {
   private createEnhancedFallbackSvg(bgColor: string, primaryColor: string, textColor: string): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
       <defs>
-        <style>
+        <style><![CDATA[
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
           
           text {
@@ -911,7 +1067,7 @@ class OpenAIService {
             stroke: #e2e8f0;
             stroke-width: 1;
           }
-        </style>
+        ]]></style>
       </defs>
       
       <!-- Background -->
