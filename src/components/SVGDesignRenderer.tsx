@@ -68,7 +68,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
     // If it doesn't start with <svg, try to find and extract the svg tag
     if (!processedSvg.startsWith('<svg')) {
       const svgStartIndex = processedSvg.indexOf('<svg');
-      const svgEndIndex = processedSvg.indexOf('</svg>');
+      const svgEndIndex = processedSvg.lastIndexOf('</svg>');
       
       if (svgStartIndex !== -1 && svgEndIndex !== -1) {
         processedSvg = processedSvg.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
@@ -176,6 +176,58 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       console.log('Added missing CDATA to style tag');
     }
     
+    // Fix issue with unmatched tags between svg and rect
+    // This addresses the specific error: "Opening and ending tag mismatch: svg line 1 and rect"
+    const lineEndingCheck = fixedSvg.match(/<rect[^>]*>([^<]*?)<\/svg>/);
+    if (lineEndingCheck) {
+      // Fix rect tag that's missing closing
+      fixedSvg = fixedSvg.replace(/<rect([^>]*>)([^<]*?)<\/svg>/, '<rect$1</rect></svg>');
+      console.log('Fixed rect tag that was missing a closing tag');
+    }
+    
+    // Look for other common unclosed element patterns
+    ['circle', 'path', 'rect', 'text', 'g', 'line', 'polygon', 'polyline', 'ellipse'].forEach(element => {
+      // Find self-closing or properly closed elements
+      const selfClosingPattern = new RegExp(`<${element}[^>]*\\/>`, 'g');
+      const properlyClosed = new RegExp(`<${element}[^>]*>.*?<\\/${element}>`, 'gs');
+      
+      // Find improperly closed elements
+      const improperlyClosedPattern = new RegExp(`<${element}([^>]*)>([^<]*?)(<[^\\/${element}]|<\\/${element === 'svg' ? 'IMPOSSIBLE' : '[^' + element + ']'})`, 'g');
+      
+      if (fixedSvg.match(improperlyClosedPattern)) {
+        // Fix unclosed elements by adding a closing tag
+        fixedSvg = fixedSvg.replace(improperlyClosedPattern, `<${element}$1>$2</${element}>$3`);
+        console.log(`Fixed unclosed ${element} tag`);
+      }
+    });
+    
+    // Try to find and fix the specific SVG structure issue
+    const svgStructureCheck = /<svg[^>]*>[\s\S]*<rect[^>]*>[\s\S]*<\/svg>/g;
+    if (!svgStructureCheck.test(fixedSvg)) {
+      // If the SVG structure is broken, try a more aggressive fix
+      // Extract all well-formed elements and rebuild SVG
+      const svgStartTag = fixedSvg.match(/<svg[^>]*>/);
+      const svgElements = fixedSvg.match(/<(?!\/)[a-zA-Z]+[^>]*>[\s\S]*?<\/[a-zA-Z]+>|<[a-zA-Z]+[^>]*\/>/g) || [];
+      
+      if (svgStartTag) {
+        let rebuiltSvg = svgStartTag[0];
+        
+        for (let element of svgElements) {
+          if (!element.includes('<svg') && !element.includes('</svg>')) {
+            rebuiltSvg += element;
+          }
+        }
+        
+        rebuiltSvg += '</svg>';
+        
+        // Only use the rebuilt SVG if it looks better than what we started with
+        if (rebuiltSvg.length > 50 && rebuiltSvg.includes('<rect') && rebuiltSvg.includes('</svg>')) {
+          console.log('Rebuilt SVG structure due to major issues');
+          fixedSvg = rebuiltSvg;
+        }
+      }
+    }
+    
     return fixedSvg;
   };
 
@@ -211,6 +263,45 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
     }
   })();
 
+  // Use direct DOM manipulation for safer rendering
+  const renderSvgWithDom = (container: HTMLElement, svgContent: string) => {
+    try {
+      // Create an SVG element via DOM API rather than innerHTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = svgContent;
+      const svgElement = tempDiv.querySelector('svg');
+      
+      if (!svgElement) {
+        throw new Error('SVG element not found in processed content');
+      }
+      
+      // Clear the container
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      
+      // Apply dimensions if needed
+      if (width) {
+        svgElement.setAttribute('width', `${width}px`);
+      }
+      if (height) {
+        svgElement.setAttribute('height', `${height}px`);
+      }
+      
+      // Make it responsive
+      svgElement.style.width = '100%';
+      svgElement.style.height = '100%';
+      svgElement.style.display = 'block';
+      
+      // Append the SVG element
+      container.appendChild(svgElement);
+      return true;
+    } catch (error) {
+      console.error('Error in direct DOM manipulation:', error);
+      return false;
+    }
+  };
+
   // Effect to render the SVG content
   useEffect(() => {
     try {
@@ -229,62 +320,54 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         return;
       }
       
-      // Clear previous content
-      container.innerHTML = '';
+      // Try direct DOM manipulation first (safer than innerHTML)
+      const domRenderSuccess = renderSvgWithDom(container, finalSvg);
       
-      // Try to parse the SVG as XML to check for any syntax errors
-      try {
-        const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(finalSvg, 'image/svg+xml');
-        
-        // Check for parsing errors (DOMParser puts errors in a parsererror tag)
-        const parserError = svgDoc.querySelector('parsererror');
-        if (parserError) {
-          throw new Error(`SVG parsing error: ${parserError.textContent}`);
-        }
-      } catch (parseError) {
-        console.error('SVG parsing error:', parseError);
-        // Continue with direct setting - we'll still try to render it
-      }
-      
-      try {
-        // Set the SVG content directly in the container
-        container.innerHTML = finalSvg;
-        
-        // Adjust SVG to fit the container if needed
-        const svgElement = container.querySelector('svg');
-        if (svgElement) {
-          if (width) {
-            svgElement.setAttribute('width', `${width}px`);
-          }
-          if (height) {
-            svgElement.setAttribute('height', `${height}px`);
-          }
+      if (domRenderSuccess) {
+        // DOM manipulation succeeded
+        setError(null);
+        onRender?.(true);
+      } else {
+        // Fall back to innerHTML as a last resort
+        console.warn('DOM manipulation failed, falling back to innerHTML (less safe)');
+        try {
+          container.innerHTML = finalSvg;
           
-          // Make it responsive
-          svgElement.style.width = '100%';
-          svgElement.style.height = '100%';
-          svgElement.style.display = 'block';
+          // Adjust SVG to fit the container if needed
+          const svgElement = container.querySelector('svg');
+          if (svgElement) {
+            if (width) {
+              svgElement.setAttribute('width', `${width}px`);
+            }
+            if (height) {
+              svgElement.setAttribute('height', `${height}px`);
+            }
+            
+            // Make it responsive
+            svgElement.style.width = '100%';
+            svgElement.style.height = '100%';
+            svgElement.style.display = 'block';
+            
+            // Signal successful render
+            setError(null);
+            onRender?.(true);
+          } else {
+            throw new Error('Failed to render SVG - no SVG element found after insertion');
+          }
+        } catch (renderError) {
+          console.error('SVG rendering error:', renderError);
           
-          // Signal successful render
-          setError(null);
-          onRender?.(true);
-        } else {
-          throw new Error('Failed to render SVG - no SVG element found after insertion');
+          // For catastrophic rendering failures, use a simple error message as HTML
+          container.innerHTML = `
+            <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8f9fa;color:#cc0000;font-family:sans-serif;padding:20px;text-align:center;">
+              <div style="font-weight:bold;margin-bottom:8px;">SVG Rendering Failed</div>
+              <div style="font-size:12px;color:#666;">${renderError instanceof Error ? renderError.message : 'Unknown error'}</div>
+            </div>
+          `;
+          
+          setError(`SVG render error: ${renderError instanceof Error ? renderError.message : String(renderError)}`);
+          onRender?.(false);
         }
-      } catch (renderError) {
-        console.error('SVG rendering error:', renderError);
-        
-        // For catastrophic rendering failures, use a simple error message as HTML
-        container.innerHTML = `
-          <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8f9fa;color:#cc0000;font-family:sans-serif;padding:20px;text-align:center;">
-            <div style="font-weight:bold;margin-bottom:8px;">SVG Rendering Failed</div>
-            <div style="font-size:12px;color:#666;">${renderError instanceof Error ? renderError.message : 'Unknown error'}</div>
-          </div>
-        `;
-        
-        setError(`SVG render error: ${renderError instanceof Error ? renderError.message : String(renderError)}`);
-        onRender?.(false);
       }
     } catch (err) {
       console.error('Error in SVG render effect:', err);

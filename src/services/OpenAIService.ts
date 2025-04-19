@@ -555,6 +555,79 @@ class OpenAIService {
             svgContent = svgContent.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
           }
         }
+        
+        // Fix unclosed tags - common issue with OpenAI-generated SVG
+        const fixUnclosedTags = (svg: string): string => {
+          let fixedSvg = svg;
+          
+          // Fix self-closing tags that are not properly closed
+          fixedSvg = fixedSvg.replace(/<(rect|circle|path|line|polygon|polyline|ellipse)([^>]*[^\/])>/g, '<$1$2/>');
+          
+          // Fix unclosed rect tags specifically (common issue)
+          if (fixedSvg.includes('<rect') && !fixedSvg.includes('</rect>') && !fixedSvg.includes('/>')) {
+            fixedSvg = fixedSvg.replace(/<rect([^>]*[^\/])>/g, '<rect$1/>');
+          }
+          
+          // Fix issue with SVG ending inside a group
+          if (fixedSvg.includes('<g') && !fixedSvg.includes('</g>')) {
+            fixedSvg = fixedSvg.replace('</svg>', '</g></svg>');
+          }
+          
+          // Ensure the SVG ends properly
+          if (!fixedSvg.endsWith('</svg>')) {
+            fixedSvg = fixedSvg + '</svg>';
+          }
+          
+          return fixedSvg;
+        };
+        
+        // Apply tag fixes
+        svgContent = fixUnclosedTags(svgContent);
+        
+        // Fix style issues
+        if (svgContent.includes('<style>') && !svgContent.includes('</style>')) {
+          svgContent = svgContent.replace('<style>', '<style><![CDATA[');
+          svgContent = svgContent.replace('</svg>', ']]></style></svg>');
+        }
+        
+        // Fix CDATA in style if missing
+        if (svgContent.includes('<style>') && !svgContent.includes('CDATA') && svgContent.includes('{')) {
+          svgContent = svgContent.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
+        }
+        
+        // Add basic validation
+        try {
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+          const parserError = svgDoc.querySelector('parsererror');
+          
+          if (parserError) {
+            console.warn('SVG parsing error detected, attempting automatic repair');
+            
+            // Extract the error message to identify specific issues
+            const errorText = parserError.textContent || '';
+            console.log('SVG parsing error:', errorText);
+            
+            // Apply specific fixes based on error type
+            if (errorText.includes('tag mismatch')) {
+              // Tag mismatch errors - try to fix common patterns
+              const tagMatch = errorText.match(/tag mismatch: (.*?) line/);
+              if (tagMatch && tagMatch[1]) {
+                const problematicTag = tagMatch[1].trim();
+                console.log('Tag mismatch detected for:', problematicTag);
+                
+                // Try to repair the specific tag issue
+                if (problematicTag.includes('svg') && problematicTag.includes('rect')) {
+                  // Fix unclosed rect tags near svg end
+                  svgContent = svgContent.replace(/<rect([^>]*?)>([^<]*?)<\/svg>/g, '<rect$1/>$2</svg>');
+                }
+              }
+            }
+          }
+        } catch (parseError) {
+          console.warn('SVG validation error:', parseError);
+          // Continue with the best SVG we have
+        }
       }
       
       // Add fallback for SVG content if extraction failed
