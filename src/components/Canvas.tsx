@@ -1896,8 +1896,8 @@ export const Canvas: React.FC<{}> = () => {
       
       // Get the closest design to determine relative position coordinates
       const iterationPosition = {
-        x: designToIterate.position.x + 20, // Slightly offset from the original
-        y: designToIterate.position.y + 20
+        x: designToIterate.position.x + (designToIterate.dimensions?.width || 400) + 50, // Position to the right with some spacing
+        y: designToIterate.position.y // Keep the same vertical position
       };
       
       // Create the new iteration with a unique ID and current timestamp
