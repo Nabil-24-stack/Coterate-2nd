@@ -272,7 +272,7 @@ class OpenAIService {
             5. Add a subtle 1px border to the div to indicate it's an image placeholder
             6. You can add a simple CSS pattern or gradient if appropriate
             
-            OUTPUT FORMAT:
+            OUTPUT FORMAT INSTRUCTIONS (IMPORTANT):
             Your response MUST be structured as follows:
             
             1. DESIGN SYSTEM:
@@ -282,10 +282,23 @@ class OpenAIService {
                Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
             
             3. HTML CODE:
-               Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
+               Provide the complete HTML code for the improved design, wrapped between triple backticks with html like this:
+               \`\`\`html
+               <html>
+               ...your HTML code here...
+               </html>
+               \`\`\`
             
             4. CSS CODE:
-               Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
+               Provide the complete CSS code for the improved design, wrapped between triple backticks with css like this:
+               \`\`\`css
+               body {
+                 ...
+               }
+               
+               ...your CSS code here...
+               \`\`\`
+               DO NOT include the CSS within the HTML file or inside <style> tags - it MUST be a separate code block with \`\`\`css.
             
             5. IMPROVEMENTS SUMMARY:
                List the specific improvements made to the design and explain the rationale behind each one
@@ -470,61 +483,49 @@ class OpenAIService {
       
       result.htmlCode = htmlContent || '';
       
-      // Extract CSS code between ```css and ``` tags with more flexible pattern matching
-      // First, let's log the entire response for debugging
+      // Extract CSS code with improved extraction logic
       console.log('Searching for CSS in response of length:', response.length);
       console.log('Response preview:', response.substring(0, 100) + '...');
       
-      // Step 1: Try standard patterns first
-      const cssRegexPatterns = [
-        /```css\n([\s\S]*?)```/,       // Standard format
-        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-        /```css([\s\S]*?)```/,         // No space or newline after css
-        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/, // Code block with style tags
-        /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS SUMMARY:|$)/, // CSS section with heading
-        /4\.\s*CSS\s*CODE:[\r\n]+([\s\S]*?)(?=\n\n|\d+\.\s|IMPROVEMENTS|$)/i, // Numbered CSS section
-        /CSS:[\r\n]+([\s\S]*?)(?=\n\n|HTML:|IMPROVEMENTS:|$)/i, // Simple CSS: heading
-        /```\s*([\s\S]*?:root\s*{[\s\S]*?})[\s\S]*?```/, // CSS with :root selector in a code block
-        /```\s*(body\s*{[\s\S]*?})[\s\S]*?```/, // CSS starting with body selector
-        /```\s*([\s\S]*?\.[\w-]+\s*{[\s\S]*?})[\s\S]*?```/ // CSS with any class selector
-      ];
-      
       let cssContent = '';
-      let matchedPattern = '';
       
-      for (const pattern of cssRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          cssContent = match[1].trim();
-          matchedPattern = pattern.toString();
-          console.log('CSS match found with pattern:', matchedPattern);
-          console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
-          break;
-        }
+      // Try multiple extraction methods, starting with the most reliable for GPT-4.1 responses
+      
+      // Method 1: Direct pattern extraction (was previously last resort, now primary)
+      console.log('Trying direct CSS rule pattern extraction first');
+      const cssBlocks = [];
+      // More permissive CSS rule regex to catch a wider variety of CSS syntax
+      const cssRules = /([.#]?[a-zA-Z0-9*][\w-]*(?:\s*[,>+~:]\s*[.#]?[a-zA-Z0-9*][\w-]*)*(?:\[[^\]]+\])?(?:::[a-z-]+)?)\s*\{[^}]*\}/g;
+      let ruleMatch;
+      
+      while ((ruleMatch = cssRules.exec(response)) !== null) {
+        cssBlocks.push(ruleMatch[0]);
       }
       
-      // Step 2: Check for the case where CSS is presented in a markdown structure like:
-      // ```css
-      // body {
-      //   ...
-      // }
-      // ```
+      if (cssBlocks.length > 0) {
+        cssContent = cssBlocks.join('\n\n');
+        console.log('Found CSS through direct pattern extraction, rules count:', cssBlocks.length);
+        console.log('CSS preview:', cssContent.substring(0, 50) + '...');
+      }
+      
+      // Method 2: If no CSS found, try code blocks with markdown format
       if (!cssContent) {
-        console.log('No CSS found with standard patterns, checking for markdown format');
+        console.log('No CSS found via direct pattern extraction, checking for markdown code blocks');
         
         // Look for any markdown code blocks
-        const markdownCodeBlocks = response.match(/```(?:css)?\s*\n([\s\S]*?)```/g);
+        const markdownCodeBlocks = response.match(/```(?:css)?\s*([\s\S]*?)```/g);
         if (markdownCodeBlocks && markdownCodeBlocks.length > 0) {
-          // Find a CSS-like block among these
+          // Find blocks that contain CSS-like content
           for (const block of markdownCodeBlocks) {
             if (block.includes('{') && 
                 (block.includes('body') || 
                  block.includes('div') || 
+                 block.includes('.') || 
+                 block.includes('#') ||
                  block.includes('color') || 
                  block.includes('margin'))) {
               // Extract the content between triple backticks
-              const cleanBlock = block.replace(/```(?:css)?\s*\n/, '').replace(/\n```$/, '').trim();
+              const cleanBlock = block.replace(/```(?:css)?\s*/, '').replace(/```\s*$/, '').trim();
               if (cleanBlock && cleanBlock.length > 0) {
                 cssContent = cleanBlock;
                 console.log('Found CSS in markdown block, length:', cssContent.length);
@@ -536,9 +537,34 @@ class OpenAIService {
         }
       }
       
-      // Step 3: If still no CSS, look for CSS section markers in the text
+      // Method 3: Try standard CSS format patterns
       if (!cssContent) {
-        console.log('No CSS found in markdown blocks, scanning for CSS section');
+        console.log('No CSS found in markdown blocks, trying standard patterns');
+        
+        const cssRegexPatterns = [
+          /```css\n([\s\S]*?)```/,       // Standard format
+          /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
+          /```css([\s\S]*?)```/,         // No space or newline after css
+          /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
+          /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS|$)/i, // CSS section with heading
+          /CSS:[\r\n]+([\s\S]*?)(?=\n\n|HTML:|IMPROVEMENTS|$)/i, // Simple CSS: heading
+          /4\.\s*CSS\s*CODE:[\r\n]+([\s\S]*?)(?=\n\n|\d+\.\s|IMPROVEMENTS|$)/i // Numbered CSS section
+        ];
+        
+        for (const pattern of cssRegexPatterns) {
+          const match = response.match(pattern);
+          if (match && match[1]) {
+            cssContent = match[1].trim();
+            console.log('CSS match found with standard pattern:', pattern.toString().substring(0, 30) + '...');
+            console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
+            break;
+          }
+        }
+      }
+      
+      // Method 4: Look for CSS section markers in the text
+      if (!cssContent) {
+        console.log('No CSS found with standard patterns, scanning for section markers');
         
         // Looking for section headers like "CSS CODE:" or "### CSS:"
         const cssSectionMarkers = [
@@ -565,28 +591,7 @@ class OpenAIService {
         }
       }
       
-      // Step 4: Last resort - direct pattern search
-      if (!cssContent) {
-        console.log('No CSS found in sections, trying direct pattern extraction');
-        
-        // Look directly for CSS-like patterns in the entire response
-        const cssBlocks = [];
-        // More comprehensive CSS rule regex - captures more valid CSS patterns
-        const cssRules = /([.#]?[a-zA-Z0-9*][\w-]*(?:\s*[,>+~:]\s*[.#]?[a-zA-Z0-9*][\w-]*)*(?:\[[^\]]+\])?(?:::[a-z-]+)?)\s*\{[^}]*\}/g;
-        let match;
-        
-        while ((match = cssRules.exec(response)) !== null) {
-          cssBlocks.push(match[0]);
-        }
-        
-        if (cssBlocks.length > 0) {
-          cssContent = cssBlocks.join('\n\n');
-          console.log('Found CSS through direct pattern extraction, rules count:', cssBlocks.length);
-          console.log('CSS preview:', cssContent.substring(0, 50) + '...');
-        }
-      }
-      
-      // Final CSS fallback - if we still have no CSS content after all extraction attempts,
+      // Final fallback - if we still have no CSS content after all extraction attempts,
       // generate minimal fallback CSS
       if (!cssContent || cssContent.length < 10) {
         console.log('All CSS extraction methods failed, using minimal fallback CSS');
@@ -1303,6 +1308,7 @@ footer {
   private async createDataUrlFromImage(imageUrl: string): Promise<string | null> {
     return new Promise((resolve) => {
       const img = new Image();
+      // Set crossOrigin to anonymous to handle CORS properly
       img.crossOrigin = 'anonymous';
       
       // Set a more generous timeout to avoid premature failure
@@ -1327,7 +1333,7 @@ footer {
           if (ctx) {
             ctx.drawImage(img, 0, 0);
             
-            // Try JPEG first, fallback to PNG if needed
+            // Try JPEG first with lower quality for better performance, fallback to PNG if needed
             try {
               const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
               console.log('Successfully created JPEG data URL');
@@ -1359,12 +1365,18 @@ footer {
         resolve(null);
       };
       
-      // Add a random query parameter to bypass cache and use a timestamp
+      // Create a properly cache-busted URL
+      // This is important to prevent CORS and caching issues
       const timestamp = Date.now();
-      const cacheBuster = `t=${timestamp}&nocache=${Math.random().toString(36).substring(2, 15)}`;
-      img.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}${cacheBuster}`;
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      const cacheBuster = `t=${timestamp}&cb=${randomStr}`;
+      const separator = imageUrl.includes('?') ? '&' : '?';
       
-      console.log(`Attempting to load image with URL: ${img.src.substring(0, 100)}...`);
+      // Use the cache-busted URL
+      const bustImageUrl = `${imageUrl}${separator}${cacheBuster}`;
+      img.src = bustImageUrl;
+      
+      console.log(`Attempting to load image with URL: ${bustImageUrl.substring(0, 100)}...`);
     });
   }
 }
