@@ -131,59 +131,26 @@ class OpenAIService {
     }
     
     try {
-      // Get image as base64 if it's a remote URL
+      // Get image dimensions first
+      const dimensions = await this.getImageDimensions(imageUrl);
+      
+      // Initialize base64Image
       let base64Image = '';
       
+      // If it's already a data URL, extract the base64 part
       if (imageUrl.startsWith('data:image')) {
-        // Already a data URL, extract the base64 part
         base64Image = imageUrl.split(',')[1];
       } else {
-        try {
-          // Get image dimensions first - we need these regardless of fetch method
-          const dimensions = await this.getImageDimensions(imageUrl);
-          
-          // Skip direct fetch attempts for Figma images that have CORS issues
-          if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
-            console.log('Figma image detected, using data URL approach directly');
-            // Convert the design to a data URL by drawing it on a canvas
-            const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-            if (dataUrl) {
-              base64Image = dataUrl.split(',')[1];
-              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
-            } else {
-              throw new Error('Failed to create data URL from Figma image');
-            }
-          }
-          
-          // For non-Figma images, try a normal fetch
-          try {
-            const fetchResponse = await fetch(imageUrl);
-            if (!fetchResponse.ok) {
-              throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
-            }
-            const blob = await fetchResponse.blob();
-            base64Image = await this.blobToBase64(blob);
-          } catch (fetchError) {
-            console.error('Error fetching image:', fetchError);
-            
-            // Always fall back to data URL method for any image that fails to fetch normally
-            console.log('Attempting to create data URL as fallback for all images');
-            const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-            if (dataUrl) {
-              base64Image = dataUrl.split(',')[1];
-              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
-            } else {
-              throw new Error('All image fetching methods failed');
-            }
-          }
-        } catch (error: any) {
-          console.error('Error processing image:', error);
-          throw new Error(`Failed to process image: ${error.message}`);
+        // For all images (including Figma), use the canvas approach directly
+        console.log('Converting image to data URL');
+        const dataUrl = await this.createDataUrlFromImage(imageUrl);
+        
+        if (dataUrl) {
+          base64Image = dataUrl.split(',')[1];
+        } else {
+          throw new Error('Failed to create data URL from image');
         }
       }
-      
-      // Get image dimensions
-      const dimensions = await this.getImageDimensions(imageUrl);
       
       // Process linked insights if available
       let insightsPrompt = '';
@@ -339,37 +306,15 @@ class OpenAIService {
       
       console.log('Sending request to OpenAI API for design analysis...');
       
-      // Since direct fetch may face CORS issues in browser environment, use a proxy 
-      // or fallback to server-side processing if needed
-      let openaiResponse;
-      
-      try {
-        // First try direct API call
-        openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`
-          },
-          body: JSON.stringify(requestBody)
-        });
-      } catch (error: any) {
-        console.error('Direct OpenAI API call failed, error details:', error);
-        
-        // In production, never use fallback
-        if (this.isProductionEnvironment()) {
-          throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-        }
-        
-        // Only use fallback during development
-        if (this.isDevEnvironment()) {
-          console.log('Development environment detected, using fallback response for testing');
-          return this.getFallbackAnalysisResponse(dimensions);
-        }
-        
-        // Default behavior for unknown environments - throw the error
-        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-      }
+      // Call OpenAI API directly
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
       
       if (!openaiResponse.ok) {
         const errorText = await openaiResponse.text();
@@ -414,23 +359,6 @@ class OpenAIService {
       // Default behavior
       throw new Error(`Failed to generate design iteration: ${error.message}`);
     }
-  }
-  
-  // Helper method to convert Blob to base64
-  private blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix if present
-        const base64 = base64String.includes(',') 
-          ? base64String.split(',')[1] 
-          : base64String;
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   }
   
   // Helper function to get image dimensions
@@ -1372,7 +1300,7 @@ footer {
   }
 
   // Method to create a data URL from an image using canvas
-  private async createDataUrlFromFigmaImage(imageUrl: string): Promise<string | null> {
+  private async createDataUrlFromImage(imageUrl: string): Promise<string | null> {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -1438,222 +1366,6 @@ footer {
       
       console.log(`Attempting to load image with URL: ${img.src.substring(0, 100)}...`);
     });
-  }
-
-  // Add this method to continue with the OpenAI analysis once we have the base64 image
-  private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[], userPrompt: string): Promise<DesignAnalysisResponse> {
-    // Process linked insights if available
-    let insightsPrompt = '';
-    if (linkedInsights && linkedInsights.length > 0) {
-      insightsPrompt = '\n\nImportant user insights to consider:\n';
-      linkedInsights.forEach((insight, index) => {
-        const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
-        insightsPrompt += `${index + 1}. ${summary}\n`;
-      });
-      insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
-    }
-    
-    // Add the user prompt if provided
-    const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
-    
-    const requestBody = {
-      model: 'gpt-4.1',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
-
-          MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
-
-          DESIGN SYSTEM EXTRACTION:
-          First, you must carefully extract and document the EXACT design system from the original design:
-          
-          1. Color palette: 
-             - Document every single color used in the UI with precise hex codes
-             - Identify primary, secondary, accent, background, and text colors
-             - Note the exact usage pattern of each color (e.g., which color is used for primary buttons vs secondary buttons)
-          
-          2. Typography:
-             - Document every font family used
-             - Note the exact font sizes used for each text element type (headings, body, buttons, labels, etc.)
-             - Document font weights, line heights, and letter spacing
-             - Map out the typographic hierarchy exactly as used in the design
-          
-          3. UI Components:
-             - Document every UI component type (buttons, inputs, checkboxes, etc.)
-             - For each component, note its exact styling (colors, borders, shadows, padding)
-             - Document different states if visible (hover, active, disabled)
-             - Identify any consistent padding or spacing patterns between components
-          
-          This design system extraction is CRITICAL - you must use these EXACT same values in your improved version.
-          
-          DESIGN ANALYSIS REQUIREMENTS:
-          Perform a comprehensive analysis of the design focusing on:
-          
-          1. Visual hierarchy:
-             - Analyze how effectively the design guides the user's attention
-             - Identify elements that compete for attention or are not properly emphasized
-             - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
-          
-          2. Color contrast and accessibility:
-             - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
-             - Analyze color combinations that may cause visibility or accessibility issues
-             - Evaluate overall color harmony and effective use of color to convey information
-          
-          3. Component selection and placement:
-             - Evaluate the appropriateness of UI components for their intended functions
-             - Identify issues with component placement, grouping, or organization
-             - Assess consistency in component usage throughout the design
-          
-          4. Text legibility:
-             - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
-             - Evaluate line length, line height, letter spacing, and overall readability
-             - Assess font choices for appropriateness to the content and brand
-          
-          5. Overall usability:
-             - Analyze the intuitiveness of interactions and flows
-             - Identify potential points of confusion or friction
-             - Evaluate spacing, alignment, and overall layout effectiveness
-          
-          6. Accessibility considerations:
-             - Identify potential issues for users with disabilities
-             - Assess keyboard navigability, screen reader compatibility, and semantic structure
-             - Evaluate compliance with WCAG guidelines
-          
-          IMPROVEMENT REQUIREMENTS:
-          Based on your analysis, create an IMPROVED VERSION that:
-          
-          1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
-          2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
-          3. Makes targeted improvements ONLY to:
-             - Visual hierarchy through component rearrangement where appropriate
-             - Component selection where a more appropriate component type serves the same function better
-             - Spacing and alignment to improve clarity and flow
-             - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
-          4. When swapping a UI component for a more appropriate one (e.g., radio button to checkbox), you MUST style the new component using the EXACT SAME design system (colors, borders, etc.) as the original component
-          5. Never changes the core brand identity or visual language
-          6. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
-          7. Ensures the improved version is immediately recognizable as an iteration of the original
-          
-          DIMENSIONS REQUIREMENT:
-          The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
-          
-          CSS REQUIREMENTS:
-          1. Use CSS Grid and Flexbox for layouts that need to be responsive
-          2. Use absolute positioning for pixel-perfect placement when needed
-          3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
-          4. Ensure clean, well-organized CSS with descriptive class names
-          5. Include detailed comments in CSS explaining design decisions
-          6. Avoid arbitrary magic numbers - document any precise pixel measurements
-          
-          ICON REQUIREMENTS:
-          For any icons identified in the UI:
-          1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
-          2. If no perfect Font Awesome match exists, create the icon using CSS
-          3. Ensure icon sizing and positioning exactly matches the original
-          4. Apply the EXACT SAME colors from the original design to the icons
-          
-          IMAGE REQUIREMENTS:
-          For any images identified in the original design:
-          1. DO NOT use any external image URLs, placeholders, or Unsplash images
-          2. Instead, replace each image with a simple colored div (rectangle or square)
-          3. Use a background color that makes sense in the context (gray, light blue, etc.)
-          4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
-          5. Add a subtle 1px border to the div to indicate it's an image placeholder
-          6. You can add a simple CSS pattern or gradient if appropriate
-          
-          OUTPUT FORMAT:
-          Your response MUST be structured as follows:
-          
-          1. DESIGN SYSTEM:
-             Document the extracted design system in detail (colors, typography, components)
-          
-          2. ANALYSIS:
-             Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
-          
-          3. HTML CODE:
-             Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
-          
-          4. CSS CODE:
-             Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
-          
-          5. IMPROVEMENTS SUMMARY:
-             List the specific improvements made to the design and explain the rationale behind each one
-          ${insightsPrompt}${userPromptContent}`
-        },
-        {
-          role: 'user',
-          content: [{
-            type: 'image_url',
-            image_url: {
-              url: `data:image/png;base64,${base64Image}`
-            }
-          }]
-        }
-      ],
-      max_tokens: 4000
-    };
-    
-    console.log('Sending request to OpenAI API for design analysis...');
-    
-    // Since direct fetch may face CORS issues in browser environment, use a proxy 
-    // or fallback to server-side processing if needed
-    let openaiResponse;
-    
-    try {
-      // First try direct API call
-      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-    } catch (error: any) {
-      console.error('Direct OpenAI API call failed, error details:', error);
-      
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
-        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-      }
-      
-      // Only use fallback during development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response for testing');
-        return this.getFallbackAnalysisResponse(dimensions);
-      }
-      
-      // Default behavior for unknown environments - throw the error
-      throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-    }
-    
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI API error response:', errorText);
-      
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
-        throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
-      }
-      
-      // Only use fallback in development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response for testing');
-        return this.getFallbackAnalysisResponse(dimensions);
-      }
-      
-      // Default behavior
-      throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
-    }
-    
-    const data = await openaiResponse.json();
-    
-    // Extract the response content
-    const responseContent = data.choices[0].message.content;
-    
-    // Parse the response to extract HTML, CSS, and analysis
-    return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
   }
 }
 
