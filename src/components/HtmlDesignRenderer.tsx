@@ -39,6 +39,20 @@ const IsolatedFrame = styled.iframe`
   display: block;
 `;
 
+// Add some logging for CSS debugging
+const debugCss = (css: string): void => {
+  // Output a sample of the CSS to check its content
+  console.log(`CSS content preview (${css.length} chars):`, css.substring(0, 100) + '...');
+  
+  // Check if CSS has actual styling rules
+  const hasRules = css.includes('{') && css.includes('}');
+  console.log('CSS contains style rules:', hasRules);
+  
+  // Count the number of style rules
+  const ruleCount = (css.match(/{/g) || []).length;
+  console.log('Number of CSS rules:', ruleCount);
+};
+
 export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesignRendererProps>(({
   htmlContent,
   cssContent,
@@ -49,153 +63,192 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
 }, ref) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [renderAttempt, setRenderAttempt] = useState(0);
 
-  // Simple HTML clean-up
-  const cleanHtml = (html: string): string => {
+  // Process HTML to clean up any potential issues
+  const processHtml = (html: string): string => {
     if (!html) return '';
     
-    // Replace all img tags with div placeholders
-    return html.replace(
+    // Replace img tags with divs
+    let processedHtml = html.replace(
       /<img[^>]*>/gi, 
       '<div style="width:100px;height:100px;background-color:#e0e0e0;border:1px solid #ccc;"></div>'
     );
+    
+    // Ensure there's a valid <body> tag
+    if (!processedHtml.includes('<body')) {
+      processedHtml = `<body>${processedHtml}</body>`;
+    }
+    
+    return processedHtml;
   };
   
-  // Simple CSS clean-up
-  const cleanCss = (css: string): string => {
+  // Process CSS to clean up and enhance it
+  const processCss = (css: string): string => {
     if (!css) return '';
     
+    // Log the original CSS for debugging
+    console.log('Original CSS length:', css.length);
+    
     // Remove any Markdown formatting
-    let cleanedCss = css;
-    cleanedCss = cleanedCss.replace(/```(?:css)?|```/g, '');
+    let processedCss = css.replace(/```(?:css)?|```/g, '');
     
     // Replace background-image properties
-    cleanedCss = cleanedCss.replace(
+    processedCss = processedCss.replace(
       /background-image\s*:\s*url\(['"]?([^'"\)]+)['"]?\)/gi, 
       'background-color:#e0e0e0;border:1px solid #ccc;'
     );
+
+    // Add !important to ensure styles are applied
+    processedCss = processedCss.replace(
+      /([^{]+\{[^}]*?)([;}])/g,
+      (match, $1, $2) => {
+        // Don't add !important if already present
+        if ($1.includes('!important')) return match;
+        return $1 + ' !important' + $2;
+      }
+    );
     
-    return cleanedCss;
+    // Log the processed CSS for debugging
+    console.log('Processed CSS length:', processedCss.length);
+    debugCss(processedCss);
+    
+    return processedCss;
   };
-  
-  const processedHtml = cleanHtml(htmlContent || '');
-  const processedCss = cleanCss(cssContent || '');
-  
-  // Basic fallback content if HTML is empty
-  const finalHtml = processedHtml || `
-    <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #f8f9fa; color: #6c757d; font-family: system-ui, sans-serif; padding: 20px; text-align: center;">
-      <div style="margin-bottom: 20px;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="50" height="50">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="9" y1="3" x2="9" y2="21"></line>
-          <line x1="15" y1="3" x2="15" y2="21"></line>
-          <line x1="3" y1="9" x2="21" y2="9"></line>
-          <line x1="3" y1="15" x2="21" y2="15"></line>
-        </svg>
-      </div>
-      <h3 style="margin: 0 0 10px; font-size: 20px; font-weight: 500;">Rendering Issue</h3>
-      <p style="margin: 0; font-size: 16px;">Unable to render the design.</p>
-    </div>
-  `;
 
-  // Create a single HTML document with inline CSS
-  const combinedContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-      <style>
-        /* Reset */
-        *, *::before, *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        
-        html, body {
-          width: ${width ? `${width}px` : '100%'};
-          height: ${height ? `${height}px` : '100%'};
-          overflow: hidden;
-          background: white;
-          font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-        
-        /* Form elements default styling */
-        button, input, select, textarea {
-          font-family: inherit;
-        }
-        
-        /* Image placeholders */
-        .image-placeholder, [style*="background-image"] {
-          background-color: #e0e0e0 !important;
-          background-image: none !important;
-          border: 1px solid #ccc !important;
-        }
-        
-        /* User's CSS */
-        ${processedCss}
-      </style>
-    </head>
-    <body>
-      ${finalHtml}
-    </body>
-    </html>
-  `;
+  const finalHtml = processHtml(htmlContent || '');
+  const finalCss = processCss(cssContent || '');
 
-  useEffect(() => {
-    const renderContent = () => {
-      try {
-        const iframe = iframeRef.current;
-        if (!iframe) return;
+  // Create a complete HTML document
+  const createDocument = (): string => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Design Render</title>
         
-        // Clear any previous content
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc) {
-          console.error('Could not access iframe document');
-          setError('Could not access iframe document');
-          onRender?.(false);
-          return;
-        }
+        <!-- Font imports -->
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         
-        // Write the content directly
-        iframeDoc.open();
-        iframeDoc.write(combinedContent);
-        iframeDoc.close();
-        
-        // Simple validation function
-        const validateRender = () => {
-          try {
-            // Check if the document is accessible
-            if (iframe.contentDocument && iframe.contentDocument.body) {
-              // Consider the render successful if we can access the body
-              setError(null);
-              onRender?.(true);
-            } else {
-              console.error('Could not access iframe body');
-              setError('Could not access iframe body');
-              onRender?.(false);
-            }
-          } catch (err) {
-            console.error('Error validating render:', err);
-            setError(`Error validating render: ${err}`);
+        <style>
+          /* Reset styles */
+          *, *::before, *::after {
+            box-sizing: border-box !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          html, body {
+            width: ${width ? `${width}px` : '100%'} !important;
+            height: ${height ? `${height}px` : '100%'} !important;
+            overflow: hidden !important;
+            font-family: 'Inter', 'Roboto', 'Open Sans', sans-serif !important;
+          }
+          
+          /* Force all elements to inherit font family */
+          * {
+            font-family: inherit !important;
+          }
+          
+          /* Basic element styling */
+          img, svg {
+            max-width: 100% !important;
+            display: block !important;
+          }
+          
+          /* Make sure backgrounds are visible */
+          [style*="background"] {
+            background-color: #f5f5f5 !important;
+          }
+          
+          /* User's CSS */
+          ${finalCss}
+        </style>
+      </head>
+      <body>
+        ${finalHtml}
+      </body>
+      </html>
+    `;
+  };
+
+  // Handle direct document manipulation for the iframe
+  const injectContent = () => {
+    try {
+      const iframe = iframeRef.current;
+      if (!iframe) throw new Error('Iframe not available');
+      
+      // Get the iframe document
+      const iframeWindow = iframe.contentWindow;
+      const iframeDoc = iframe.contentDocument || iframeWindow?.document;
+      
+      if (!iframeDoc) throw new Error('Cannot access iframe document');
+      
+      // Clear previous content
+      iframeDoc.open();
+      iframeDoc.write(createDocument());
+      iframeDoc.close();
+      
+      // Add a handler for the iframe load event
+      const validateRender = () => {
+        try {
+          if (iframe.contentDocument && iframe.contentDocument.body) {
+            // Success - force another reflow just to be sure
+            const styleElement = iframe.contentDocument.createElement('style');
+            styleElement.textContent = `
+              body * {
+                visibility: visible !important;
+                opacity: 1 !important;
+                display: block !important;
+              }
+            `;
+            iframe.contentDocument.head.appendChild(styleElement);
+            
+            // Signal successful render
+            setError(null);
+            onRender?.(true);
+          } else {
+            throw new Error('Cannot access iframe body');
+          }
+        } catch (err) {
+          console.error('Error validating render:', err);
+          
+          // Retry a few times before giving up
+          if (renderAttempt < 3) {
+            console.log(`Retrying render (attempt ${renderAttempt + 1})`);
+            setRenderAttempt(prev => prev + 1);
+          } else {
+            setError(`Render validation failed: ${err}`);
             onRender?.(false);
           }
-        };
-        
-        // Give the iframe a moment to render
-        setTimeout(validateRender, 200);
-      } catch (err) {
-        console.error('Error rendering content:', err);
-        setError(`Error rendering content: ${err}`);
-        onRender?.(false);
-      }
-    };
+        }
+      };
+      
+      // Set both onload handler and a backup timeout
+      iframe.onload = validateRender;
+      setTimeout(validateRender, 500);
+      
+    } catch (err) {
+      console.error('Error injecting content:', err);
+      setError(`Injection error: ${err}`);
+      onRender?.(false);
+    }
+  };
+
+  // Effect to render the content whenever inputs change or we retry
+  useEffect(() => {
+    injectContent();
     
-    renderContent();
-  }, [combinedContent, onRender]);
+    // Return cleanup function
+    return () => {
+      const iframe = iframeRef.current;
+      if (iframe) iframe.onload = null;
+    };
+  }, [htmlContent, cssContent, width, height, renderAttempt]);
 
   // Method to convert the rendered HTML to an image
   const convertToImage = async (): Promise<string | null> => {
@@ -222,7 +275,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
     }
   };
 
-  // Expose methods
+  // Expose methods via ref
   useImperativeHandle(ref, () => ({
     convertToImage
   }));
@@ -238,7 +291,7 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           ref={iframeRef} 
           title="Design Renderer"
           sandbox="allow-same-origin allow-scripts"
-          style={{ width: width ? `${width}px` : '100%', height: height ? `${height}px` : '100%' }}
+          style={{ width: '100%', height: '100%' }}
         />
       )}
     </RendererContainer>
