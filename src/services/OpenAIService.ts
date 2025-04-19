@@ -52,6 +52,7 @@ interface DesignAnalysisResponse {
 
 class OpenAIService {
   private apiKey: string | null = null;
+  private debugMode: boolean = false;
 
   constructor() {
     // Try to get API key from environment
@@ -61,6 +62,34 @@ class OpenAIService {
     if (!this.apiKey) {
       this.apiKey = localStorage.getItem('openai_api_key');
     }
+    
+    // Set debug mode based on environment and localStorage preference
+    this.debugMode = 
+      process.env.NODE_ENV !== 'production' && 
+      (localStorage.getItem('openai_debug_mode') === 'true');
+  }
+  
+  // Toggle debug mode
+  toggleDebugMode(enabled: boolean): void {
+    this.debugMode = enabled;
+    localStorage.setItem('openai_debug_mode', String(enabled));
+  }
+  
+  // Debug log that only outputs in debug mode
+  private debugLog(message: string, ...args: any[]): void {
+    if (this.debugMode) {
+      console.log(`[OpenAI] ${message}`, ...args);
+    }
+  }
+  
+  // Always log important messages regardless of debug mode
+  private log(message: string, ...args: any[]): void {
+    console.log(`[OpenAI] ${message}`, ...args);
+  }
+  
+  // Log errors always
+  private logError(message: string, ...args: any[]): void {
+    console.error(`[OpenAI] ${message}`, ...args);
   }
   
   // Set API key manually (useful for development)
@@ -91,7 +120,7 @@ class OpenAIService {
     
     return false;
   }
-
+  
   // Helper to check if we're in a production environment where we should NEVER use fallbacks
   private isProductionEnvironment(): boolean {
     // Check if explicitly set to production
@@ -118,7 +147,7 @@ class OpenAIService {
     if (!this.apiKey) {
       console.error('OpenAI API key not configured, cannot generate design iteration');
       
-      // In production, never use fallback for missing API key
+      // In production, never use fallback
       if (this.isProductionEnvironment()) {
         throw new Error('OpenAI API key not configured. Please set it in your environment variables.');
       }

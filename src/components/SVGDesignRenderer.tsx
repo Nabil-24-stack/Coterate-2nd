@@ -2,6 +2,68 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import styled from 'styled-components';
 import html2canvas from 'html2canvas';
 
+// Add log deduplication utility
+const LogTracker = {
+  // Keep track of logs that have been output
+  loggedSvgs: new Set<string>(),
+  
+  // Create a simple hash from SVG content
+  getContentHash: (content: string): string => {
+    // Use first 100 chars + length as a simple hash
+    return `${content.substring(0, 100).replace(/\s+/g, '')}:${content.length}`;
+  },
+  
+  // Check if this SVG has been logged before
+  hasBeenLogged: (content: string): boolean => {
+    const hash = LogTracker.getContentHash(content);
+    return LogTracker.loggedSvgs.has(hash);
+  },
+  
+  // Mark an SVG as logged
+  markAsLogged: (content: string): void => {
+    const hash = LogTracker.getContentHash(content);
+    LogTracker.loggedSvgs.add(hash);
+  },
+  
+  // Clear all logged SVGs (useful for testing)
+  clear: (): void => {
+    LogTracker.loggedSvgs.clear();
+  },
+  
+  // Debug mode control
+  debugMode: localStorage.getItem('svg_debug_mode') === 'true',
+  
+  // Toggle debug mode
+  setDebugMode: (enabled: boolean): void => {
+    LogTracker.debugMode = enabled;
+    localStorage.setItem('svg_debug_mode', String(enabled));
+  },
+  
+  // Logs only if in debug mode
+  debugLog: (message: string, ...args: any[]): void => {
+    if (LogTracker.debugMode) {
+      console.log(`[SVG] ${message}`, ...args);
+    }
+  },
+  
+  // Always logs important info
+  log: (message: string, ...args: any[]): void => {
+    console.log(`[SVG] ${message}`, ...args);
+  },
+  
+  // Always logs errors
+  error: (message: string, ...args: any[]): void => {
+    console.error(`[SVG] ${message}`, ...args);
+  }
+};
+
+// Add global function to toggle debug mode for SVG renderer
+// @ts-ignore - Add to window for debugging purposes
+window.toggleSVGDebug = (enabled: boolean) => {
+  LogTracker.setDebugMode(enabled);
+  console.log(`SVG debug mode ${enabled ? 'enabled' : 'disabled'}`);
+};
+
 interface SVGDesignRendererProps {
   svgContent: string;
   onRender?: (success: boolean) => void;
@@ -30,36 +92,52 @@ const RendererContainer = styled.div<{ width?: number; height?: number; showBord
   }
 `;
 
-// Enhanced logging for SVG debugging
+// Enhanced logging for SVG debugging with deduplication
 const debugSvg = (svg: string): void => {
-  // Output a sample of the SVG to check its content
-  console.log(`SVG content preview (${svg.length} chars):`, svg.substring(0, 100) + '...');
-  
-  // Check if SVG has valid structure
-  const hasValidStructure = svg.includes('<svg') && svg.includes('</svg>');
-  console.log('SVG contains valid structure:', hasValidStructure);
-  
-  // Check if SVG has viewBox or dimensions
-  const hasViewBox = svg.includes('viewBox');
-  const hasDimensions = svg.includes('width=') && svg.includes('height=');
-  console.log('SVG has viewBox:', hasViewBox, 'dimensions:', hasDimensions);
-  
-  // Check for common problematic elements
-  const hasCData = svg.includes('CDATA');
-  const hasStyle = svg.includes('<style');
-  const hasScript = svg.includes('<script');
-  
-  console.log('SVG contains CDATA:', hasCData);
-  console.log('SVG contains style element:', hasStyle);
-  console.log('SVG contains script element:', hasScript);
-  
-  // Generate validation warnings
-  if (hasStyle && !hasCData) {
-    console.warn('SVG has style element without CDATA - might cause parsing issues');
+  // Check if this SVG has been logged before to avoid duplicate logs
+  if (LogTracker.hasBeenLogged(svg)) {
+    // If already logged, just output a minimal message
+    LogTracker.debugLog('Processing previously validated SVG content...');
+    return;
   }
   
-  if (hasScript) {
-    console.warn('SVG has script element - security considerations may apply');
+  // Mark this SVG content as logged
+  LogTracker.markAsLogged(svg);
+  
+  // Always log the basic info
+  LogTracker.log(`SVG content length: ${svg.length} chars`);
+  
+  // Detailed logs only in debug mode
+  if (LogTracker.debugMode) {
+    // Output a sample of the SVG to check its content
+    LogTracker.debugLog(`Content preview: ${svg.substring(0, 100)}...`);
+    
+    // Check if SVG has valid structure
+    const hasValidStructure = svg.includes('<svg') && svg.includes('</svg>');
+    LogTracker.debugLog('SVG contains valid structure:', hasValidStructure);
+    
+    // Check if SVG has viewBox or dimensions
+    const hasViewBox = svg.includes('viewBox');
+    const hasDimensions = svg.includes('width=') && svg.includes('height=');
+    LogTracker.debugLog('SVG has viewBox:', hasViewBox, 'dimensions:', hasDimensions);
+    
+    // Check for common problematic elements
+    const hasCData = svg.includes('CDATA');
+    const hasStyle = svg.includes('<style');
+    const hasScript = svg.includes('<script');
+    
+    LogTracker.debugLog('SVG contains CDATA:', hasCData);
+    LogTracker.debugLog('SVG contains style element:', hasStyle);
+    LogTracker.debugLog('SVG contains script element:', hasScript);
+    
+    // Generate validation warnings
+    if (hasStyle && !hasCData) {
+      console.warn('[SVG] Style element without CDATA - might cause parsing issues');
+    }
+    
+    if (hasScript) {
+      console.warn('[SVG] Script element detected - security considerations may apply');
+    }
   }
 };
 
@@ -74,12 +152,26 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
   const [error, setError] = useState<string | null>(null);
   const [renderAttempt, setRenderAttempt] = useState(0);
   const [renderMethod, setRenderMethod] = useState<'dom' | 'blob' | 'innerHTML'>('dom');
+  const instanceId = useRef(`svg-renderer-${Math.random().toString(36).substring(2, 9)}`);
+  const previousContentHashRef = useRef<string | null>(null);
 
   // Enhanced processing to clean up any potential issues
   const processSvg = (svg: string): string => {
     if (!svg) return '';
     
-    console.log('Processing SVG content...');
+    // Create content hash for deduplication
+    const contentHash = LogTracker.getContentHash(svg);
+    
+    // Check if this is the same SVG content as before
+    if (previousContentHashRef.current === contentHash) {
+      LogTracker.debugLog('Processing SVG content... (cached)');
+      return svg.trim();
+    }
+    
+    // Update the previous content hash
+    previousContentHashRef.current = contentHash;
+    
+    LogTracker.debugLog('Processing SVG content...');
     
     // Clean up the SVG content
     let processedSvg = svg.trim();
@@ -91,7 +183,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       
       if (svgStartIndex !== -1 && svgEndIndex !== -1) {
         processedSvg = processedSvg.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
-        console.log('Extracted SVG tag from content');
+        LogTracker.debugLog('Extracted SVG tag from content');
       }
     }
     
@@ -100,24 +192,24 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
     // 1. Missing or improper xmlns
     if (!processedSvg.includes('xmlns=')) {
       processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-      console.log('Added missing xmlns attribute');
+      LogTracker.debugLog('Added missing xmlns attribute');
     }
     
     // 2. Missing dimensions
     if (!processedSvg.includes('width=') && width) {
       processedSvg = processedSvg.replace('<svg', `<svg width="${width}"`);
-      console.log('Added width attribute:', width);
+      LogTracker.debugLog('Added width attribute:', width);
     }
     
     if (!processedSvg.includes('height=') && height) {
       processedSvg = processedSvg.replace('<svg', `<svg height="${height}"`);
-      console.log('Added height attribute:', height);
+      LogTracker.debugLog('Added height attribute:', height);
     }
     
     // 3. Missing viewBox
     if (!processedSvg.includes('viewBox=') && width && height) {
       processedSvg = processedSvg.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
-      console.log('Added viewBox attribute');
+      LogTracker.debugLog('Added viewBox attribute');
     } else if (!processedSvg.includes('viewBox=')) {
       // If we don't have width/height provided, try to extract them from the SVG
       const widthMatch = processedSvg.match(/width=["']([^"']+)["']/);
@@ -129,11 +221,11 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         
         if (!isNaN(Number(extractedWidth)) && !isNaN(Number(extractedHeight))) {
           processedSvg = processedSvg.replace('<svg', `<svg viewBox="0 0 ${extractedWidth} ${extractedHeight}"`);
-          console.log('Added viewBox attribute based on extracted dimensions');
+          LogTracker.debugLog('Added viewBox attribute based on extracted dimensions');
         } else {
           // Fallback to default viewBox
           processedSvg = processedSvg.replace('<svg', `<svg viewBox="0 0 800 600"`);
-          console.log('Added default viewBox attribute');
+          LogTracker.debugLog('Added default viewBox attribute');
         }
       }
     }
@@ -141,13 +233,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
     // 4. Fix any malformed style elements - ensure CDATA is used
     if (processedSvg.includes('<style>') && !processedSvg.includes('CDATA')) {
       processedSvg = processedSvg.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
-      console.log('Fixed malformed style tag by adding CDATA');
+      LogTracker.debugLog('Fixed malformed style tag by adding CDATA');
     }
     
     // 5. Fix missing style closing tag
     if (processedSvg.includes('<style>') && !processedSvg.includes('</style>')) {
       processedSvg = processedSvg.replace('</svg>', '</style></svg>');
-      console.log('Added missing style closing tag');
+      LogTracker.debugLog('Added missing style closing tag');
     }
     
     // 6. Ensure text elements have proper attributes for positioning
@@ -159,7 +251,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         }
         return match;
       });
-      console.log('Added missing text attributes');
+      LogTracker.debugLog('Added missing text attributes');
     }
     
     // 7. Fix font-family issues
@@ -197,7 +289,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
     if (openGTags > closeGTags) {
       const missingClosures = openGTags - closeGTags;
       processedSvg = processedSvg.replace('</svg>', '</g>'.repeat(missingClosures) + '</svg>');
-      console.log(`Added ${missingClosures} missing </g> tags`);
+      LogTracker.debugLog(`Added ${missingClosures} missing </g> tags`);
     }
     
     // Final validation with DOM parser
@@ -207,13 +299,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       const errorNode = doc.querySelector('parsererror');
       
       if (errorNode) {
-        console.warn('SVG parsing issues remain after processing:', errorNode.textContent);
+        LogTracker.error('SVG parsing issues remain after processing:', errorNode.textContent);
         // We'll still return the processed SVG and try rendering it anyway
       } else {
-        console.log('SVG validated successfully after processing');
+        LogTracker.debugLog('SVG validated successfully after processing');
       }
     } catch (err) {
-      console.warn('Error validating SVG:', err);
+      LogTracker.error('Error validating SVG:', err);
     }
     
     return processedSvg;
@@ -240,13 +332,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       
       // Basic validation - if it doesn't have svg tags, it's invalid
       if (!processed.includes('<svg') || !processed.includes('</svg>')) {
-        console.error('Invalid SVG content (missing svg tags)');
+        LogTracker.error('Invalid SVG content (missing svg tags)');
         return createFallbackSvg();
       }
       
       return processed;
     } catch (err) {
-      console.error('Error processing SVG:', err);
+      LogTracker.error('Error processing SVG:', err);
       return createFallbackSvg();
     }
   })();
@@ -262,13 +354,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       const parserError = svgDoc.querySelector('parsererror');
       
       if (parserError) {
-        console.warn('Parser error in DOM rendering method:', parserError.textContent);
+        LogTracker.error('Parser error in DOM rendering method:', parserError.textContent);
         return false;
       }
       
       const svgElement = svgDoc.querySelector('svg');
       if (!svgElement) {
-        console.error('No SVG element found after parsing');
+        LogTracker.error('No SVG element found after parsing');
         return false;
       }
       
@@ -294,10 +386,10 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       const importedNode = document.importNode(svgElement, true);
       container.appendChild(importedNode);
       
-      console.log('Successfully rendered SVG with DOM API method');
+      LogTracker.log('Successfully rendered SVG with DOM API method');
       return true;
     } catch (error) {
-      console.error('Error in direct DOM rendering method:', error);
+      LogTracker.error('Error in direct DOM rendering method:', error);
       return false;
     }
   };
@@ -306,7 +398,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
   const renderWithBlobURL = (container: HTMLElement, svg: string): Promise<boolean> => {
     return new Promise((resolve) => {
       try {
-        console.log('Trying Blob URL rendering method');
+        LogTracker.debugLog('Trying Blob URL rendering method');
         
         // Create a blob from the SVG content
         const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -322,13 +414,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         
         // Set up onload/onerror handlers
         img.onload = () => {
-          console.log('Successfully rendered SVG with Blob URL method');
+          LogTracker.log('Successfully rendered SVG with Blob URL method');
           URL.revokeObjectURL(url); // Clean up
           resolve(true);
         };
         
         img.onerror = (err) => {
-          console.error('Blob URL rendering method failed:', err);
+          LogTracker.error('Blob URL rendering method failed:', err);
           URL.revokeObjectURL(url); // Clean up
           resolve(false);
         };
@@ -342,7 +434,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         img.src = url;
         container.appendChild(img);
       } catch (error) {
-        console.error('Error in Blob URL rendering method:', error);
+        LogTracker.error('Error in Blob URL rendering method:', error);
         resolve(false);
       }
     });
@@ -351,7 +443,7 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
   // 3. innerHTML method (fallback, less safe but most compatible)
   const renderWithInnerHTML = (container: HTMLElement, svg: string): boolean => {
     try {
-      console.log('Using innerHTML rendering method');
+      LogTracker.debugLog('Using innerHTML rendering method');
       
       // Clear container
       container.innerHTML = '';
@@ -374,14 +466,14 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         svgElement.style.height = '100%';
         svgElement.style.display = 'block';
         
-        console.log('Successfully rendered SVG with innerHTML method');
+        LogTracker.log('Successfully rendered SVG with innerHTML method');
         return true;
       } else {
-        console.error('No SVG element found after innerHTML rendering');
+        LogTracker.error('No SVG element found after innerHTML rendering');
         return false;
       }
     } catch (error) {
-      console.error('Error in innerHTML rendering method:', error);
+      LogTracker.error('Error in innerHTML rendering method:', error);
       return false;
     }
   };
@@ -510,6 +602,13 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
   useImperativeHandle(ref, () => ({
     convertToImage
   }));
+
+  // Clean up previous content hash on unmount
+  useEffect(() => {
+    return () => {
+      previousContentHashRef.current = null;
+    };
+  }, []);
 
   return (
     <RendererContainer 

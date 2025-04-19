@@ -715,6 +715,94 @@ const DebugButton = styled.button`
   }
 `;
 
+// Debug toggle component for development mode
+const DebugControls = () => {
+  const [debugEnabled, setDebugEnabled] = useState(() => {
+    // Initialize from localStorage
+    return localStorage.getItem('svg_debug_mode') === 'true';
+  });
+  
+  const toggleDebug = () => {
+    const newState = !debugEnabled;
+    setDebugEnabled(newState);
+    
+    // Update localStorage and call the global toggle function if available
+    localStorage.setItem('svg_debug_mode', String(newState));
+    
+    // Call the global SVG debug toggle function if it exists
+    if (typeof window.toggleSVGDebug === 'function') {
+      window.toggleSVGDebug(newState);
+    }
+    
+    // Also clear log caches when toggling debug mode
+    LogManager.clear();
+  };
+  
+  return (
+    <div style={{ 
+      position: 'fixed', 
+      bottom: 20, 
+      right: 20, 
+      zIndex: 9999, 
+      display: 'flex', 
+      flexDirection: 'column',
+      gap: 8
+    }}>
+      <button 
+        onClick={toggleDebug}
+        style={{
+          backgroundColor: debugEnabled ? '#4CAF50' : '#9e9e9e',
+          color: 'white',
+          border: 'none',
+          borderRadius: 4,
+          padding: '8px 16px',
+          fontSize: 14,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}
+      >
+        <span style={{ 
+          width: 16, 
+          height: 16, 
+          borderRadius: 8, 
+          backgroundColor: debugEnabled ? '#4CAF50' : '#9e9e9e',
+          border: '4px solid white',
+          display: 'inline-block'
+        }} />
+        SVG Debug {debugEnabled ? 'ON' : 'OFF'}
+      </button>
+      
+      <button
+        onClick={() => {
+          // Clear all logs
+          console.clear();
+          LogManager.clear();
+        }}
+        style={{
+          backgroundColor: '#2196F3',
+          color: 'white',
+          border: 'none',
+          borderRadius: 4,
+          padding: '8px 16px',
+          fontSize: 14,
+          cursor: 'pointer'
+        }}
+      >
+        Clear Console
+      </button>
+    </div>
+  );
+};
+
+// Add to the global window object
+declare global {
+  interface Window {
+    toggleSVGDebug?: (enabled: boolean) => void;
+  }
+}
+
 // Add a styled component for the Figma badge
 const FigmaBadge = styled.div<{ scale: number }>`
   position: absolute;
@@ -802,13 +890,26 @@ const debugImageLoad = (src: string, success: boolean, error?: string) => {
 // Logging utility to prevent duplicate logs
 const LogManager = {
   prevLogs: new Map<string, string>(),
+  renderedItems: new Set<string>(),
   
   // Log only if the message is different from the previous one with the same key
   log: (key: string, message: string, force: boolean = false) => {
+    // If we've already logged this iteration and it's not forced, skip
+    if (key.includes('iteration-') && LogManager.renderedItems.has(key.split('-')[1]) && !force) {
+      return false;
+    }
+    
     const prevMessage = LogManager.prevLogs.get(key);
     if (force || prevMessage !== message) {
       console.log(message);
       LogManager.prevLogs.set(key, message);
+      
+      // If this is an iteration success log, add it to the renderedItems set
+      if (key.match(/^iteration-[\w-]+$/) && message.includes('rendered successfully')) {
+        const iterationId = key.split('-')[1];
+        LogManager.renderedItems.add(iterationId);
+      }
+      
       return true;
     }
     return false;
@@ -817,6 +918,7 @@ const LogManager = {
   // Clear all previous logs
   clear: () => {
     LogManager.prevLogs.clear();
+    LogManager.renderedItems.clear();
   }
 };
 
@@ -3364,6 +3466,9 @@ export const Canvas: React.FC<{}> = () => {
           </PromptButton>
         </PromptButtonContainer>
       </PromptDialog>
+      
+      {/* Debug Controls - only in development mode */}
+      {process.env.NODE_ENV === 'development' && <DebugControls />}
     </>
   );
 }; 
