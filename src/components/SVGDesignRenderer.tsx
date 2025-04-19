@@ -304,6 +304,50 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
 
   // Effect to render the SVG content
   useEffect(() => {
+    // Define the fallback function outside the block to avoid strict mode issues
+    const fallbackToInnerHTML = (container: HTMLElement) => {
+      console.warn('All safe methods failed, falling back to innerHTML (less safe)');
+      try {
+        container.innerHTML = finalSvg;
+        
+        // Adjust SVG to fit the container if needed
+        const svgElement = container.querySelector('svg');
+        if (svgElement) {
+          if (width) {
+            svgElement.setAttribute('width', `${width}px`);
+          }
+          if (height) {
+            svgElement.setAttribute('height', `${height}px`);
+          }
+          
+          // Make it responsive
+          svgElement.style.width = '100%';
+          svgElement.style.height = '100%';
+          svgElement.style.display = 'block';
+          
+          // Signal successful render
+          setError(null);
+          onRender?.(true);
+          console.log('Successfully rendered SVG with innerHTML fallback');
+        } else {
+          throw new Error('Failed to render SVG - no SVG element found after insertion');
+        }
+      } catch (renderError) {
+        console.error('SVG rendering error:', renderError);
+        
+        // For catastrophic rendering failures, use a simple error message as HTML
+        container.innerHTML = `
+          <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8f9fa;color:#cc0000;font-family:sans-serif;padding:20px;text-align:center;">
+            <div style="font-weight:bold;margin-bottom:8px;">SVG Rendering Failed</div>
+            <div style="font-size:12px;color:#666;">${renderError instanceof Error ? renderError.message : 'Unknown error'}</div>
+          </div>
+        `;
+        
+        setError(`SVG render error: ${renderError instanceof Error ? renderError.message : String(renderError)}`);
+        onRender?.(false);
+      }
+    };
+
     try {
       if (!svgContent) {
         setError('No SVG content provided');
@@ -327,46 +371,53 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
         // DOM manipulation succeeded
         setError(null);
         onRender?.(true);
+        console.log('Successfully rendered SVG with DOM manipulation');
       } else {
-        // Fall back to innerHTML as a last resort
-        console.warn('DOM manipulation failed, falling back to innerHTML (less safe)');
+        // Try a second approach using blob URLs which can sometimes work better for SVG
         try {
-          container.innerHTML = finalSvg;
+          console.log('DOM manipulation failed, trying Blob URL approach');
+          // Create a blob from the SVG content
+          const blob = new Blob([finalSvg], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
           
-          // Adjust SVG to fit the container if needed
-          const svgElement = container.querySelector('svg');
-          if (svgElement) {
-            if (width) {
-              svgElement.setAttribute('width', `${width}px`);
-            }
-            if (height) {
-              svgElement.setAttribute('height', `${height}px`);
-            }
-            
-            // Make it responsive
-            svgElement.style.width = '100%';
-            svgElement.style.height = '100%';
-            svgElement.style.display = 'block';
-            
-            // Signal successful render
+          // Create an img element to display the SVG
+          const img = document.createElement('img');
+          img.width = width || 400;
+          img.height = height || 300;
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'contain';
+          
+          // Set up onload/onerror handlers
+          img.onload = () => {
+            console.log('Successfully rendered SVG with Blob URL approach');
+            // Clean up the URL once the image is loaded
+            URL.revokeObjectURL(url);
             setError(null);
             onRender?.(true);
-          } else {
-            throw new Error('Failed to render SVG - no SVG element found after insertion');
+          };
+          
+          img.onerror = (err) => {
+            console.error('Blob URL approach failed:', err);
+            // Clean up and fall back to innerHTML
+            URL.revokeObjectURL(url);
+            // Check if container is still available
+            if (containerRef.current) {
+              fallbackToInnerHTML(containerRef.current);
+            }
+          };
+          
+          // Set the src and add to container
+          img.src = url;
+          // Clear container first
+          container.innerHTML = '';
+          container.appendChild(img);
+        } catch (blobError) {
+          console.error('Blob URL approach failed:', blobError);
+          // Fall back to innerHTML if container is still available
+          if (containerRef.current) {
+            fallbackToInnerHTML(containerRef.current);
           }
-        } catch (renderError) {
-          console.error('SVG rendering error:', renderError);
-          
-          // For catastrophic rendering failures, use a simple error message as HTML
-          container.innerHTML = `
-            <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8f9fa;color:#cc0000;font-family:sans-serif;padding:20px;text-align:center;">
-              <div style="font-weight:bold;margin-bottom:8px;">SVG Rendering Failed</div>
-              <div style="font-size:12px;color:#666;">${renderError instanceof Error ? renderError.message : 'Unknown error'}</div>
-            </div>
-          `;
-          
-          setError(`SVG render error: ${renderError instanceof Error ? renderError.message : String(renderError)}`);
-          onRender?.(false);
         }
       }
     } catch (err) {

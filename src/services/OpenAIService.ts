@@ -469,173 +469,134 @@ class OpenAIService {
       // Extract SVG code - improved extraction logic
       console.log('Extracting SVG from response...');
       
-      // First attempt: Try to find the SVG section explicitly marked with ```svg and ``` tags
-      const svgRegexPatterns = [
-        /```svg\n([\s\S]*?)```/,       // Standard format
-        /```svg\s+([\s\S]*?)```/,      // Without newline after 'svg'
-        /<svg[\s\S]*?<\/svg>/,         // Direct SVG tags
-        /```\n<svg[\s\S]*?<\/svg>\n```/, // Code block with SVG tags
-        /```([\s\S]*?)<\/svg>\n```/    // Code block with SVG ending tag
-      ];
-      
+      // First attempt: Try to find SVG content with more aggressive pattern matching
       let svgContent = '';
       
-      // First search for the SVG code using our regex patterns
-      for (const pattern of svgRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[0]) {
-          // Extract either the group or the entire match depending on the pattern
-          svgContent = match[1] ? match[1].trim() : match[0].trim();
-          
-          // If the extracted content doesn't start with <svg, but we have a match, then it's the entire match
-          if (!svgContent.startsWith('<svg') && match[0].includes('<svg')) {
-            svgContent = match[0].replace(/```svg\n?|```/g, '').trim();
-          }
-          
-          console.log('Found SVG content using regex pattern:', pattern);
-          break;
+      // First try to extract SVG from code blocks
+      const codeBlockMatch = response.match(/```(?:svg|html)?\s*([\s\S]*?<svg[\s\S]*?<\/svg>)[\s\S]*?```/i);
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        svgContent = codeBlockMatch[1].trim();
+        console.log('Found SVG in code block with length:', svgContent.length);
+      }
+      
+      // If no match, look for SVG tags directly
+      if (!svgContent || !svgContent.includes('<svg')) {
+        const svgTagMatch = response.match(/<svg[^>]*>[\s\S]*?<\/svg>/);
+        if (svgTagMatch) {
+          svgContent = svgTagMatch[0].trim();
+          console.log('Found direct SVG tag with length:', svgContent.length);
         }
       }
       
-      // If no match through patterns, try a more direct approach for SVG content
-      if (!svgContent) {
-        console.log('No SVG found with patterns, trying direct extraction...');
-        
-        // Look for SVG CODE or SVG: section in the text
-        const svgSectionRegex = /(?:SVG\s*CODE:|SVG:)(?:\s*|\n)([\s\S]*?)(?=\n\n\d+\.|\n\n#|IMPROVEMENTS|$)/i;
-        const svgSectionMatch = response.match(svgSectionRegex);
-        
+      // If still no match, try looking in sections with SVG: or SVG CODE: labels
+      if (!svgContent || !svgContent.includes('<svg')) {
+        const svgSectionMatch = response.match(/(?:SVG(?:\s*CODE)?:)\s*([\s\S]*?)(?=\n\n(?:\d+\.|\#|IMPROVEMENTS|$))/i);
         if (svgSectionMatch && svgSectionMatch[1]) {
-          const svgSection = svgSectionMatch[1].trim();
-          
-          // Extract the SVG tag content from this section
-          const svgTagMatch = svgSection.match(/<svg[\s\S]*?<\/svg>/);
-          if (svgTagMatch) {
-            svgContent = svgTagMatch[0];
-            console.log('Found SVG content in SVG section');
+          const sectionContent = svgSectionMatch[1].trim();
+          const svgInSectionMatch = sectionContent.match(/<svg[\s\S]*?<\/svg>/);
+          if (svgInSectionMatch) {
+            svgContent = svgInSectionMatch[0].trim();
+            console.log('Found SVG in labeled section with length:', svgContent.length);
           }
         }
       }
       
-      // If still no match, try a broader search through the entire response
-      if (!svgContent) {
-        console.log('Trying full response scan for SVG content...');
-        const allSvgTags = response.match(/<svg[\s\S]*?<\/svg>/g);
+      // Last resort - scan the entire response for the longest SVG tag content
+      if (!svgContent || !svgContent.includes('<svg')) {
+        console.log('No SVG found with direct pattern matching, trying full response scan...');
+        const allSvgTags = Array.from(response.matchAll(/<svg[\s\S]*?<\/svg>/g)).map(m => m[0]);
         
-        if (allSvgTags && allSvgTags.length > 0) {
-          // Use the longest SVG tag found (most likely the complete one)
+        if (allSvgTags.length > 0) {
+          // Use the longest SVG content found
           svgContent = allSvgTags.reduce((longest, current) => 
             current.length > longest.length ? current : longest, allSvgTags[0]);
-            
-          console.log('Found SVG content in full scan');
+          console.log('Found SVG in full scan with length:', svgContent.length);
         }
       }
       
-      // Clean up the SVG content
-      if (svgContent) {
+      // If we have SVG content, clean it up
+      if (svgContent && svgContent.includes('<svg')) {
         // Remove code block markers if present
         svgContent = svgContent.replace(/```svg\n?|```/g, '').trim();
         
-        // If the SVG doesn't have xmlns attribute, add it
+        // Make sure SVG content begins with <svg
+        const svgTagStart = svgContent.indexOf('<svg');
+        if (svgTagStart > 0) {
+          svgContent = svgContent.substring(svgTagStart);
+          console.log('Trimmed content before <svg> tag');
+        }
+        
+        // Make sure SVG content ends with </svg>
+        const svgTagEnd = svgContent.lastIndexOf('</svg>');
+        if (svgTagEnd > 0 && svgTagEnd + 6 < svgContent.length) {
+          svgContent = svgContent.substring(0, svgTagEnd + 6);
+          console.log('Trimmed content after </svg> tag');
+        }
+        
+        // Add xmlns attribute if missing
         if (!svgContent.includes('xmlns=')) {
           svgContent = svgContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+          console.log('Added missing xmlns attribute');
         }
         
         // Make sure we have proper viewBox and dimensions
-        if (!svgContent.includes('viewBox=') && svgContent.includes('width=') && svgContent.includes('height=')) {
-          // Extract width and height values
-          const widthMatch = svgContent.match(/width="([^"]+)"/);
-          const heightMatch = svgContent.match(/height="([^"]+)"/);
+        if (!svgContent.includes('viewBox=')) {
+          const widthMatch = svgContent.match(/width=["']([^"']+)["']/);
+          const heightMatch = svgContent.match(/height=["']([^"']+)["']/);
           
           if (widthMatch && heightMatch) {
             const width = widthMatch[1].replace('px', '');
             const height = heightMatch[1].replace('px', '');
-            
-            // Add viewBox attribute
             svgContent = svgContent.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
+            console.log('Added viewBox attribute based on dimensions');
           }
         }
         
-        // Fix unclosed tags - common issue with OpenAI-generated SVG
-        const fixUnclosedTags = (svg: string): string => {
-          let fixedSvg = svg;
-          
-          // Fix self-closing tags that are not properly closed
-          fixedSvg = fixedSvg.replace(/<(rect|circle|path|line|polygon|polyline|ellipse)([^>]*[^\/])>/g, '<$1$2/>');
-          
-          // Fix unclosed rect tags specifically (common issue)
-          if (fixedSvg.includes('<rect') && !fixedSvg.includes('</rect>') && !fixedSvg.includes('/>')) {
-            fixedSvg = fixedSvg.replace(/<rect([^>]*[^\/])>/g, '<rect$1/>');
-          }
-          
-          // Fix issue with SVG ending inside a group
-          if (fixedSvg.includes('<g') && !fixedSvg.includes('</g>')) {
-            fixedSvg = fixedSvg.replace('</svg>', '</g></svg>');
-          }
-          
-          // Ensure the SVG ends properly
-          if (!fixedSvg.endsWith('</svg>')) {
-            fixedSvg = fixedSvg + '</svg>';
-          }
-          
-          return fixedSvg;
-        };
+        // Enhanced SVG cleaning for critical tag structure issues
+        svgContent = this.fixSvgStructure(svgContent);
         
-        // Apply tag fixes
-        svgContent = fixUnclosedTags(svgContent);
-        
-        // Fix style issues
-        if (svgContent.includes('<style>') && !svgContent.includes('</style>')) {
-          svgContent = svgContent.replace('<style>', '<style><![CDATA[');
-          svgContent = svgContent.replace('</svg>', ']]></style></svg>');
-        }
-        
-        // Fix CDATA in style if missing
-        if (svgContent.includes('<style>') && !svgContent.includes('CDATA') && svgContent.includes('{')) {
-          svgContent = svgContent.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
-        }
-        
-        // Add basic validation
+        // Validate with DOMParser
         try {
           const parser = new DOMParser();
           const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
           const parserError = svgDoc.querySelector('parsererror');
           
           if (parserError) {
-            console.warn('SVG parsing error detected, attempting automatic repair');
+            console.warn('SVG parsing error detected, applying aggressive repair');
             
-            // Extract the error message to identify specific issues
             const errorText = parserError.textContent || '';
-            console.log('SVG parsing error:', errorText);
+            console.warn('SVG parsing error:', errorText);
             
-            // Apply specific fixes based on error type
+            // Try more aggressive fixes based on common error patterns
             if (errorText.includes('tag mismatch')) {
-              // Tag mismatch errors - try to fix common patterns
-              const tagMatch = errorText.match(/tag mismatch: (.*?) line/);
-              if (tagMatch && tagMatch[1]) {
-                const problematicTag = tagMatch[1].trim();
-                console.log('Tag mismatch detected for:', problematicTag);
-                
-                // Try to repair the specific tag issue
-                if (problematicTag.includes('svg') && problematicTag.includes('rect')) {
-                  // Fix unclosed rect tags near svg end
-                  svgContent = svgContent.replace(/<rect([^>]*?)>([^<]*?)<\/svg>/g, '<rect$1/>$2</svg>');
-                }
-              }
+              svgContent = this.repairTagMismatch(svgContent, errorText);
+              console.log('Applied tag mismatch repairs');
+            }
+            
+            // Force self-closing tags for elements that should be self-closing
+            svgContent = this.forceSelfClosingTags(svgContent);
+            console.log('Applied self-closing tag fixes');
+            
+            // Validate the fixes
+            const fixedDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+            if (fixedDoc.querySelector('parsererror')) {
+              // If still broken, use the fallback SVG
+              console.error('SVG still has parsing errors after repairs, will use fallback');
+              svgContent = '';
+            } else {
+              console.log('SVG successfully repaired!');
             }
           }
         } catch (parseError) {
           console.warn('SVG validation error:', parseError);
-          // Continue with the best SVG we have
         }
       }
       
       // Add fallback for SVG content if extraction failed
-      if (!svgContent || svgContent.length < 10) {
+      if (!svgContent || svgContent.length < 50 || !svgContent.includes('<svg')) {
         console.error('FAILED TO EXTRACT SVG from response, using fallback');
         
-        // Before using generic fallback, check if we can extract any design information from the response
-        // to create a more useful fallback
+        // Before using generic fallback, check if we can extract any design information
         const colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
         const colorValues: string[] = [];
         
@@ -647,7 +608,7 @@ class OpenAIService {
           }
         });
         
-        // Create a more informative fallback SVG with extracted design info if possible
+        // Create a more detailed fallback SVG with extracted design info
         if (colorValues.length > 0) {
           const primaryColor = colorValues[0] || '#4A6CF7';
           const backgroundColor = colorValues.find(color => colorPalette.some(item => 
@@ -657,21 +618,9 @@ class OpenAIService {
             item.toLowerCase().includes('text') && item.includes(color)
           )) || '#1D2939';
           
-          svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
-            <rect width="100%" height="100%" fill="${backgroundColor}" />
-            <rect x="50" y="50" width="700" height="80" fill="${primaryColor}" rx="8" />
-            <text x="400" y="100" text-anchor="middle" font-size="24" fill="white" font-family="Arial">Generated Design Header</text>
-            <text x="400" y="300" text-anchor="middle" font-size="18" fill="${textColor}" font-family="Arial">
-              SVG Extraction Issue - Only Design System Extracted
-            </text>
-            <text x="400" y="330" text-anchor="middle" font-size="14" fill="${textColor}" font-family="Arial">
-              Please try generating again with more specific instructions
-            </text>
-            <rect x="280" y="380" width="240" height="50" fill="${primaryColor}" rx="8" />
-            <text x="400" y="410" text-anchor="middle" font-size="16" fill="white" font-family="Arial">Try Again Button</text>
-          </svg>`;
+          svgContent = this.createEnhancedFallbackSvg(backgroundColor, primaryColor, textColor);
         } else {
-          // Use generic fallback if no design info available
+          // Use generic fallback
           svgContent = this.createBasicSvgFallback({ width: 800, height: 600 });
         }
       }
@@ -795,388 +744,225 @@ class OpenAIService {
     }
   }
   
-  // Helper to extract list items from a section
-  private extractListItems(text: string, sectionPattern: string): string[] {
-    const regex = new RegExp(`(?:${sectionPattern})(?:[:\\s]*)((?:[\\s\\S](?!\\n\\s*\\n))*?)(?:\\n\\s*\\n|$)`, 'i');
-    const match = text.match(regex);
+  // Helper method to fix SVG structure
+  private fixSvgStructure(svg: string): string {
+    let fixedSvg = svg;
     
-    if (!match) return [];
+    // Fix unclosed tags
+    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
     
-    // Split by common list item markers
-    return match[1]
-      .split(/\n-|\n\*|\n\d+\./)
-      .map(item => item.trim())
-      .filter(Boolean);
+    // First convert non-self-closing empty tags to self-closing
+    selfClosingElements.forEach(tagName => {
+      const emptyTagPattern = new RegExp(`<${tagName}([^>]*)></\\s*${tagName}\\s*>`, 'g');
+      fixedSvg = fixedSvg.replace(emptyTagPattern, `<${tagName}$1/>`);
+      console.log(`Fixed empty ${tagName} tags`);
+      
+      // Then ensure proper handling of tags that should be self-closing but aren't
+      const nonClosedPattern = new RegExp(`<${tagName}([^/>][^>]*)>(?![\\s\\S]*?</${tagName}>)`, 'g');
+      if (fixedSvg.match(nonClosedPattern)) {
+        fixedSvg = fixedSvg.replace(nonClosedPattern, `<${tagName}$1/>`);
+        console.log(`Fixed unclosed ${tagName} tag`);
+      }
+    });
+    
+    // Fix rect tags with missing closing tags
+    if (fixedSvg.includes('<rect') && !fixedSvg.includes('</rect>') && !fixedSvg.includes('/>')) {
+      fixedSvg = fixedSvg.replace(/<rect([^>]*[^\/])>/g, '<rect$1/>');
+      console.log('Fixed unclosed rect tag');
+    }
+    
+    // Fix g tags that are opened but never closed
+    const gTagPattern = /<g[^>]*>(?![\\s\\S]*?<\\/g>)/g;
+    const gTagsCount = (fixedSvg.match(/<g/g) || []).length;
+    const gCloseTagsCount = (fixedSvg.match(/<\\/g>/g) || []).length;
+    
+    if (gTagsCount > gCloseTagsCount) {
+      fixedSvg = fixedSvg.replace('</svg>', '</g></svg>'.repeat(gTagsCount - gCloseTagsCount));
+      console.log(`Fixed unclosed g tag by adding ${gTagsCount - gCloseTagsCount} closing tags`);
+    }
+    
+    // Fix CDATA sections in style elements
+    if (fixedSvg.includes('<style>') && !fixedSvg.includes('CDATA') && fixedSvg.includes('{')) {
+      fixedSvg = fixedSvg.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
+      console.log('Added CDATA to style tag');
+    }
+    
+    // Fix missing style closing tag
+    if (fixedSvg.includes('<style>') && !fixedSvg.includes('</style>')) {
+      fixedSvg = fixedSvg.replace('<style>', '<style><![CDATA[').replace('</svg>', ']]></style></svg>');
+      console.log('Fixed missing style closing tag');
+    }
+    
+    return fixedSvg;
   }
   
-  // Helper to extract colors from color sections
-  private extractColors(text: string, colorType: string): string[] {
-    const regex = new RegExp(`${colorType}[\\s\\S]*?(?:colors?|palette)?[:\\s]*((?:[\\s\\S](?!\\n\\s*\\n))*?)(?:\\n\\s*\\n|$)`, 'i');
-    const match = text.match(regex);
+  // Helper to repair tag mismatch errors with specific context of the error
+  private repairTagMismatch(svg: string, errorText: string): string {
+    let fixedSvg = svg;
     
-    if (!match) return [];
-    
-    // Extract any hex color codes
-    const hexCodes = match[1].match(/#[0-9A-Fa-f]{3,6}/g);
-    return hexCodes || [];
-  }
-  
-  // Create a fallback demo response for development/testing
-  private getFallbackAnalysisResponse(dimensions: {width: number, height: number}): DesignAnalysisResponse {
-    return {
-      analysis: {
-        strengths: [
-          "Clean and minimalist aesthetic with good use of whitespace",
-          "Consistent color scheme throughout the design",
-          "Clear visual distinction between different sections",
-          "Good use of typography for main headings"
-        ],
-        weaknesses: [
-          "Some text elements lack sufficient contrast with background",
-          "Button states are not visually distinct enough",
-          "Mobile responsiveness could be improved",
-          "Some interactive elements lack clear affordances"
-        ],
-        improvementAreas: [
-          "Enhance visual hierarchy to better guide users through the content",
-          "Improve color contrast for better accessibility",
-          "Add more distinctive hover/focus states to interactive elements",
-          "Optimize spacing and alignment for better visual flow"
-        ],
-        specificChanges: [
-          "Increased contrast ratio of primary button text from 3:1 to 4.5:1",
-          "Added visual feedback on hover states for all interactive elements",
-          "Fixed inconsistent spacing between section elements",
-          "Enhanced form field styling for better input affordance"
-        ],
-        visualHierarchy: {
-          issues: [
-            "Main call-to-action doesn't stand out enough from secondary actions",
-            "Important information lacks visual emphasis",
-            "Content grouping could be more clearly defined"
-          ],
-          improvements: [
-            "Enhanced emphasis on primary actions while maintaining original position and size",
-            "Applied appropriate visual weight to headings and key content",
-            "Improved content grouping through subtle spacing adjustments"
-          ]
-        },
-        colorContrast: {
-          issues: [
-            "Primary button text has insufficient contrast (3:1)",
-            "Some secondary text is too light against the background",
-            "Link colors don't provide enough distinction from regular text"
-          ],
-          improvements: [
-            "Increased button text contrast to 4.5:1 while preserving brand colors",
-            "Darkened secondary text by 15% to improve readability",
-            "Made links more distinctive without changing the overall color scheme"
-          ]
-        },
-        componentSelection: {
-          issues: [
-            "Some toggle controls are ambiguous in their current state",
-            "Input fields lack clear focus states",
-            "Dropdown menus have insufficient visual cues"
-          ],
-          improvements: [
-            "Enhanced toggle controls with more distinct visual states",
-            "Added clear focus indicators to all interactive elements",
-            "Improved dropdown affordance with consistent visual cues"
-          ]
-        },
-        textLegibility: {
-          issues: [
-            "Body text is too small in some sections",
-            "Line height is insufficient for comfortable reading",
-            "Some headings lack sufficient spacing from body text"
-          ],
-          improvements: [
-            "Increased body text size from 14px to 16px where needed",
-            "Adjusted line height to 1.5 times the font size for better readability",
-            "Added appropriate spacing between headings and related content"
-          ]
-        },
-        usability: {
-          issues: [
-            "Navigation structure is not immediately clear",
-            "Some interactive elements don't appear clickable",
-            "Form submission process lacks visual feedback"
-          ],
-          improvements: [
-            "Enhanced navigation indicators while maintaining original structure",
-            "Improved hover/focus states for all interactive elements",
-            "Added clear visual feedback for form interactions"
-          ]
-        },
-        accessibility: {
-          issues: [
-            "Keyboard navigation path is not logical",
-            "Some interactive elements lack accessible names",
-            "Color alone is used to convey some information"
-          ],
-          improvements: [
-            "Fixed focus order to follow natural content flow without restructuring the UI",
-            "Added proper aria-labels while maintaining visual design",
-            "Added non-color indicators for important state information"
-          ]
-        },
-        designSystem: {
-          colorPalette: [
-            "Primary: #4A6CF7 - Used for primary buttons, links, and key accent elements",
-            "Secondary: #6F7DEB - Used for secondary buttons and supporting elements",
-            "Background: #FFFFFF (main), #F8F9FB (secondary) - Used for page and card backgrounds",
-            "Text: #1D2939 (headings), #4B5563 (body), #6B7280 (secondary text)"
-          ],
-          typography: [
-            "Headings: Plus Jakarta Sans, 28px/700 (h1), 24px/600 (h2), 20px/600 (h3)",
-            "Body: Inter, 16px/400 (primary), 14px/400 (secondary)",
-            "Buttons: Inter, 16px/500",
-            "Labels: Inter, 14px/500"
-          ],
-          components: [
-            "Buttons: Rounded corners (8px), consistent padding (16px horizontal, 10px vertical), primary (#4A6CF7), secondary (#EEF1FF with #6F7DEB text)",
-            "Input fields: 1px border (#E5E7EB), 8px border radius, 12px padding, #F9FAFB background",
-            "Cards: White background, subtle shadow (0 2px 5px rgba(0,0,0,0.08)), 16px border radius, 24px padding",
-            "Navigation: Consistent 16px spacing between items, 2px accent indicator for active items"
-          ]
+    // Extract the specific tag mismatch information
+    const tagMismatchMatch = errorText.match(/tag mismatch: ([^.]+)/);
+    if (tagMismatchMatch) {
+      const mismatchInfo = tagMismatchMatch[1].trim();
+      console.log(`Detailed tag mismatch: "${mismatchInfo}"`);
+      
+      // Common tag mismatch patterns and their fixes
+      if (mismatchInfo.includes('svg') && mismatchInfo.includes('rect')) {
+        // SVG ending in a rect tag issue - make rect self-closing
+        fixedSvg = fixedSvg.replace(/<rect([^>]*?)>([^<]*?)<\/svg>/g, '<rect$1/>$2</svg>');
+        console.log('Fixed rect-svg tag mismatch');
+      }
+      
+      if (mismatchInfo.includes('svg') && mismatchInfo.includes('g')) {
+        // SVG ending in a g tag issue - add closing g tag
+        fixedSvg = fixedSvg.replace(/<\/svg>/g, '</g></svg>');
+        console.log('Fixed g-svg tag mismatch');
+      }
+      
+      // Match tags mentioned in the error and try to fix them
+      const tags = mismatchInfo.match(/[a-zA-Z]+/g) || [];
+      if (tags.length >= 2) {
+        const firstTag = tags[0];
+        const secondTag = tags[1];
+        
+        if (firstTag && secondTag && firstTag !== 'line' && secondTag !== 'line') {
+          // Check if first tag appears without closing before second tag appears
+          const tagRegex = new RegExp(`<${firstTag}([^>]*)>([^<]*)<${secondTag}`, 'g');
+          const matches = fixedSvg.match(tagRegex);
+          
+          if (matches) {
+            // Fix by making first tag self-closing or adding missing closing tag
+            if (['rect', 'circle', 'path', 'line', 'polygon', 'polyline', 'ellipse'].includes(firstTag)) {
+              fixedSvg = fixedSvg.replace(tagRegex, `<${firstTag}$1/>$2<${secondTag}`);
+              console.log(`Fixed ${firstTag}-${secondTag} tag mismatch by making ${firstTag} self-closing`);
+            } else {
+              fixedSvg = fixedSvg.replace(tagRegex, `<${firstTag}$1>$2</${firstTag}><${secondTag}`);
+              console.log(`Fixed ${firstTag}-${secondTag} tag mismatch by adding closing tag`);
+            }
+          }
         }
-      },
-      svgContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="${dimensions.width}" height="${dimensions.height}">
-  <defs>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap');
-      
-      .header {
-        font-family: 'Plus Jakarta Sans', sans-serif;
       }
-      
-      .body-text {
-        font-family: 'Inter', sans-serif;
-        font-size: 16px;
-        line-height: 1.5;
-        fill: #4B5563;
-      }
-      
-      .heading {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        font-weight: 600;
-        fill: #1D2939;
-      }
-      
-      .h1 {
-        font-size: 28px;
-        font-weight: 700;
-      }
-      
-      .h2 {
-        font-size: 24px;
-        font-weight: 600;
-      }
-      
-      .h3 {
-        font-size: 20px;
-        font-weight: 600;
-      }
-      
-      .button {
-        cursor: pointer;
-      }
-      
-      .primary-button {
-        fill: #4A6CF7;
-        stroke: none;
-        rx: 8;
-        ry: 8;
-      }
-      
-      .primary-button-text {
-        fill: white;
-        font-family: 'Inter', sans-serif;
-        font-weight: 500;
-        font-size: 16px;
-        text-anchor: middle;
-        dominant-baseline: middle;
-      }
-      
-      .secondary-button {
-        fill: #EEF1FF;
-        stroke: none;
-        rx: 8;
-        ry: 8;
-      }
-      
-      .secondary-button-text {
-        fill: #6F7DEB;
-        font-family: 'Inter', sans-serif;
-        font-weight: 500;
-        font-size: 16px;
-        text-anchor: middle;
-        dominant-baseline: middle;
-      }
-      
-      .card {
-        fill: white;
-        stroke: #E5E7EB;
-        stroke-width: 1;
-        rx: 16;
-        ry: 16;
-        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.08));
-      }
-      
-      .feature-icon {
-        fill: #4A6CF7;
-      }
-      
-      .nav-item {
-        font-family: 'Inter', sans-serif;
-        font-weight: 500;
-        font-size: 16px;
-        fill: #6B7280;
-      }
-      
-      .nav-item.active {
-        fill: #4A6CF7;
-      }
-      
-      .image-placeholder {
-        fill: #F8F9FB;
-        stroke: #E5E7EB;
-        stroke-width: 1;
-        rx: 8;
-        ry: 8;
-      }
-    </style>
+    }
     
-    <filter id="shadow-sm" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.05"/>
-    </filter>
-    
-    <filter id="shadow-md" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-    </filter>
-  </defs>
+    return fixedSvg;
+  }
   
-  <!-- Header -->
-  <g class="header" transform="translate(0, 0)">
-    <rect width="${dimensions.width}" height="80" fill="white" />
-    <text class="heading h1" x="40" y="50">Brand Logo</text>
+  // Helper to force self-closing tags for elements that should be self-closing
+  private forceSelfClosingTags(svg: string): string {
+    let fixedSvg = svg;
+    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
     
-    <!-- Navigation -->
-    <g transform="translate(${dimensions.width/2 - 150}, 45)">
-      <text class="nav-item active" x="0" y="0">Home</text>
-      <text class="nav-item" x="80" y="0">Features</text>
-      <text class="nav-item" x="180" y="0">Pricing</text>
-      <text class="nav-item" x="260" y="0">About</text>
-    </g>
-    
-    <!-- CTA Button -->
-    <g class="button" transform="translate(${dimensions.width - 150}, 30)">
-      <rect class="primary-button" width="120" height="40" />
-      <text class="primary-button-text" x="60" y="20">Get Started</text>
-    </g>
-  </g>
-  
-  <!-- Hero Section -->
-  <g transform="translate(40, 100)">
-    <text class="heading h2" x="0" y="40">Improved Design With SVG</text>
-    <text class="body-text" x="0" y="80" width="400">This is a demonstration of an SVG-based design iteration. It showcases improved readability, better visual hierarchy, and enhanced component design while maintaining the original style.</text>
-    
-    <g class="button" transform="translate(0, 100)">
-      <rect class="primary-button" width="120" height="40" />
-      <text class="primary-button-text" x="60" y="20">Try It Now</text>
-    </g>
-    
-    <!-- Hero Image -->
-    <rect class="image-placeholder" x="${dimensions.width - 380}" y="0" width="300" height="200" />
-  </g>
-  
-  <!-- Features Section -->
-  <g transform="translate(0, 350)">
-    <rect width="${dimensions.width}" height="300" fill="#F8F9FB" />
-    <text class="heading h3" x="${dimensions.width/2}" y="40" text-anchor="middle">Key Features</text>
-    
-    <!-- Feature Cards -->
-    <g transform="translate(40, 70)">
-      <!-- Card 1 -->
-      <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
-      <circle class="feature-icon" cx="40" cy="40" r="20" />
-      <text class="heading" x="40" y="90" text-anchor="middle">Feature 1</text>
-      <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Improved feature with better spacing and contrast.</text>
+    selfClosingElements.forEach(tagName => {
+      // Pattern to find non-self-closing tags that should be
+      const pattern = new RegExp(`<${tagName}([^>]*[^/])>(?![\\s\\S]*?</${tagName}>)`, 'g');
+      fixedSvg = fixedSvg.replace(pattern, `<${tagName}$1/>`);
       
-      <!-- Card 2 -->
-      <g transform="translate(${dimensions.width/3}, 0)">
-        <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
-        <circle class="feature-icon" cx="40" cy="40" r="20" />
-        <text class="heading" x="40" y="90" text-anchor="middle">Feature 2</text>
-        <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Enhanced component with clear visual hierarchy.</text>
+      // Also fix any improperly closed tags
+      const badClosingPattern = new RegExp(`<${tagName}([^>]*)>\\s*</${tagName}>`, 'g');
+      fixedSvg = fixedSvg.replace(badClosingPattern, `<${tagName}$1/>`);
+    });
+    
+    return fixedSvg;
+  }
+  
+  // Create a more visually appealing fallback SVG that shows an improved design
+  private createEnhancedFallbackSvg(bgColor: string, primaryColor: string, textColor: string): string {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+      <defs>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+          
+          text {
+            font-family: 'Inter', sans-serif;
+          }
+          
+          .heading {
+            font-weight: 600;
+            fill: ${textColor};
+          }
+          
+          .body-text {
+            font-size: 14px;
+            fill: ${textColor}99;
+          }
+          
+          .primary-button {
+            fill: ${primaryColor};
+            stroke: none;
+          }
+          
+          .primary-button-text {
+            fill: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-anchor: middle;
+            dominant-baseline: middle;
+          }
+          
+          .error-message {
+            font-size: 16px;
+            font-weight: 500;
+            fill: #e53e3e;
+            text-anchor: middle;
+          }
+          
+          .card {
+            fill: #fff;
+            stroke: #e2e8f0;
+            stroke-width: 1;
+          }
+        </style>
+      </defs>
+      
+      <!-- Background -->
+      <rect width="100%" height="100%" fill="${bgColor}" />
+      
+      <!-- Main content area -->
+      <rect x="50" y="50" width="700" height="500" rx="8" class="card" />
+      
+      <!-- Header -->
+      <text x="400" y="100" text-anchor="middle" class="heading" font-size="24">Design Iteration Preview</text>
+      <text x="400" y="130" text-anchor="middle" class="body-text">Based on extracted design system</text>
+      
+      <!-- Extracted colors -->
+      <g transform="translate(200, 180)">
+        <text x="0" y="0" class="heading" font-size="16">Extracted Color Palette</text>
+        <rect x="0" y="20" width="40" height="40" rx="4" fill="${primaryColor}" />
+        <rect x="50" y="20" width="40" height="40" rx="4" fill="${textColor}" />
+        <rect x="100" y="20" width="40" height="40" rx="4" fill="${bgColor}" />
+        <rect x="150" y="20" width="40" height="40" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
       </g>
       
-      <!-- Card 3 -->
-      <g transform="translate(${dimensions.width*2/3}, 0)">
-        <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
-        <circle class="feature-icon" cx="40" cy="40" r="20" />
-        <text class="heading" x="40" y="90" text-anchor="middle">Feature 3</text>
-        <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Optimized layout with improved accessibility.</text>
-      </g>
-    </g>
-  </g>
-  
-  <!-- Footer -->
-  <g transform="translate(0, ${dimensions.height - 150})">
-    <rect width="${dimensions.width}" height="150" fill="#F8F9FB" />
-    
-    <!-- Footer Columns -->
-    <g transform="translate(40, 30)">
-      <!-- Column 1 -->
-      <text class="heading" x="0" y="0">Company</text>
-      <text class="body-text" x="0" y="30">About Us</text>
-      <text class="body-text" x="0" y="55">Careers</text>
-      <text class="body-text" x="0" y="80">Contact</text>
-      
-      <!-- Column 2 -->
-      <g transform="translate(${dimensions.width/3}, 0)">
-        <text class="heading" x="0" y="0">Resources</text>
-        <text class="body-text" x="0" y="30">Blog</text>
-        <text class="body-text" x="0" y="55">Documentation</text>
-        <text class="body-text" x="0" y="80">Help Center</text>
+      <!-- UI Component Samples -->
+      <g transform="translate(200, 280)">
+        <text x="0" y="0" class="heading" font-size="16">UI Components</text>
+        
+        <!-- Button -->
+        <rect x="0" y="20" width="120" height="40" rx="6" class="primary-button" />
+        <text x="60" y="40" class="primary-button-text">Primary Button</text>
+        
+        <!-- Input field -->
+        <rect x="140" y="20" width="180" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+        <text x="150" y="40" fill="${textColor}80" font-size="14">Input field</text>
+        
+        <!-- Toggle -->
+        <rect x="340" y="20" width="60" height="30" rx="15" fill="${primaryColor}" />
+        <circle cx="380" cy="35" r="10" fill="#ffffff" />
       </g>
       
-      <!-- Column 3 -->
-      <g transform="translate(${dimensions.width*2/3}, 0)">
-        <text class="heading" x="0" y="0">Legal</text>
-        <text class="body-text" x="0" y="30">Privacy</text>
-        <text class="body-text" x="0" y="55">Terms</text>
-        <text class="body-text" x="0" y="80">Security</text>
+      <!-- Error message -->
+      <g transform="translate(400, 400)">
+        <text x="0" y="0" class="error-message" text-anchor="middle">SVG Rendering Issue</text>
+        <text x="0" y="30" class="body-text" text-anchor="middle">This is a placeholder showing the extracted design system.</text>
+        <text x="0" y="50" class="body-text" text-anchor="middle">Try generating again with your design.</text>
       </g>
-    </g>
-    
-    <!-- Copyright -->
-    <text class="body-text" x="${dimensions.width/2}" y="130" text-anchor="middle">© 2023 Example Company. All rights reserved.</text>
-  </g>
-</svg>`,
-      metadata: {
-        colors: {
-          primary: ['#4A6CF7', '#4338CA'],
-          secondary: ['#6F7DEB', '#EEF1FF'],
-          background: ['#FFFFFF', '#F8F9FB'],
-          text: ['#1D2939', '#4B5563', '#6B7280']
-        },
-        fonts: [
-          'Plus Jakarta Sans', 
-          'Inter'
-        ],
-        components: [
-          'Navigation Menu',
-          'Hero Section',
-          'Feature Cards',
-          'Primary Button',
-          'Secondary Button',
-          'Footer',
-          'Logo'
-        ]
-      }
-    };
+      
+      <!-- Action button -->
+      <g transform="translate(400, 480)">
+        <rect x="-75" y="-20" width="150" height="40" rx="6" class="primary-button" />
+        <text x="0" y="5" class="primary-button-text">Try Again</text>
+      </g>
+    </svg>`;
   }
 
   // Method to create a data URL from an image using canvas
