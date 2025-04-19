@@ -466,7 +466,10 @@ class OpenAIService {
         }
       };
       
-      // Extract SVG code between ```svg and ``` tags with more flexible pattern matching
+      // Extract SVG code - improved extraction logic
+      console.log('Extracting SVG from response...');
+      
+      // First attempt: Try to find the SVG section explicitly marked with ```svg and ``` tags
       const svgRegexPatterns = [
         /```svg\n([\s\S]*?)```/,       // Standard format
         /```svg\s+([\s\S]*?)```/,      // Without newline after 'svg'
@@ -476,6 +479,8 @@ class OpenAIService {
       ];
       
       let svgContent = '';
+      
+      // First search for the SVG code using our regex patterns
       for (const pattern of svgRegexPatterns) {
         const match = response.match(pattern);
         if (match && match[0]) {
@@ -487,28 +492,115 @@ class OpenAIService {
             svgContent = match[0].replace(/```svg\n?|```/g, '').trim();
           }
           
+          console.log('Found SVG content using regex pattern:', pattern);
           break;
         }
       }
       
-      // Clean up the SVG if needed (remove code block markers)
-      svgContent = svgContent.replace(/```svg\n?|```/g, '').trim();
-      
-      // Ensure the SVG content has the correct opening tag
-      if (!svgContent.startsWith('<svg')) {
-        // Try to find the start of the SVG tag in the response
-        const svgStartIndex = response.indexOf('<svg');
-        const svgEndIndex = response.indexOf('</svg>');
+      // If no match through patterns, try a more direct approach for SVG content
+      if (!svgContent) {
+        console.log('No SVG found with patterns, trying direct extraction...');
         
-        if (svgStartIndex !== -1 && svgEndIndex !== -1) {
-          svgContent = response.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
+        // Look for SVG CODE or SVG: section in the text
+        const svgSectionRegex = /(?:SVG\s*CODE:|SVG:)(?:\s*|\n)([\s\S]*?)(?=\n\n\d+\.|\n\n#|IMPROVEMENTS|$)/i;
+        const svgSectionMatch = response.match(svgSectionRegex);
+        
+        if (svgSectionMatch && svgSectionMatch[1]) {
+          const svgSection = svgSectionMatch[1].trim();
+          
+          // Extract the SVG tag content from this section
+          const svgTagMatch = svgSection.match(/<svg[\s\S]*?<\/svg>/);
+          if (svgTagMatch) {
+            svgContent = svgTagMatch[0];
+            console.log('Found SVG content in SVG section');
+          }
+        }
+      }
+      
+      // If still no match, try a broader search through the entire response
+      if (!svgContent) {
+        console.log('Trying full response scan for SVG content...');
+        const allSvgTags = response.match(/<svg[\s\S]*?<\/svg>/g);
+        
+        if (allSvgTags && allSvgTags.length > 0) {
+          // Use the longest SVG tag found (most likely the complete one)
+          svgContent = allSvgTags.reduce((longest, current) => 
+            current.length > longest.length ? current : longest, allSvgTags[0]);
+            
+          console.log('Found SVG content in full scan');
+        }
+      }
+      
+      // Clean up the SVG content
+      if (svgContent) {
+        // Remove code block markers if present
+        svgContent = svgContent.replace(/```svg\n?|```/g, '').trim();
+        
+        // If the SVG doesn't have xmlns attribute, add it
+        if (!svgContent.includes('xmlns=')) {
+          svgContent = svgContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        
+        // Make sure we have proper viewBox and dimensions
+        if (!svgContent.includes('viewBox=') && svgContent.includes('width=') && svgContent.includes('height=')) {
+          // Extract width and height values
+          const widthMatch = svgContent.match(/width="([^"]+)"/);
+          const heightMatch = svgContent.match(/height="([^"]+)"/);
+          
+          if (widthMatch && heightMatch) {
+            const width = widthMatch[1].replace('px', '');
+            const height = heightMatch[1].replace('px', '');
+            
+            // Add viewBox attribute
+            svgContent = svgContent.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
+          }
         }
       }
       
       // Add fallback for SVG content if extraction failed
       if (!svgContent || svgContent.length < 10) {
         console.error('FAILED TO EXTRACT SVG from response, using fallback');
-        svgContent = this.createBasicSvgFallback({ width: 800, height: 600 });
+        
+        // Before using generic fallback, check if we can extract any design information from the response
+        // to create a more useful fallback
+        const colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
+        const colorValues: string[] = [];
+        
+        // Extract any hex colors from the color palette
+        colorPalette.forEach(item => {
+          const hexMatches = item.match(/#[0-9A-Fa-f]{3,6}/g);
+          if (hexMatches) {
+            colorValues.push(...hexMatches);
+          }
+        });
+        
+        // Create a more informative fallback SVG with extracted design info if possible
+        if (colorValues.length > 0) {
+          const primaryColor = colorValues[0] || '#4A6CF7';
+          const backgroundColor = colorValues.find(color => colorPalette.some(item => 
+            item.toLowerCase().includes('background') && item.includes(color)
+          )) || '#F8F9FA';
+          const textColor = colorValues.find(color => colorPalette.some(item => 
+            item.toLowerCase().includes('text') && item.includes(color)
+          )) || '#1D2939';
+          
+          svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+            <rect width="100%" height="100%" fill="${backgroundColor}" />
+            <rect x="50" y="50" width="700" height="80" fill="${primaryColor}" rx="8" />
+            <text x="400" y="100" text-anchor="middle" font-size="24" fill="white" font-family="Arial">Generated Design Header</text>
+            <text x="400" y="300" text-anchor="middle" font-size="18" fill="${textColor}" font-family="Arial">
+              SVG Extraction Issue - Only Design System Extracted
+            </text>
+            <text x="400" y="330" text-anchor="middle" font-size="14" fill="${textColor}" font-family="Arial">
+              Please try generating again with more specific instructions
+            </text>
+            <rect x="280" y="380" width="240" height="50" fill="${primaryColor}" rx="8" />
+            <text x="400" y="410" text-anchor="middle" font-size="16" fill="white" font-family="Arial">Try Again Button</text>
+          </svg>`;
+        } else {
+          // Use generic fallback if no design info available
+          svgContent = this.createBasicSvgFallback({ width: 800, height: 600 });
+        }
       }
       
       result.svgContent = svgContent;

@@ -60,6 +60,8 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
   const processSvg = (svg: string): string => {
     if (!svg) return '';
     
+    console.log('Processing SVG content...');
+    
     // Clean up the SVG content
     let processedSvg = svg.trim();
     
@@ -70,29 +72,111 @@ export const SVGDesignRenderer = forwardRef<SVGDesignRendererHandle, SVGDesignRe
       
       if (svgStartIndex !== -1 && svgEndIndex !== -1) {
         processedSvg = processedSvg.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
+        console.log('Extracted SVG tag from content');
       }
     }
     
-    // Make sure the SVG has proper dimensions if not provided
+    // Check for and fix common SVG issues
+    
+    // 1. Missing or improper xmlns
+    if (!processedSvg.includes('xmlns=')) {
+      processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+      console.log('Added missing xmlns attribute');
+    }
+    
+    // 2. Missing dimensions
     if (!processedSvg.includes('width=') && width) {
       processedSvg = processedSvg.replace('<svg', `<svg width="${width}"`);
+      console.log('Added width attribute:', width);
     }
     
     if (!processedSvg.includes('height=') && height) {
       processedSvg = processedSvg.replace('<svg', `<svg height="${height}"`);
+      console.log('Added height attribute:', height);
     }
     
-    // Ensure SVG has proper xmlns
-    if (!processedSvg.includes('xmlns=')) {
-      processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
-    
-    // Add viewBox if missing
+    // 3. Missing viewBox
     if (!processedSvg.includes('viewBox=') && width && height) {
       processedSvg = processedSvg.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
+      console.log('Added viewBox attribute');
     }
     
+    // 4. Fix any malformed style elements
+    if (processedSvg.includes('<style>') && !processedSvg.includes('</style>')) {
+      processedSvg = processedSvg.replace('<style>', '<style><![CDATA[');
+      processedSvg = processedSvg.replace(/<\/svg>/, ']]></style></svg>');
+      console.log('Fixed malformed style tag');
+    }
+    
+    // 5. Ensure text elements have proper attributes for positioning
+    if (processedSvg.includes('<text') && (!processedSvg.includes('text-anchor') || !processedSvg.includes('dominant-baseline'))) {
+      // Add default text properties to improve text rendering
+      processedSvg = processedSvg.replace(/<text([^>]*)>/g, (match, attributes) => {
+        if (!attributes.includes('text-anchor')) {
+          return `<text${attributes} text-anchor="start">`;
+        }
+        return match;
+      });
+      console.log('Added missing text attributes');
+    }
+    
+    // 6. Fix font-family issues
+    processedSvg = processedSvg.replace(/font-family:([^;,"']+)/g, "font-family:'$1', Arial, sans-serif");
+    
+    // 7. Check for and fix missing/malformed SVG elements or attributes
+    processedSvg = fixCommonSvgIssues(processedSvg);
+    
     return processedSvg;
+  };
+
+  // Helper function to fix common SVG issues
+  const fixCommonSvgIssues = (svg: string): string => {
+    let fixedSvg = svg;
+    
+    // Fix unclosed tags
+    const openTags = svg.match(/<([a-zA-Z]+)(?:\s+[^>]*)?>/g) || [];
+    const closeTags = svg.match(/<\/([a-zA-Z]+)>/g) || [];
+    
+    if (openTags.length > closeTags.length) {
+      console.log('Detected unclosed tags, attempting to fix');
+      
+      // Find tags that aren't properly closed
+      const openTagNames = openTags.map(tag => tag.match(/<([a-zA-Z]+)(?:\s+[^>]*)?>/)?.[1] || '');
+      const closeTagNames = closeTags.map(tag => tag.match(/<\/([a-zA-Z]+)>/)?.[1] || '');
+      
+      // Count occurrences of each tag
+      const tagCounts: {[key: string]: number} = {};
+      openTagNames.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+      
+      closeTagNames.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) - 1;
+      });
+      
+      // Find unclosed tags
+      Object.keys(tagCounts).forEach(tag => {
+        if (tagCounts[tag] > 0) {
+          // Add missing closing tags before </svg>
+          const closingTag = `</${tag}>`;
+          if (!fixedSvg.includes(closingTag)) {
+            fixedSvg = fixedSvg.replace('</svg>', `${closingTag}</svg>`);
+            console.log(`Added missing closing tag: ${closingTag}`);
+          }
+        }
+      });
+    }
+    
+    // Check for style tag with actual styling but missing CDATA
+    if (fixedSvg.includes('<style>') && 
+        fixedSvg.match(/<style>(?![<!\[CDATA\[]).*\{/g) &&
+        !fixedSvg.includes('<![CDATA[')) {
+      // Add CDATA to style tag
+      fixedSvg = fixedSvg.replace(/<style>([\s\S]*?)<\/style>/g, '<style><![CDATA[$1]]></style>');
+      console.log('Added missing CDATA to style tag');
+    }
+    
+    return fixedSvg;
   };
 
   // Create a fallback SVG for error cases
