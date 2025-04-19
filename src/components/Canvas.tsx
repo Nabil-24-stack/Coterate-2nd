@@ -5,6 +5,7 @@ import { Design, DesignIteration, Page } from '../types';
 import supabaseService from '../services/SupabaseService';
 import openAIService from '../services/OpenAIService';
 import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
+import SVGDesignRenderer, { SVGDesignRendererHandle } from './SVGDesignRenderer';
 import { isFigmaSelectionLink, parseFigmaSelectionLink, FigmaLinkData } from '../utils/figmaLinkParser';
 
 // Global style to ensure no focus outlines or borders
@@ -1962,8 +1963,7 @@ export const Canvas: React.FC<{}> = () => {
         id: `iteration-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         parentId: isIteration ? (designToIterate as DesignIteration).parentId : designId,
         position: iterationPosition,
-        htmlContent: result.htmlCode,
-        cssContent: result.cssCode,
+        svgContent: result.svgContent, // Store SVG content instead of HTML/CSS
         analysis: {
           strengths: result.analysis.strengths,
           weaknesses: result.analysis.weaknesses,
@@ -2003,10 +2003,10 @@ export const Canvas: React.FC<{}> = () => {
         created_at: new Date().toISOString()
       };
       
-      // Log info about the generated CSS content
-      console.log(`Generated iteration ${newIteration.id} with CSS content length: ${newIteration.cssContent?.length || 0}`);
-      if (!newIteration.cssContent || newIteration.cssContent.length === 0) {
-        console.error(`Error: Empty CSS content for iteration ${newIteration.id}`);
+      // Log info about the generated SVG content
+      console.log(`Generated iteration ${newIteration.id} with SVG content length: ${newIteration.svgContent?.length || 0}`);
+      if (!newIteration.svgContent || newIteration.svgContent.length === 0) {
+        console.error(`Error: Empty SVG content for iteration ${newIteration.id}`);
       }
       
       // Check if the process has been aborted
@@ -2622,52 +2622,100 @@ export const Canvas: React.FC<{}> = () => {
               onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
               style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
             >
-              <HtmlDesignRenderer
-                ref={(el: HtmlDesignRendererHandle | null) => {
-                  if (el) {
-                    designRefs.current[iteration.id] = el as any;
-                  }
-                }}
-                htmlContent={iteration.htmlContent} 
-                cssContent={iteration.cssContent}
-                width={iteration.dimensions?.width} 
-                height={iteration.dimensions?.height}
-                onRender={(success) => {
-                  // Only log the first successful render to avoid console clutter
-                  if (renderedIterationsRef.current.has(iteration.id)) {
-                    return;
-                  }
-                  
-                  if (success) {
-                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully`);
-                    renderedIterationsRef.current.add(iteration.id);
-                  } else {
-                    // Log failure with more detail
-                    LogManager.log(`iteration-${iteration.id}-error`, 
-                      `Iteration ${iteration.id} render failed. HTML length: ${iteration.htmlContent?.length || 0}, CSS length: ${iteration.cssContent?.length || 0}`
-                    );
+              {iteration.svgContent ? (
+                // Use SVGDesignRenderer for iterations with SVG content
+                <SVGDesignRenderer
+                  ref={(el: SVGDesignRendererHandle | null) => {
+                    if (el) {
+                      designRefs.current[iteration.id] = el as any;
+                    }
+                  }}
+                  svgContent={iteration.svgContent}
+                  width={iteration.dimensions?.width} 
+                  height={iteration.dimensions?.height}
+                  onRender={(success) => {
+                    // Only log the first successful render to avoid console clutter
+                    if (renderedIterationsRef.current.has(iteration.id)) {
+                      return;
+                    }
                     
-                    // Add additional debug for failed render
-                    if (!iteration.cssContent || iteration.cssContent.length < 10) {
-                      LogManager.log(`iteration-${iteration.id}-css-issue`, 
-                        `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`
-                      );
+                    if (success) {
+                      LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully`);
+                      renderedIterationsRef.current.add(iteration.id);
                     } else {
-                      // Log CSS content sample for debugging
-                      LogManager.log(`iteration-${iteration.id}-css-debug`, 
-                        `CSS content sample: ${iteration.cssContent?.substring(0, 200)}...`
+                      // Log failure with more detail
+                      LogManager.log(`iteration-${iteration.id}-error`, 
+                        `Iteration ${iteration.id} render failed. SVG length: ${iteration.svgContent?.length || 0}`
                       );
+                      
+                      // Add additional debug for failed render
+                      if (!iteration.svgContent || iteration.svgContent.length < 10) {
+                        LogManager.log(`iteration-${iteration.id}-svg-issue`, 
+                          `SVG content appears invalid. SVG: ${iteration.svgContent?.substring(0, 100) || 'empty'}`
+                        );
+                      } else {
+                        // Log SVG content sample for debugging
+                        LogManager.log(`iteration-${iteration.id}-svg-debug`, 
+                          `SVG content sample: ${iteration.svgContent?.substring(0, 200)}...`
+                        );
+                      }
+                    }
+                  }}
+                />
+              ) : iteration.htmlContent && iteration.cssContent ? (
+                // Fallback to HtmlDesignRenderer for legacy iterations
+                <HtmlDesignRenderer
+                  ref={(el: HtmlDesignRendererHandle | null) => {
+                    if (el) {
+                      designRefs.current[iteration.id] = el as any;
+                    }
+                  }}
+                  htmlContent={iteration.htmlContent} 
+                  cssContent={iteration.cssContent}
+                  width={iteration.dimensions?.width} 
+                  height={iteration.dimensions?.height}
+                  onRender={(success) => {
+                    // Only log the first successful render to avoid console clutter
+                    if (renderedIterationsRef.current.has(iteration.id)) {
+                      return;
                     }
                     
-                    // Log HTML content sample as well
-                    if (iteration.htmlContent) {
-                      LogManager.log(`iteration-${iteration.id}-html-debug`, 
-                        `HTML content sample: ${iteration.htmlContent?.substring(0, 200)}...`
+                    if (success) {
+                      LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully`);
+                      renderedIterationsRef.current.add(iteration.id);
+                    } else {
+                      // Log failure with more detail
+                      LogManager.log(`iteration-${iteration.id}-error`, 
+                        `Iteration ${iteration.id} render failed. HTML length: ${iteration.htmlContent?.length || 0}, CSS length: ${iteration.cssContent?.length || 0}`
                       );
+                      
+                      // Add additional debug for failed render
+                      if (!iteration.cssContent || iteration.cssContent.length < 10) {
+                        LogManager.log(`iteration-${iteration.id}-css-issue`, 
+                          `CSS content appears invalid. CSS: ${iteration.cssContent?.substring(0, 100) || 'empty'}`
+                        );
+                      } else {
+                        // Log CSS content sample for debugging
+                        LogManager.log(`iteration-${iteration.id}-css-debug`, 
+                          `CSS content sample: ${iteration.cssContent?.substring(0, 200)}...`
+                        );
+                      }
+                      
+                      // Log HTML content sample as well
+                      if (iteration.htmlContent) {
+                        LogManager.log(`iteration-${iteration.id}-html-debug`, 
+                          `HTML content sample: ${iteration.htmlContent?.substring(0, 200)}...`
+                        );
+                      }
                     }
-                  }
-                }}
-              />
+                  }}
+                />
+              ) : (
+                // Error fallback for missing content
+                <div style={{ padding: '20px', color: 'red', fontSize: '14px' }}>
+                  Error: No renderable content available
+                </div>
+              )}
               
               {/* Add processing overlay for iterations */}
               <ProcessingOverlay 
@@ -2985,14 +3033,27 @@ export const Canvas: React.FC<{}> = () => {
                         </div>
                         <div className="comparison-half">
                           <div className="comparison-label">Improved</div>
-                          {/* This would be a thumbnail of the iteration */}
-                          <HtmlDesignRenderer
-                            htmlContent={currentAnalysis.htmlContent}
-                            cssContent={currentAnalysis.cssContent}
-                            width={150}
-                            height={150}
-                            showBorder={false}
-                          />
+                          {/* Use SVGDesignRenderer or HtmlDesignRenderer depending on what's available */}
+                          {currentAnalysis.svgContent ? (
+                            <SVGDesignRenderer
+                              svgContent={currentAnalysis.svgContent}
+                              width={150}
+                              height={150}
+                              showBorder={false}
+                            />
+                          ) : currentAnalysis.htmlContent && currentAnalysis.cssContent ? (
+                            <HtmlDesignRenderer
+                              htmlContent={currentAnalysis.htmlContent}
+                              cssContent={currentAnalysis.cssContent}
+                              width={150}
+                              height={150}
+                              showBorder={false}
+                            />
+                          ) : (
+                            <div style={{ background: '#f0f0f0', width: '150px', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              No preview available
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

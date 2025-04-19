@@ -36,8 +36,7 @@ interface DesignAnalysisResponse {
       components: string[];
     };
   };
-  htmlCode: string;
-  cssCode: string;
+  svgContent: string;
   metadata: {
     colors: {
       primary: string[];
@@ -171,7 +170,7 @@ class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
+            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE SVG VERSION that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
 
             MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
 
@@ -246,31 +245,38 @@ class OpenAIService {
             7. Ensures the improved version is immediately recognizable as an iteration of the original
             
             DIMENSIONS REQUIREMENT:
-            The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
+            The generated SVG MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
             
-            CSS REQUIREMENTS:
-            1. Use CSS Grid and Flexbox for layouts that need to be responsive
-            2. Use absolute positioning for pixel-perfect placement when needed
-            3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
-            4. Ensure clean, well-organized CSS with descriptive class names
-            5. Include detailed comments in CSS explaining design decisions
-            6. Avoid arbitrary magic numbers - document any precise pixel measurements
+            SVG REQUIREMENTS:
+            1. Create a SINGLE, self-contained SVG that includes all styling within the SVG markup
+            2. Use proper SVG structure with all necessary elements (rect, circle, path, text, etc.)
+            3. Include proper grouping with <g> elements for logical content organization
+            4. Use CSS within the SVG for styling (either inline or in a <style> element)
+            5. Handle text properly with <text> elements, preserving all font properties
+            6. Create clean, optimized SVG without unnecessary elements or attributes
+            7. Ensure the SVG viewBox is set correctly to match the design dimensions
+            8. Include descriptions for accessibility where appropriate
+            9. Use SVG filters for effects like shadows, gradients, etc. where needed
+           10. Make sure the SVG validates with no errors
+            
+            FONT REQUIREMENTS:
+            For typography:
+            1. Use web-safe fonts or specify fallbacks using font-family
+            2. Include <defs> section with @font-face declarations if needed
+            3. Ensure text is selectable and accessible in the SVG
+            4. Apply appropriate font-size, font-weight, and other typography properties
+            
+            IMAGE PLACEHOLDERS:
+            For any images in the original design:
+            1. Replace with <rect> elements with appropriate dimensions and styling
+            2. Use a background-color that makes sense in context
+            3. Add a subtle stroke (border) to indicate it's an image placeholder
             
             ICON REQUIREMENTS:
-            For any icons identified in the UI:
-            1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
-            2. If no perfect Font Awesome match exists, create the icon using CSS
-            3. Ensure icon sizing and positioning exactly matches the original
-            4. Apply the EXACT SAME colors from the original design to the icons
-            
-            IMAGE REQUIREMENTS:
-            For any images identified in the original design:
-            1. DO NOT use any external image URLs, placeholders, or Unsplash images
-            2. Instead, replace each image with a simple colored div (rectangle or square)
-            3. Use a background color that makes sense in the context (gray, light blue, etc.)
-            4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
-            5. Add a subtle 1px border to the div to indicate it's an image placeholder
-            6. You can add a simple CSS pattern or gradient if appropriate
+            For icons:
+            1. Use SVG path data to recreate icons accurately
+            2. For simple icons, create them directly with SVG shapes
+            3. Apply the EXACT SAME colors from the original design
             
             OUTPUT FORMAT INSTRUCTIONS (IMPORTANT):
             Your response MUST be structured as follows:
@@ -281,26 +287,16 @@ class OpenAIService {
             2. ANALYSIS:
                Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
             
-            3. HTML CODE:
-               Provide the complete HTML code for the improved design, wrapped between triple backticks with html like this:
-               \`\`\`html
-               <html>
-               ...your HTML code here...
-               </html>
+            3. SVG CODE:
+               Provide the complete SVG markup for the improved design, wrapped between triple backticks like this:
+               \`\`\`svg
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 width height">
+               ...your SVG code here...
+               </svg>
                \`\`\`
+               Make sure the SVG is complete, valid, and self-contained. All styling should be included within the SVG.
             
-            4. CSS CODE:
-               Provide the complete CSS code for the improved design, wrapped between triple backticks with css like this:
-               \`\`\`css
-               body {
-                 ...
-               }
-               
-               ...your CSS code here...
-               \`\`\`
-               DO NOT include the CSS within the HTML file or inside <style> tags - it MUST be a separate code block with \`\`\`css.
-            
-            5. IMPROVEMENTS SUMMARY:
+            4. IMPROVEMENTS SUMMARY:
                List the specific improvements made to the design and explain the rationale behind each one
             ${insightsPrompt}${userPromptContent}`
           },
@@ -353,7 +349,7 @@ class OpenAIService {
       // Extract the response content
       const responseContent = data.choices[0].message.content;
       
-      // Parse the response to extract HTML, CSS, and analysis
+      // Parse the response to extract SVG and analysis
       return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
     } catch (error: any) {
       console.error('Error analyzing design:', error);
@@ -395,7 +391,24 @@ class OpenAIService {
     });
   }
   
-  // Parse the OpenAI response to extract HTML, CSS, and analysis
+  // Helper to create a basic SVG fallback when needed
+  private createBasicSvgFallback(dimensions: {width: number, height: number}): string {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="${dimensions.width}" height="${dimensions.height}">
+      <defs>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
+          text { font-family: 'Inter', sans-serif; }
+        </style>
+      </defs>
+      <rect width="100%" height="100%" fill="#f8f9fa" />
+      <g transform="translate(${dimensions.width/2}, ${dimensions.height/2})">
+        <text x="0" y="-20" text-anchor="middle" font-size="16" fill="#6c757d">SVG Rendering Failed</text>
+        <text x="0" y="10" text-anchor="middle" font-size="14" fill="#6c757d">Please try again or check console for errors</text>
+      </g>
+    </svg>`;
+  }
+  
+  // Parse the OpenAI response to extract SVG and analysis
   private parseOpenAIResponse(response: string, hasUserInsights: boolean = false): DesignAnalysisResponse {
     console.log('Parsing OpenAI response...');
     
@@ -440,8 +453,7 @@ class OpenAIService {
             components: []
           }
         },
-        htmlCode: '',
-        cssCode: '',
+        svgContent: '',
         metadata: {
           colors: {
             primary: [],
@@ -454,220 +466,60 @@ class OpenAIService {
         }
       };
       
-      // Extract HTML code between ```html and ``` tags with more flexible pattern matching
-      const htmlRegexPatterns = [
-        /```html\n([\s\S]*?)```/,       // Standard format
-        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
-        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
-        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
-        /```([\s\S]*?)<\/html>\n```/    // Code block with HTML ending tag
+      // Extract SVG code between ```svg and ``` tags with more flexible pattern matching
+      const svgRegexPatterns = [
+        /```svg\n([\s\S]*?)```/,       // Standard format
+        /```svg\s+([\s\S]*?)```/,      // Without newline after 'svg'
+        /<svg[\s\S]*?<\/svg>/,         // Direct SVG tags
+        /```\n<svg[\s\S]*?<\/svg>\n```/, // Code block with SVG tags
+        /```([\s\S]*?)<\/svg>\n```/    // Code block with SVG ending tag
       ];
       
-      let htmlContent = '';
-      for (const pattern of htmlRegexPatterns) {
+      let svgContent = '';
+      for (const pattern of svgRegexPatterns) {
         const match = response.match(pattern);
-        if (match && match[1]) {
-          htmlContent = match[1].trim();
+        if (match && match[0]) {
+          // Extract either the group or the entire match depending on the pattern
+          svgContent = match[1] ? match[1].trim() : match[0].trim();
+          
+          // If the extracted content doesn't start with <svg, but we have a match, then it's the entire match
+          if (!svgContent.startsWith('<svg') && match[0].includes('<svg')) {
+            svgContent = match[0].replace(/```svg\n?|```/g, '').trim();
+          }
+          
           break;
         }
       }
       
-      // If no match found but there's a <!DOCTYPE html> in the response, try to extract it
-      if (!htmlContent && response.includes('<!DOCTYPE html>')) {
-        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
-        const endIndex = response.indexOf('</html>', docTypeIndex);
-        if (endIndex > docTypeIndex) {
-          htmlContent = response.substring(docTypeIndex, endIndex + 7).trim();
+      // Clean up the SVG if needed (remove code block markers)
+      svgContent = svgContent.replace(/```svg\n?|```/g, '').trim();
+      
+      // Ensure the SVG content has the correct opening tag
+      if (!svgContent.startsWith('<svg')) {
+        // Try to find the start of the SVG tag in the response
+        const svgStartIndex = response.indexOf('<svg');
+        const svgEndIndex = response.indexOf('</svg>');
+        
+        if (svgStartIndex !== -1 && svgEndIndex !== -1) {
+          svgContent = response.substring(svgStartIndex, svgEndIndex + 6); // +6 to include </svg>
         }
       }
       
-      result.htmlCode = htmlContent || '';
-      
-      // Extract CSS code with improved extraction logic
-      console.log('Searching for CSS in response of length:', response.length);
-      console.log('Response preview:', response.substring(0, 100) + '...');
-      
-      let cssContent = '';
-      
-      // Try multiple extraction methods, starting with the most reliable for GPT-4.1 responses
-      
-      // Method 1: Direct pattern extraction (was previously last resort, now primary)
-      console.log('Trying direct CSS rule pattern extraction first');
-      const cssBlocks = [];
-      // More permissive CSS rule regex to catch a wider variety of CSS syntax
-      const cssRules = /([.#]?[a-zA-Z0-9*][\w-]*(?:\s*[,>+~:]\s*[.#]?[a-zA-Z0-9*][\w-]*)*(?:\[[^\]]+\])?(?:::[a-z-]+)?)\s*\{[^}]*\}/g;
-      let ruleMatch;
-      
-      while ((ruleMatch = cssRules.exec(response)) !== null) {
-        cssBlocks.push(ruleMatch[0]);
+      // Add fallback for SVG content if extraction failed
+      if (!svgContent || svgContent.length < 10) {
+        console.error('FAILED TO EXTRACT SVG from response, using fallback');
+        svgContent = this.createBasicSvgFallback({ width: 800, height: 600 });
       }
       
-      if (cssBlocks.length > 0) {
-        cssContent = cssBlocks.join('\n\n');
-        console.log('Found CSS through direct pattern extraction, rules count:', cssBlocks.length);
-        console.log('CSS preview:', cssContent.substring(0, 50) + '...');
-      }
+      result.svgContent = svgContent;
       
-      // Method 2: If no CSS found, try code blocks with markdown format
-      if (!cssContent) {
-        console.log('No CSS found via direct pattern extraction, checking for markdown code blocks');
-        
-        // Look for any markdown code blocks
-        const markdownCodeBlocks = response.match(/```(?:css)?\s*([\s\S]*?)```/g);
-        if (markdownCodeBlocks && markdownCodeBlocks.length > 0) {
-          // Find blocks that contain CSS-like content
-          for (const block of markdownCodeBlocks) {
-            if (block.includes('{') && 
-                (block.includes('body') || 
-                 block.includes('div') || 
-                 block.includes('.') || 
-                 block.includes('#') ||
-                 block.includes('color') || 
-                 block.includes('margin'))) {
-              // Extract the content between triple backticks
-              const cleanBlock = block.replace(/```(?:css)?\s*/, '').replace(/```\s*$/, '').trim();
-              if (cleanBlock && cleanBlock.length > 0) {
-                cssContent = cleanBlock;
-                console.log('Found CSS in markdown block, length:', cssContent.length);
-                console.log('CSS preview:', cssContent.substring(0, 50) + '...');
-                break;
-              }
-            }
-          }
-        }
-      }
-      
-      // Method 3: Try standard CSS format patterns
-      if (!cssContent) {
-        console.log('No CSS found in markdown blocks, trying standard patterns');
-        
-        const cssRegexPatterns = [
-          /```css\n([\s\S]*?)```/,       // Standard format
-          /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-          /```css([\s\S]*?)```/,         // No space or newline after css
-          /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-          /CSS CODE:[\r\n]+([\s\S]*?)(?=\n\n|HTML CODE:|IMPROVEMENTS|$)/i, // CSS section with heading
-          /CSS:[\r\n]+([\s\S]*?)(?=\n\n|HTML:|IMPROVEMENTS|$)/i, // Simple CSS: heading
-          /4\.\s*CSS\s*CODE:[\r\n]+([\s\S]*?)(?=\n\n|\d+\.\s|IMPROVEMENTS|$)/i // Numbered CSS section
-        ];
-        
-        for (const pattern of cssRegexPatterns) {
-          const match = response.match(pattern);
-          if (match && match[1]) {
-            cssContent = match[1].trim();
-            console.log('CSS match found with standard pattern:', pattern.toString().substring(0, 30) + '...');
-            console.log('CSS content preview:', cssContent.substring(0, 50) + '...');
-            break;
-          }
-        }
-      }
-      
-      // Method 4: Look for CSS section markers in the text
-      if (!cssContent) {
-        console.log('No CSS found with standard patterns, scanning for section markers');
-        
-        // Looking for section headers like "CSS CODE:" or "### CSS:"
-        const cssSectionMarkers = [
-          /CSS CODE:[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
-          /### CSS[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
-          /## [0-9.]+[^#\n]*CSS[\r\n]+([\s\S]+?)(?=\n+#|\n+[A-Z]{2,}|$)/i,
-          /\n[0-9]+\.\s+CSS[\r\n]+([\s\S]+?)(?=\n+[0-9]+\.|\n+#|\n+[A-Z]{2,}|$)/i
-        ];
-        
-        for (const marker of cssSectionMarkers) {
-          const match = response.match(marker);
-          if (match && match[1]) {
-            // If we found a potential CSS section, look for actual CSS content within it
-            const potentialCssSection = match[1].trim();
-            
-            if (potentialCssSection.includes('{') && potentialCssSection.includes('}')) {
-              // This looks like CSS content
-              cssContent = potentialCssSection;
-              console.log('Found CSS in section marker, length:', cssContent.length);
-              console.log('CSS preview:', cssContent.substring(0, 50) + '...');
-              break;
-            }
-          }
-        }
-      }
-      
-      // Final fallback - if we still have no CSS content after all extraction attempts,
-      // generate minimal fallback CSS
-      if (!cssContent || cssContent.length < 10) {
-        console.log('All CSS extraction methods failed, using minimal fallback CSS');
-        cssContent = `
-          body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #ffffff;
-            color: #333333;
-          }
-          
-          h1, h2, h3, h4, h5, h6 {
-            margin-bottom: 1rem;
-            font-weight: 600;
-          }
-          
-          p {
-            margin-bottom: 1rem;
-            line-height: 1.5;
-          }
-          
-          button, .button {
-            background-color: #4a6cf7;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            border: none;
-            font-weight: 500;
-            cursor: pointer;
-          }
-          
-          a {
-            color: #4a6cf7;
-            text-decoration: none;
-          }
-          
-          input, select, textarea {
-            padding: 8px;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            width: 100%;
-            margin-bottom: 1rem;
-          }
-          
-          .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-          }
-        `;
-      }
-      
-      // Remove any triple backticks if they're still in the content
-      if (cssContent.includes('```')) {
-        cssContent = cssContent.replace(/```(?:css)?\s*\n?|```/g, '').trim();
-        console.log('Removed remaining backticks from CSS content');
-      }
-      
-      // Track and log detailed information about CSS extraction
-      if (cssContent && cssContent.length > 0) {
-        console.log('Successfully extracted CSS, final length:', cssContent.length);
+      // Log success or failure of SVG extraction
+      if (svgContent && svgContent.length > 0) {
+        console.log('Successfully extracted SVG, length:', svgContent.length);
+        console.log('SVG preview:', svgContent.substring(0, 100) + '...');
       } else {
-        console.error('FAILED TO EXTRACT CSS from response');
-        // Log sample fragments from the response to help debug
-        const fragments = [];
-        // Try to find any CSS-like fragments for debugging
-        const potentialCssFragments = response.match(/[^{]*{[^}]*}/g);
-        if (potentialCssFragments && potentialCssFragments.length > 0) {
-          fragments.push(...potentialCssFragments.slice(0, 3));
-          console.log('Potential CSS fragments found:', fragments);
-        }
+        console.error('FAILED TO EXTRACT SVG from response');
       }
-      
-      result.cssCode = cssContent || '';
-      console.log('Final CSS content length:', result.cssCode.length);
       
       // Extract design system information
       result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
@@ -699,42 +551,55 @@ class OpenAIService {
       result.analysis.accessibility.issues = this.extractListItems(response, 'Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility Considerations(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
       result.analysis.accessibility.improvements = this.extractListItems(response, 'Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility Considerations(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
       
-      // Extract colors
-      result.metadata.colors.primary = this.extractColors(response, 'Primary');
-      result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
-      result.metadata.colors.background = this.extractColors(response, 'Background');
-      result.metadata.colors.text = this.extractColors(response, 'Text');
-      
-      // Extract all colors from CSS as a fallback
-      if (result.cssCode) {
-        const allCssColors = result.cssCode.match(/#[0-9A-Fa-f]{3,6}|rgba?\([^)]+\)/g) || [];
+      // Extract colors from SVG style elements or inline styles
+      if (svgContent) {
+        // Extract color values from style elements
+        const styleColors = svgContent.match(/(?:fill|stroke|color|background|stop-color):\s*(#[0-9A-Fa-f]{3,8}|rgba?\([^)]+\))/g) || [];
+        const uniqueColors = Array.from(new Set(styleColors.map(c => {
+          const match = c.match(/(#[0-9A-Fa-f]{3,8}|rgba?\([^)]+\))/);
+          return match ? match[1] : '';
+        }).filter(Boolean)));
         
-        // If we couldn't extract colors from the analysis, use the CSS colors
-        if (
-          result.metadata.colors.primary.length === 0 &&
-          result.metadata.colors.secondary.length === 0 &&
-          result.metadata.colors.background.length === 0 &&
-          result.metadata.colors.text.length === 0
-        ) {
-          // Add unique colors from CSS - using Array.from instead of spread to handle Set in TypeScript
-          const uniqueColors = Array.from(new Set(allCssColors));
-          result.metadata.colors.primary = uniqueColors.slice(0, 2);
-          result.metadata.colors.secondary = uniqueColors.slice(2, 4);
-          result.metadata.colors.background = uniqueColors.slice(4, 6);
-          result.metadata.colors.text = uniqueColors.slice(6, 8);
+        // Organize colors into categories based on frequency and context
+        if (uniqueColors.length > 0) {
+          result.metadata.colors.primary = uniqueColors.slice(0, Math.min(3, uniqueColors.length));
+          
+          if (uniqueColors.length > 3) {
+            result.metadata.colors.secondary = uniqueColors.slice(3, Math.min(6, uniqueColors.length));
+          }
+          
+          if (uniqueColors.length > 6) {
+            result.metadata.colors.background = uniqueColors.slice(6, Math.min(9, uniqueColors.length));
+          }
+          
+          if (uniqueColors.length > 9) {
+            result.metadata.colors.text = uniqueColors.slice(9, Math.min(12, uniqueColors.length));
+          }
         }
-      }
-      
-      // Extract fonts from CSS as a fallback
-      if (result.cssCode && result.metadata.fonts.length === 0) {
-        const fontFamilies = result.cssCode.match(/font-family:\s*([^;]+)/g) || [];
+        
+        // Extract fonts from SVG
+        const fontFamilies = svgContent.match(/font-family:\s*([^;>"']+)/g) || [];
         result.metadata.fonts = fontFamilies
-          .map(f => f.replace('font-family:', '').trim())
+          .map(f => {
+            const match = f.match(/font-family:\s*([^;>"']+)/);
+            return match ? match[1].trim() : '';
+          })
+          .filter(Boolean)
           .filter((f, i, self) => self.indexOf(f) === i); // Unique values only
       }
       
-      // Extract fonts
-      result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
+      // Fallback for extracting colors from the analysis text if SVG extraction failed
+      if (result.metadata.colors.primary.length === 0) {
+        result.metadata.colors.primary = this.extractColors(response, 'Primary');
+        result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
+        result.metadata.colors.background = this.extractColors(response, 'Background');
+        result.metadata.colors.text = this.extractColors(response, 'Text');
+      }
+      
+      // Extract fonts from the text if SVG extraction failed
+      if (result.metadata.fonts.length === 0) {
+        result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
+      }
       
       // Extract components
       result.metadata.components = this.extractListItems(response, 'Components|UI Components');
@@ -912,391 +777,236 @@ class OpenAIService {
           ]
         }
       },
-      htmlCode: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Improved Design</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-  <!-- This is a demo fallback response. In production, this would be an iterated version of the original UI -->
-  <div class="container">
-    <!-- Preserving original header structure -->
-    <header class="header">
-      <div class="logo">
-        <h1>Original Logo</h1>
-      </div>
-      <nav class="main-nav">
-        <ul>
-          <li><a href="#" class="active">Home</a></li>
-          <li><a href="#">Features</a></li>
-          <li><a href="#">Pricing</a></li>
-          <li><a href="#">About</a></li>
-        </ul>
-      </nav>
-      <!-- Enhancement: Improved button with better contrast -->
-      <div class="cta-button">
-        <button class="primary-button">Get Started</button>
-      </div>
-    </header>
-    
-    <main>
-      <!-- Preserving original hero structure with improved contrast -->
-      <section class="hero">
-        <div class="hero-content">
-          <h2>Original Headline Text</h2>
-          <p>Original description text with improved line height and spacing.</p>
-          <button class="primary-button">Try It Now</button>
-        </div>
-        <div class="hero-image">
-          <!-- Image placeholder preserving original dimensions -->
-          <div class="image-placeholder"></div>
-        </div>
-      </section>
+      svgContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dimensions.width} ${dimensions.height}" width="${dimensions.width}" height="${dimensions.height}">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap');
       
-      <!-- Original features section with improved spacing -->
-      <section class="features">
-        <h3>Key Features</h3>
-        <div class="feature-cards">
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-magic"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-users"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-        </div>
-      </section>
-    </main>
+      .header {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+      
+      .body-text {
+        font-family: 'Inter', sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        fill: #4B5563;
+      }
+      
+      .heading {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-weight: 600;
+        fill: #1D2939;
+      }
+      
+      .h1 {
+        font-size: 28px;
+        font-weight: 700;
+      }
+      
+      .h2 {
+        font-size: 24px;
+        font-weight: 600;
+      }
+      
+      .h3 {
+        font-size: 20px;
+        font-weight: 600;
+      }
+      
+      .button {
+        cursor: pointer;
+      }
+      
+      .primary-button {
+        fill: #4A6CF7;
+        stroke: none;
+        rx: 8;
+        ry: 8;
+      }
+      
+      .primary-button-text {
+        fill: white;
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        font-size: 16px;
+        text-anchor: middle;
+        dominant-baseline: middle;
+      }
+      
+      .secondary-button {
+        fill: #EEF1FF;
+        stroke: none;
+        rx: 8;
+        ry: 8;
+      }
+      
+      .secondary-button-text {
+        fill: #6F7DEB;
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        font-size: 16px;
+        text-anchor: middle;
+        dominant-baseline: middle;
+      }
+      
+      .card {
+        fill: white;
+        stroke: #E5E7EB;
+        stroke-width: 1;
+        rx: 16;
+        ry: 16;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.08));
+      }
+      
+      .feature-icon {
+        fill: #4A6CF7;
+      }
+      
+      .nav-item {
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        font-size: 16px;
+        fill: #6B7280;
+      }
+      
+      .nav-item.active {
+        fill: #4A6CF7;
+      }
+      
+      .image-placeholder {
+        fill: #F8F9FB;
+        stroke: #E5E7EB;
+        stroke-width: 1;
+        rx: 8;
+        ry: 8;
+      }
+    </style>
     
-    <!-- Preserving original footer structure -->
-    <footer>
-      <div class="footer-links">
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>Original copyright text.</p>
-      </div>
-    </footer>
-  </div>
-</body>
-</html>`,
-      cssCode: `/* CSS Variables for consistent theming */
-:root {
-  /* Preserving original color values with adjustments for accessibility */
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --secondary-color: #6b7280;
-  --text-color: #1f2937;
-  --light-text: #4b5563; /* Slightly darker than original for better contrast */
-  --background: #ffffff;
-  --light-bg: #f9fafb;
-  --border-color: #e5e7eb;
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --border-radius: 0.375rem;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Base styles - preserving original with minor enhancements */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  /* Preserving original font stack */
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  color: var(--text-color);
-  line-height: 1.5; /* Improved from original 1.3 */
-  background-color: var(--background);
-  font-size: 16px; /* Preserved from original */
-}
-
-.container {
-  width: ${dimensions.width}px; /* Preserving original width */
-  margin: 0 auto;
-  overflow: hidden;
-}
-
-/* Typography - preserving original with minor enhancements for readability */
-h1, h2, h3, h4, h5, h6 {
-  margin-bottom: var(--spacing-md);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-h1 {
-  font-size: 1.875rem; /* Preserved from original */
-}
-
-h2 {
-  font-size: 2.25rem; /* Preserved from original */
-  color: var(--text-color);
-}
-
-h3 {
-  font-size: 1.5rem; /* Preserved from original */
-  text-align: center;
-  margin-bottom: var(--spacing-xl);
-}
-
-h4 {
-  font-size: 1.25rem; /* Preserved from original */
-  margin-bottom: var(--spacing-sm);
-}
-
-h5 {
-  font-size: 1rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-  color: var(--secondary-color);
-}
-
-p {
-  margin-bottom: var(--spacing-md);
-  color: var(--light-text); /* Adjusted for better contrast */
-}
-
-a {
-  color: var(--primary-color);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-/* Enhancement: Better hover states while preserving original styling */
-a:hover, a:focus {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-
-/* Buttons - preserving original with accessibility enhancements */
-.primary-button {
-  background-color: var(--primary-color);
-  color: white;
-  padding: 0.75rem 1.5rem; /* Preserved from original */
-  border-radius: var(--border-radius);
-  border: none;
-  font-weight: 500;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  box-shadow: var(--shadow-sm);
-}
-
-.primary-button:hover {
-  background-color: var(--primary-hover);
-}
-
-/* Enhancement: Better focus states */
-.primary-button:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-.primary-button:active {
-  transform: translateY(1px);
-}
-
-/* Header - preserving original structure */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-lg) 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.logo h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0;
-}
-
-.main-nav ul {
-  display: flex;
-  list-style: none;
-  gap: var(--spacing-lg);
-}
-
-.main-nav a {
-  color: var(--light-text);
-  font-weight: 500;
-}
-
-.main-nav a.active {
-  color: var(--primary-color);
-}
-
-/* Hero Section - preserving original layout */
-.hero {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-xl) 0;
-  gap: var(--spacing-xl);
-}
-
-.hero-content {
-  flex: 1;
-}
-
-.hero-content h2 {
-  font-size: 2.5rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-}
-
-.hero-content p {
-  font-size: 1.125rem; /* Preserved from original */
-  margin-bottom: var(--spacing-lg);
-}
-
-.hero-image {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.image-placeholder {
-  width: 100%;
-  height: 300px; /* Preserved from original */
-  background-color: #e5e7eb;
-  border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
-}
-
-/* Features Section - preserving original with minor improvements */
-.features {
-  padding: var(--spacing-xl) 0;
-  background-color: var(--light-bg);
-}
-
-.feature-cards {
-  display: flex;
-  gap: var(--spacing-lg);
-  justify-content: space-between;
-}
-
-.feature-card {
-  flex: 1;
-  background-color: var(--background);
-  padding: var(--spacing-lg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow-md);
-  transition: transform 0.2s ease;
-}
-
-/* Enhancement: Subtle hover effect */
-.feature-card:hover {
-  transform: translateY(-2px); /* More subtle than original */
-}
-
-.feature-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-  margin-bottom: var(--spacing-md);
-}
-
-/* Footer - preserving original structure */
-footer {
-  background-color: var(--light-bg);
-  padding: var(--spacing-xl) 0;
-  margin-top: var(--spacing-xl);
-}
-
-.footer-links {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-xl);
-}
-
-.footer-column ul {
-  list-style: none;
-}
-
-.footer-column li {
-  margin-bottom: var(--spacing-sm);
-}
-
-.footer-column a {
-  color: var(--light-text);
-  font-size: 0.875rem; /* Preserved from original */
-}
-
-.footer-bottom {
-  text-align: center;
-  padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
-  color: var(--light-text);
-  font-size: 0.875rem;
-}
-
-/* Accessibility Enhancements */
-:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-/* High contrast focus for keyboard navigation */
-:focus-visible {
-  outline: 3px solid var(--primary-color);
-  outline-offset: 3px;
-}`,
+    <filter id="shadow-sm" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.05"/>
+    </filter>
+    
+    <filter id="shadow-md" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+  
+  <!-- Header -->
+  <g class="header" transform="translate(0, 0)">
+    <rect width="${dimensions.width}" height="80" fill="white" />
+    <text class="heading h1" x="40" y="50">Brand Logo</text>
+    
+    <!-- Navigation -->
+    <g transform="translate(${dimensions.width/2 - 150}, 45)">
+      <text class="nav-item active" x="0" y="0">Home</text>
+      <text class="nav-item" x="80" y="0">Features</text>
+      <text class="nav-item" x="180" y="0">Pricing</text>
+      <text class="nav-item" x="260" y="0">About</text>
+    </g>
+    
+    <!-- CTA Button -->
+    <g class="button" transform="translate(${dimensions.width - 150}, 30)">
+      <rect class="primary-button" width="120" height="40" />
+      <text class="primary-button-text" x="60" y="20">Get Started</text>
+    </g>
+  </g>
+  
+  <!-- Hero Section -->
+  <g transform="translate(40, 100)">
+    <text class="heading h2" x="0" y="40">Improved Design With SVG</text>
+    <text class="body-text" x="0" y="80" width="400">This is a demonstration of an SVG-based design iteration. It showcases improved readability, better visual hierarchy, and enhanced component design while maintaining the original style.</text>
+    
+    <g class="button" transform="translate(0, 100)">
+      <rect class="primary-button" width="120" height="40" />
+      <text class="primary-button-text" x="60" y="20">Try It Now</text>
+    </g>
+    
+    <!-- Hero Image -->
+    <rect class="image-placeholder" x="${dimensions.width - 380}" y="0" width="300" height="200" />
+  </g>
+  
+  <!-- Features Section -->
+  <g transform="translate(0, 350)">
+    <rect width="${dimensions.width}" height="300" fill="#F8F9FB" />
+    <text class="heading h3" x="${dimensions.width/2}" y="40" text-anchor="middle">Key Features</text>
+    
+    <!-- Feature Cards -->
+    <g transform="translate(40, 70)">
+      <!-- Card 1 -->
+      <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
+      <circle class="feature-icon" cx="40" cy="40" r="20" />
+      <text class="heading" x="40" y="90" text-anchor="middle">Feature 1</text>
+      <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Improved feature with better spacing and contrast.</text>
+      
+      <!-- Card 2 -->
+      <g transform="translate(${dimensions.width/3}, 0)">
+        <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
+        <circle class="feature-icon" cx="40" cy="40" r="20" />
+        <text class="heading" x="40" y="90" text-anchor="middle">Feature 2</text>
+        <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Enhanced component with clear visual hierarchy.</text>
+      </g>
+      
+      <!-- Card 3 -->
+      <g transform="translate(${dimensions.width*2/3}, 0)">
+        <rect class="card" width="${dimensions.width/3 - 60}" height="180" />
+        <circle class="feature-icon" cx="40" cy="40" r="20" />
+        <text class="heading" x="40" y="90" text-anchor="middle">Feature 3</text>
+        <text class="body-text" x="20" y="120" width="${dimensions.width/3 - 100}">Optimized layout with improved accessibility.</text>
+      </g>
+    </g>
+  </g>
+  
+  <!-- Footer -->
+  <g transform="translate(0, ${dimensions.height - 150})">
+    <rect width="${dimensions.width}" height="150" fill="#F8F9FB" />
+    
+    <!-- Footer Columns -->
+    <g transform="translate(40, 30)">
+      <!-- Column 1 -->
+      <text class="heading" x="0" y="0">Company</text>
+      <text class="body-text" x="0" y="30">About Us</text>
+      <text class="body-text" x="0" y="55">Careers</text>
+      <text class="body-text" x="0" y="80">Contact</text>
+      
+      <!-- Column 2 -->
+      <g transform="translate(${dimensions.width/3}, 0)">
+        <text class="heading" x="0" y="0">Resources</text>
+        <text class="body-text" x="0" y="30">Blog</text>
+        <text class="body-text" x="0" y="55">Documentation</text>
+        <text class="body-text" x="0" y="80">Help Center</text>
+      </g>
+      
+      <!-- Column 3 -->
+      <g transform="translate(${dimensions.width*2/3}, 0)">
+        <text class="heading" x="0" y="0">Legal</text>
+        <text class="body-text" x="0" y="30">Privacy</text>
+        <text class="body-text" x="0" y="55">Terms</text>
+        <text class="body-text" x="0" y="80">Security</text>
+      </g>
+    </g>
+    
+    <!-- Copyright -->
+    <text class="body-text" x="${dimensions.width/2}" y="130" text-anchor="middle">© 2023 Example Company. All rights reserved.</text>
+  </g>
+</svg>`,
       metadata: {
         colors: {
-          primary: ['#4f46e5', '#4338ca'],
-          secondary: ['#6b7280'],
-          background: ['#ffffff', '#f9fafb'],
-          text: ['#1f2937', '#4b5563']  // Slightly adjusted for better contrast
+          primary: ['#4A6CF7', '#4338CA'],
+          secondary: ['#6F7DEB', '#EEF1FF'],
+          background: ['#FFFFFF', '#F8F9FB'],
+          text: ['#1D2939', '#4B5563', '#6B7280']
         },
         fonts: [
-          'Inter', 
-          '-apple-system', 
-          'BlinkMacSystemFont', 
-          'Segoe UI', 
-          'Roboto'
+          'Plus Jakarta Sans', 
+          'Inter'
         ],
         components: [
           'Navigation Menu',
           'Hero Section',
           'Feature Cards',
           'Primary Button',
+          'Secondary Button',
           'Footer',
           'Logo'
         ]
