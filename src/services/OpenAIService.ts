@@ -838,6 +838,9 @@ class OpenAIService {
       return this.createBasicSvgFallback({ width: 800, height: 600 });
     }
     
+    // Fix common attribute issues
+    fixedSvg = this.fixSvgAttributes(fixedSvg);
+    
     // ESSENTIAL FIX: Ensure style tags have CDATA sections to avoid XML parsing issues
     if (fixedSvg.includes('<style>') && !fixedSvg.includes('CDATA')) {
       // Check for CSS syntax in style tag
@@ -856,19 +859,7 @@ class OpenAIService {
     }
     
     // Fix self-closing tags
-    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
-    selfClosingElements.forEach(tagName => {
-      // Fix unclosed tags 
-      const unclosedTagPattern = new RegExp(`<${tagName}([^>]*[^/])>(?![\\s\\S]*?</${tagName}>)`, 'g');
-      if (fixedSvg.match(unclosedTagPattern)) {
-        fixedSvg = fixedSvg.replace(unclosedTagPattern, `<${tagName}$1/>`);
-        console.log(`Fixed unclosed ${tagName} tag`);
-      }
-      
-      // Convert empty tags to self-closing
-      const emptyTagPattern = new RegExp(`<${tagName}([^>]*)></\\s*${tagName}\\s*>`, 'g');
-      fixedSvg = fixedSvg.replace(emptyTagPattern, `<${tagName}$1/>`);
-    });
+    fixedSvg = this.forceSelfClosingTags(fixedSvg);
     
     // Fix improper nesting of elements before </svg>
     const endingPatterns = [
@@ -905,82 +896,56 @@ class OpenAIService {
     return fixedSvg;
   }
   
-  // Add a more aggressive SVG repair method as a last resort
-  private aggressiveSvgRepair(svg: string): string {
-    let fixedSvg = svg;
-    
-    // Extract just the SVG root elements and its attributes
-    const svgRootMatch = fixedSvg.match(/<svg([^>]*)>/);
-    if (!svgRootMatch) {
-      return this.createBasicSvgFallback({ width: 800, height: 600 });
-    }
-    
-    // Extract essential attributes
-    const attrsMatch = svgRootMatch[1];
-    const viewBoxMatch = attrsMatch.match(/viewBox=["']([^"']*)["']/);
-    const viewBox = viewBoxMatch ? viewBoxMatch[1] : "0 0 800 600";
-    
-    const widthMatch = attrsMatch.match(/width=["']([^"']*)["']/);
-    const width = widthMatch ? widthMatch[1].replace('px', '') : "800";
-    
-    const heightMatch = attrsMatch.match(/height=["']([^"']*)["']/);
-    const height = heightMatch ? heightMatch[1].replace('px', '') : "600";
-    
-    // Extract style section if it exists
-    let styleContent = '';
-    const styleMatch = fixedSvg.match(/<style[^>]*>([\s\S]*?)<\/style>/);
-    if (styleMatch) {
-      styleContent = styleMatch[1];
-      // Ensure CDATA wrapping
-      if (!styleContent.includes('CDATA')) {
-        styleContent = `<![CDATA[${styleContent}]]>`;
-      }
-    }
-    
-    // Extract all valid elements we can find
-    const elements: string[] = [];
-    
-    // Safe elements to extract
-    const elementTypes = ['rect', 'circle', 'path', 'text', 'g', 'ellipse', 'line', 'polygon', 'polyline', 'image'];
-    
-    // Extract self-closing elements
-    const selfClosingPattern = /<(rect|circle|path|ellipse|line|polygon|polyline|image)([^>]*?)\/>/g;
-    let match;
-    while ((match = selfClosingPattern.exec(fixedSvg)) !== null) {
-      elements.push(`<${match[1]}${match[2]}/>`);
-    }
-    
-    // Try to extract properly closed elements (harder to do reliably)
-    elementTypes.forEach(type => {
-      if (type === 'g') return; // Skip g elements for now - harder to match reliably
-      
-      const pattern = new RegExp(`<${type}([^>]*)>([^<]*?)<\\/${type}>`, 'g');
-      let elemMatch;
-      while ((elemMatch = pattern.exec(fixedSvg)) !== null) {
-        elements.push(`<${type}${elemMatch[1]}>${elemMatch[2]}</${type}>`);
-      }
-    });
-    
-    // Build a clean, minimal SVG
-    let cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${height}">`;
-    
-    // Add style if we found any
-    if (styleContent) {
-      cleanSvg += `<style>${styleContent}</style>`;
-    }
-    
-    // Add all the extracted elements
-    elements.forEach(element => {
-      cleanSvg += element;
-    });
-    
-    // Close the SVG
-    cleanSvg += '</svg>';
-    
-    console.log('Created clean SVG with aggressive repair method');
-    return cleanSvg;
+  // Helper to fix common attribute issues in SVG
+  private fixSvgAttributes(svg: string): string {
+    // Repair common attribute errors
+    return svg
+      // Fix unquoted attributes (name=value) should be (name="value")
+      .replace(/(\w+)=([^"'][^\s>]*)/g, '$1="$2"')
+      // Fix standalone attributes (name) should be (name="")
+      .replace(/(\s)(\w+)(\s|>)/g, (match, before, name, after) => {
+        // Skip known boolean attributes
+        if (['async', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 
+             'defer', 'disabled', 'hidden', 'ismap', 'loop', 'multiple', 'muted', 
+             'novalidate', 'open', 'readonly', 'required', 'selected'].includes(name)) {
+          return match;
+        }
+        return `${before}${name}=""${after}`;
+      })
+      // Fix missing XML namespace
+      .replace(/<svg(?!\s+xmlns)/g, '<svg xmlns="http://www.w3.org/2000/svg"')
+      // Fix attributes missing values, 'name=' -> 'name=""'
+      .replace(/(\w+)=(?=[\s>])/g, '$1=""')
+      // Fix mismatched quotes
+      .replace(/(\w+)=['"]([^'"]*)['"]/g, (match, name, value) => {
+        // Replace any remaining quotes in value with character entity
+        const cleanValue = value
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&apos;');
+        return `${name}="${cleanValue}"`;
+      })
+      // Fix truncated attributes
+      .replace(/(\w+)="([^"]*)(?=[><])/g, '$1="$2"');
   }
-
+  
+  // Helper to force self-closing tags for elements that should be self-closing
+  private forceSelfClosingTags(svg: string): string {
+    let fixedSvg = svg;
+    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
+    
+    selfClosingElements.forEach(tagName => {
+      // Pattern to find non-self-closing tags that should be
+      const pattern = new RegExp(`<${tagName}([^>]*[^/])>(?![\\s\\S]*?</${tagName}>)`, 'g');
+      fixedSvg = fixedSvg.replace(pattern, `<${tagName}$1/>`);
+      
+      // Also fix any improperly closed tags
+      const badClosingPattern = new RegExp(`<${tagName}([^>]*)>\\s*</${tagName}>`, 'g');
+      fixedSvg = fixedSvg.replace(badClosingPattern, `<${tagName}$1/>`);
+    });
+    
+    return fixedSvg;
+  }
+  
   // Helper to repair tag mismatch errors with specific context of the error
   private repairTagMismatch(svg: string, errorText: string): string {
     let fixedSvg = svg;
@@ -1032,22 +997,222 @@ class OpenAIService {
     return fixedSvg;
   }
   
-  // Helper to force self-closing tags for elements that should be self-closing
-  private forceSelfClosingTags(svg: string): string {
+  // Main aggressive SVG repair function that combines both approaches
+  private aggressiveSvgRepair(svg: string, errorMsg?: string): string {
     let fixedSvg = svg;
-    const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
     
-    selfClosingElements.forEach(tagName => {
-      // Pattern to find non-self-closing tags that should be
-      const pattern = new RegExp(`<${tagName}([^>]*[^/])>(?![\\s\\S]*?</${tagName}>)`, 'g');
-      fixedSvg = fixedSvg.replace(pattern, `<${tagName}$1/>`);
+    // Initially apply common fixes
+    fixedSvg = this.fixSvgAttributes(fixedSvg);
+    fixedSvg = this.forceSelfClosingTags(fixedSvg);
+    
+    // If we have specific error information, try more targeted fixes
+    if (errorMsg) {
+      // Extract line and column from error message if possible
+      const lineMatch = errorMsg.match(/line (\d+)/);
+      const colMatch = errorMsg.match(/column (\d+)/);
       
-      // Also fix any improperly closed tags
-      const badClosingPattern = new RegExp(`<${tagName}([^>]*)>\\s*</${tagName}>`, 'g');
-      fixedSvg = fixedSvg.replace(badClosingPattern, `<${tagName}$1/>`);
+      if (lineMatch && colMatch) {
+        const line = parseInt(lineMatch[1], 10);
+        const col = parseInt(colMatch[1], 10);
+        console.log(`Attribute error at line ${line}, column ${col}`);
+        
+        // Split into lines for line-specific repair
+        const lines = fixedSvg.split('\n');
+        
+        if (lines.length >= line) {
+          const problematicLine = lines[line-1];
+          
+          // Extract a window around the error column to see context
+          if (col > 0 && col < problematicLine.length) {
+            const start = Math.max(0, col - 20);
+            const end = Math.min(problematicLine.length, col + 20);
+            const context = problematicLine.substring(start, end);
+            console.log(`Error context: "${context}"`);
+            
+            // Detect and fix common patterns that may cause attribute errors
+            if (context.includes('=') && !context.includes('"') && !context.includes("'")) {
+              // Unquoted attribute
+              lines[line-1] = problematicLine.replace(/(\w+)=([^"'][^\s>]*)/g, '$1="$2"');
+            } else if (context.includes('""') || context.includes("''")) {
+              // Empty quotes
+              lines[line-1] = problematicLine.replace(/""/g, '"&nbsp;"').replace(/''/g, "'&nbsp;'");
+            } else if (context.includes('"') && context.includes("'")) {
+              // Mixed quotes
+              lines[line-1] = problematicLine
+                .replace(/(\w+)='([^']*)"([^']*)'(?=[\s>])/g, '$1="$2&quot;$3"')
+                .replace(/(\w+)="([^"]*)'([^"]*)"(?=[\s>])/g, '$1="$2&apos;$3"');
+            } else {
+              // For more complex cases, try to sanitize the entire tag
+              const tagMatch = problematicLine.match(/<(\w+)/);
+              if (tagMatch) {
+                const tagName = tagMatch[1];
+                
+                // Extract any useful attributes we want to preserve
+                const idMatch = problematicLine.match(/id=["']([^"']*)["']/);
+                const id = idMatch ? idMatch[1] : '';
+                
+                const classMatch = problematicLine.match(/class=["']([^"']*)["']/);
+                const className = classMatch ? classMatch[1] : '';
+                
+                const styleMatch = problematicLine.match(/style=["']([^"']*)["']/);
+                const style = styleMatch ? styleMatch[1] : '';
+                
+                // Rebuild tag with clean attributes
+                if (tagName === 'svg') {
+                  lines[line-1] = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">';
+                } else {
+                  const selfClosingElements = ['rect', 'circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'image', 'use'];
+                  let attrs = '';
+                  if (id) attrs += ` id="${id}"`;
+                  if (className) attrs += ` class="${className}"`;
+                  if (style) attrs += ` style="${style}"`;
+                  
+                  if (selfClosingElements.includes(tagName)) {
+                    // For paths, try to preserve the path data
+                    if (tagName === 'path') {
+                      const dMatch = problematicLine.match(/d=["']([^"']*)["']/);
+                      if (dMatch) attrs += ` d="${dMatch[1]}"`;
+                    }
+                    lines[line-1] = `<${tagName}${attrs}/>`;
+                  } else {
+                    // Check if this is likely a closing tag or opening tag
+                    if (problematicLine.includes(`</${tagName}`)) {
+                      lines[line-1] = `</${tagName}>`;
+                    } else {
+                      lines[line-1] = `<${tagName}${attrs}>`;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Rebuild SVG with fixed lines
+        fixedSvg = lines.join('\n');
+        
+        // Validate the repaired SVG
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(fixedSvg, 'image/svg+xml');
+          const errorNode = doc.querySelector('parsererror');
+          
+          if (!errorNode) {
+            console.log('Successfully fixed attribute construct error');
+            return fixedSvg;
+          } else {
+            console.log('❌ SVG still has parsing errors after repairs');
+          }
+        } catch (e) {
+          console.log('Error checking repaired SVG:', e);
+        }
+      }
+    }
+    
+    // If line-specific repair failed or wasn't applicable, try more aggressive approaches
+    
+    // 1. Extract essential attributes from SVG root
+    const svgRootMatch = fixedSvg.match(/<svg[^>]*>/);
+    if (!svgRootMatch) {
+      return this.createBasicSvgFallback({ width: 800, height: 600 });
+    }
+    
+    // Extract essential attributes
+    const attrsMatch = svgRootMatch[1] || '';
+    const viewBoxMatch = attrsMatch.match(/viewBox=["']([^"']*)["']/);
+    const viewBox = viewBoxMatch ? viewBoxMatch[1] : "0 0 800 600";
+    
+    const widthMatch = attrsMatch.match(/width=["']([^"']*)["']/);
+    const width = widthMatch ? widthMatch[1].replace('px', '') : "800";
+    
+    const heightMatch = attrsMatch.match(/height=["']([^"']*)["']/);
+    const height = heightMatch ? heightMatch[1].replace('px', '') : "600";
+    
+    // Extract style section if it exists
+    let styleContent = '';
+    const styleMatch = fixedSvg.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+    if (styleMatch) {
+      styleContent = styleMatch[1];
+      // Ensure CDATA wrapping
+      if (!styleContent.includes('CDATA')) {
+        styleContent = `<![CDATA[${styleContent}]]>`;
+      }
+    }
+    
+    // Extract all valid elements we can find
+    const elements: string[] = [];
+    
+    // Safe elements to extract
+    const elementTypes = ['rect', 'circle', 'path', 'text', 'g', 'ellipse', 'line', 'polygon', 'polyline', 'image'];
+    
+    // Extract self-closing elements
+    const selfClosingPattern = /<(rect|circle|path|ellipse|line|polygon|polyline|image)([^>]*?)\/>/g;
+    let match;
+    while ((match = selfClosingPattern.exec(fixedSvg)) !== null) {
+      elements.push(`<${match[1]}${match[2]}/>`);
+    }
+    
+    // Try to extract properly closed elements (harder to do reliably)
+    elementTypes.forEach(type => {
+      if (type === 'g') return; // Skip g elements for now - harder to match reliably
+      
+      const pattern = new RegExp(`<${type}([^>]*)>([^<]*?)<\\/${type}>`, 'g');
+      let elemMatch;
+      while ((elemMatch = pattern.exec(fixedSvg)) !== null) {
+        elements.push(`<${type}${elemMatch[1]}>${elemMatch[2]}</${type}>`);
+      }
     });
     
-    return fixedSvg;
+    // If no elements were extracted, create some placeholders
+    if (elements.length === 0) {
+      // Extract colors from the SVG if possible
+      let backgroundColor = '#F8F9FA';
+      let foregroundColor = '#4A6CF7';
+      let textColor = '#1D2939';
+      
+      const backgroundMatch = fixedSvg.match(/background(?:-color)?:\s*([#\w][^;}"']+)/);
+      if (backgroundMatch) backgroundColor = backgroundMatch[1];
+      
+      const fillMatch = fixedSvg.match(/fill:\s*([#\w][^;}"']+)/);
+      if (fillMatch) foregroundColor = fillMatch[1];
+      
+      const colorMatch = fixedSvg.match(/color:\s*([#\w][^;}"']+)/);
+      if (colorMatch) textColor = colorMatch[1];
+      
+      // Add placeholder elements
+      elements.push(`<rect width="100%" height="100%" fill="${backgroundColor}"/>`);
+      elements.push(`<rect x="50" y="50" width="700" height="500" rx="8" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>`);
+      elements.push(`<rect x="80" y="120" width="640" height="80" rx="4" fill="${foregroundColor}"/>`);
+      elements.push(`<rect x="80" y="230" width="200" height="40" rx="20" fill="${foregroundColor}"/>`);
+      elements.push(`<rect x="300" y="230" width="200" height="40" rx="4" fill="#FFFFFF" stroke="${foregroundColor}" stroke-width="1"/>`);
+      elements.push(`<rect x="520" y="230" width="200" height="40" rx="4" fill="#F3F4F6"/>`);
+      elements.push(`<text x="400" y="85" text-anchor="middle" font-family="sans-serif" font-size="24" fill="${textColor}">Improved Design</text>`);
+      elements.push(`<text x="180" y="250" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#FFFFFF">Primary Button</text>`);
+      elements.push(`<text x="400" y="250" text-anchor="middle" font-family="sans-serif" font-size="14" fill="${textColor}">Secondary Button</text>`);
+      elements.push(`<text x="620" y="250" text-anchor="middle" font-family="sans-serif" font-size="14" fill="${textColor}">Disabled</text>`);
+      elements.push(`<text x="400" y="160" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#FFFFFF">This is a fallback rendering with basic UI elements</text>`);
+      elements.push(`<text x="400" y="350" text-anchor="middle" font-family="sans-serif" font-size="16" fill="${textColor}">The AI-generated SVG had structural issues that prevented rendering</text>`);
+      elements.push(`<text x="400" y="380" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#666666">View the analysis to see the improvements made to the design</text>`);
+    }
+    
+    // Build a clean, minimal SVG
+    let cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${height}">`;
+    
+    // Add style if we found any
+    if (styleContent) {
+      cleanSvg += `<style>${styleContent}</style>`;
+    }
+    
+    // Add all the extracted elements
+    elements.forEach(element => {
+      cleanSvg += element;
+    });
+    
+    // Close the SVG
+    cleanSvg += '</svg>';
+    
+    console.log('Created clean SVG with aggressive repair method');
+    return cleanSvg;
   }
   
   // Create a more visually appealing fallback SVG that shows an improved design
@@ -1608,6 +1773,139 @@ class OpenAIService {
         ]
       }
     };
+  }
+
+  // Helper method to extract and fix SVG content from a response
+  private async extractSvgContent(response: string): Promise<string> {
+    try {
+      // Try to fix common SVG issues before extraction
+      let fixedResponse = response;
+      
+      // Fix common attribute issues before attempting extraction
+      fixedResponse = this.fixSvgAttributes(fixedResponse);
+      
+      // Apply self-closing tag fixes for elements that should be self-closing
+      fixedResponse = this.forceSelfClosingTags(fixedResponse);
+      
+      console.log('Applied self-closing tag fixes');
+      
+      // Check if there are parsing errors
+      if (typeof window !== 'undefined' && window.DOMParser) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(fixedResponse, 'image/svg+xml');
+          const errorNode = doc.querySelector('parsererror');
+          
+          if (errorNode) {
+            console.log('❗ SVG parsing error detected, applying enhanced repairs');
+            
+            // Extract the error message for better diagnostics
+            const errorMsg = errorNode.textContent || '';
+            console.log(`❗ SVG parsing error: ${errorMsg}`);
+            
+            // If we have an attribute construct error, try to fix it
+            if (errorMsg.includes('attributes construct error')) {
+              fixedResponse = this.aggressiveSvgRepair(fixedResponse, errorMsg);
+              
+              // Check if the repair fixed the issue
+              const fixedDoc = parser.parseFromString(fixedResponse, 'image/svg+xml');
+              if (fixedDoc.querySelector('parsererror')) {
+                console.log('❌ SVG still has parsing errors after repairs');
+              } else {
+                console.log('Created clean SVG with aggressive repair method');
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Error checking SVG with DOMParser:', e);
+        }
+      }
+      
+      // Try to extract the SVG from the fixed response
+      const svgCodeBlockPattern = /```(?:svg|html)?\s*([\s\S]*?<svg[\s\S]*?<\/svg>)[\s\S]*?```/i;
+      const codeBlockMatch = fixedResponse.match(svgCodeBlockPattern);
+      
+      if (codeBlockMatch && codeBlockMatch[1] && codeBlockMatch[1].includes('<svg')) {
+        const extractedSvg = codeBlockMatch[1].trim();
+        console.log('Successfully extracted SVG from code block, length:', extractedSvg.length);
+        return extractedSvg;
+      }
+      
+      // Method 2: Look for complete SVG tags
+      const svgTagPattern = /<svg[\s\S]*?<\/svg>/g;
+      const svgMatches = Array.from(fixedResponse.matchAll(svgTagPattern));
+      
+      if (svgMatches.length > 0) {
+        // Use the longest SVG content found (most likely to be complete)
+        const extractedSvg = svgMatches.reduce((longest, current) => 
+          current[0].length > longest.length ? current[0] : longest, svgMatches[0][0]);
+        console.log('Found complete SVG tag, length:', extractedSvg.length);
+        return extractedSvg;
+      }
+      
+      // If we couldn't extract an SVG, use a fallback
+      console.log('❌ FAILED TO EXTRACT SVG from response, using fallback');
+      
+      // Create a fallback SVG with minimal styling
+      const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+        <rect width="100%" height="100%" fill="#f8f9fa" />
+        <rect x="100" y="100" width="600" height="400" rx="10" fill="white" stroke="#4285f4" stroke-width="2" />
+        <text x="400" y="250" text-anchor="middle" font-size="24" fill="#202124" font-family="sans-serif">SVG Generation Issue</text>
+        <text x="400" y="300" text-anchor="middle" font-size="16" fill="#5f6368" font-family="sans-serif">Could not extract valid SVG content</text>
+        <text x="400" y="330" text-anchor="middle" font-size="14" fill="#5f6368" font-family="sans-serif">Please try again</text>
+      </svg>`;
+      
+      return fallbackSvg;
+    } catch (error) {
+      console.error('Error extracting SVG content:', error);
+      
+      // Return a simple error SVG
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+        <rect width="100%" height="100%" fill="#f8f9fa" />
+        <rect x="100" y="100" width="600" height="400" rx="10" fill="white" stroke="#ea4335" stroke-width="2" />
+        <text x="400" y="250" text-anchor="middle" font-size="24" fill="#202124" font-family="sans-serif">Error Processing SVG</text>
+        <text x="400" y="300" text-anchor="middle" font-size="16" fill="#5f6368" font-family="sans-serif">${error instanceof Error ? error.message : 'Unknown error'}</text>
+      </svg>`;
+    }
+  }
+
+  // Helper to implement the common SVG repair process
+  private fixCommonSvgIssues(svgString: string): string {
+    let result = svgString;
+    
+    // Fix common attribute issues first
+    result = this.fixSvgAttributes(result);
+    
+    // Apply self-closing tag fixes for elements that should be self-closing
+    result = this.forceSelfClosingTags(result);
+    
+    console.log('Applied self-closing tag fixes');
+    
+    // Try to parse the SVG using DOM parser if available
+    if (typeof window !== 'undefined' && window.DOMParser) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(result, 'image/svg+xml');
+        const errorNode = doc.querySelector('parsererror');
+        
+        if (errorNode) {
+          console.log('❗ SVG parsing error detected, applying enhanced repairs');
+          
+          // Extract the error message for better diagnostics
+          const errorMsg = errorNode.textContent || '';
+          console.log(`❗ SVG parsing error: ${errorMsg}`);
+          
+          // If we have an attribute construct error, try to fix it
+          if (errorMsg.includes('attributes construct error')) {
+            result = this.aggressiveSvgRepair(result, errorMsg);
+          }
+        }
+      } catch (e) {
+        console.log('Error checking SVG with DOMParser:', e);
+      }
+    }
+    
+    return result;
   }
 }
 
