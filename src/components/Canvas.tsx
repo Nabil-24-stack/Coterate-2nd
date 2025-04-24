@@ -386,27 +386,23 @@ const ProcessingSteps = ({ step }: { step: 'analyzing' | 'recreating' | 'renderi
 
 // Enhance the AnalysisPanel to better display changes
 const AnalysisPanel = styled.div<{ visible: boolean }>`
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 380px;
-  max-height: calc(100% - 40px);
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  display: ${props => props.visible ? 'flex' : 'none'};
-  flex-direction: column;
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 400px;
+  height: 100vh;
+  background-color: #fff;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
   z-index: 1000;
+  transform: translateX(${props => props.visible ? 0 : '100%'});
+  transition: transform 0.3s ease-in-out;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-  transform: ${props => props.visible ? 'translateX(0)' : 'translateX(400px)'};
-  opacity: ${props => props.visible ? '1' : '0'};
 `;
 
-// Improved panel header with tabs
 const AnalysisPanelHeader = styled.div`
-  padding: 15px 20px;
-  background-color: #f8f9fa;
+  padding: 15px;
   border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
@@ -416,71 +412,54 @@ const AnalysisPanelHeader = styled.div`
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: #333;
   }
   
   button {
     background: none;
     border: none;
+    font-size: 20px;
     cursor: pointer;
-    color: #666;
-    padding: 5px;
-    
-    &:hover {
-      color: #333;
-    }
+    color: #555;
+    padding: 0;
+    margin: 0;
   }
 `;
 
-// Add tabs for different analysis sections
 const TabContainer = styled.div`
   display: flex;
-  padding: 0 15px;
-  background-color: #f8f9fa;
   border-bottom: 1px solid #eee;
 `;
 
-const Tab = styled.button<{ active: boolean }>`
+const Tab = styled.div<{ active: boolean }>`
   padding: 10px 15px;
-  border: none;
-  background: none;
-  font-size: 14px;
-  font-weight: ${props => props.active ? '600' : '400'};
-  color: ${props => props.active ? '#333' : '#666'};
-  border-bottom: 2px solid ${props => props.active ? '#26D4C8' : 'transparent'};
   cursor: pointer;
+  font-size: 14px;
+  font-weight: ${props => props.active ? 600 : 400};
+  color: ${props => props.active ? '#000' : '#666'};
+  border-bottom: 2px solid ${props => props.active ? '#000' : 'transparent'};
+  background-color: ${props => props.active ? 'rgba(0, 0, 0, 0.03)' : 'transparent'};
   
   &:hover {
-    color: ${props => props.active ? '#333' : '#444'};
+    background-color: rgba(0, 0, 0, 0.05);
   }
 `;
 
-// Enhanced content area
 const AnalysisPanelContent = styled.div`
-  flex: 1;
-  overflow-y: auto;
   padding: 15px;
+  overflow-y: auto;
+  flex: 1;
   
   h4 {
+    display: flex;
+    align-items: center;
+    font-size: 15px;
     margin-top: 20px;
     margin-bottom: 10px;
     font-weight: 600;
-    color: #333;
-    display: flex;
-    align-items: center;
-    gap: 6px;
     
     svg {
-      flex-shrink: 0;
+      margin-right: 8px;
     }
-  }
-  
-  h5 {
-    margin-top: 12px;
-    margin-bottom: 8px;
-    font-weight: 500;
-    color: #555;
-    font-size: 14px;
   }
   
   ul {
@@ -488,20 +467,64 @@ const AnalysisPanelContent = styled.div`
     padding-left: 20px;
     
     li {
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+      font-size: 14px;
       line-height: 1.5;
     }
   }
   
+  .analysis-section {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+    
+    .analysis-subsection {
+      flex: 1;
+      margin-right: 10px;
+      
+      h5 {
+        font-size: 14px;
+        margin-top: 10px;
+        margin-bottom: 5px;
+        font-weight: 600;
+      }
+    }
+  }
+  
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .color-swatch {
+    width: 60px;
+    height: 60px;
+    border-radius: 4px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    
+    span {
+      font-size: 10px;
+      padding: 2px 4px;
+      background-color: rgba(255, 255, 255, 0.8);
+      border-radius: 2px;
+      position: absolute;
+      bottom: 4px;
+    }
+  }
+  
   .comparison-container {
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
     margin-bottom: 20px;
     
     .comparison-title {
       font-weight: 600;
       margin-bottom: 10px;
+      font-size: 15px;
     }
     
     .comparison-view {
@@ -513,83 +536,61 @@ const AnalysisPanelContent = styled.div`
         
         .comparison-label {
           font-size: 12px;
-          margin-bottom: 6px;
           color: #666;
-          text-align: center;
+          margin-bottom: 5px;
         }
       }
     }
   }
   
-  .color-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-    gap: 10px;
-    margin: 10px 0 20px;
-    
-    .color-swatch {
-      height: 70px;
-      border-radius: 4px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      padding-bottom: 5px;
-      position: relative;
-      overflow: hidden;
-      
-      span {
-        font-size: 10px;
-        color: white;
-        text-shadow: 0 0 2px rgba(0,0,0,0.8);
-        background: rgba(0,0,0,0.2);
-        padding: 2px 4px;
-        border-radius: 2px;
-      }
-    }
-  }
-  
-  .analysis-section {
-    display: flex;
-    flex-direction: column;
+  .prompt-container {
     margin-bottom: 20px;
     
-    .analysis-subsection {
-      background-color: #f8f9fa;
+    .user-prompt {
+      background-color: #f9f9f9;
+      padding: 15px;
       border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 10px;
+      border: 1px solid #eaeaea;
       
-      h5 {
-        margin-top: 0;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-weight: 600;
-        color: #333;
-        
-        &:before {
-          content: '';
-          display: block;
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background-color: #26D4C8;
-        }
+      p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
       }
+    }
+    
+    .no-prompt {
+      padding: 15px;
+      color: #888;
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      text-align: center;
       
-      ul {
-        margin: 10px 0 0;
+      p {
+        margin: 0;
+        font-size: 14px;
       }
     }
   }
   
-  .changes-list {
-    li {
-      background-color: #f8f9fa;
-      padding: 10px;
-      border-radius: 6px;
-      margin-bottom: 10px;
-      border-left: 3px solid #26D4C8;
+  .result-container {
+    margin-bottom: 20px;
+    
+    .raw-response {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #eaeaea;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      max-height: calc(100vh - 150px);
+      overflow-y: auto;
+      word-break: break-word;
+      color: #333;
+      overflow-x: hidden;
     }
   }
 `;
@@ -1860,7 +1861,9 @@ export const Canvas: React.FC = () => {
             colors: result.metadata.colors,
             fonts: result.metadata.fonts,
             components: result.metadata.components
-          }
+          },
+          rawResponse: result.analysis.rawResponse, // Store the raw GPT-4.1 response
+          userPrompt: prompt // Store the user's prompt input
         },
         dimensions: originalDimensions, // Add the original dimensions to the iteration
         created_at: new Date().toISOString()
@@ -2309,7 +2312,7 @@ export const Canvas: React.FC = () => {
   }, [selectedDesignId]);
   
   // Add state for active tab
-  const [activeTab, setActiveTab] = useState<'changes' | 'analysis' | 'uxanalysis' | 'colors'>('changes');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'result'>('prompt');
   
   // Update the render part to include the processing overlay with steps
   const renderDesign = (design: ExtendedDesign) => {
@@ -2709,314 +2712,51 @@ export const Canvas: React.FC = () => {
           {/* Add tabs for different analysis views */}
           <TabContainer>
             <Tab 
-              active={activeTab === 'changes'} 
-              onClick={() => setActiveTab('changes')}
+              active={activeTab === 'prompt'} 
+              onClick={() => setActiveTab('prompt')}
             >
-              Changes Made
+              Prompt
             </Tab>
             <Tab 
-              active={activeTab === 'analysis'} 
-              onClick={() => setActiveTab('analysis')}
+              active={activeTab === 'result'} 
+              onClick={() => setActiveTab('result')}
             >
-              Analysis
-            </Tab>
-            <Tab 
-              active={activeTab === 'uxanalysis'} 
-              onClick={() => setActiveTab('uxanalysis')}
-            >
-              UX Analysis
-            </Tab>
-            <Tab 
-              active={activeTab === 'colors'} 
-              onClick={() => setActiveTab('colors')}
-            >
-              Design System
+              Result
             </Tab>
           </TabContainer>
           
           <AnalysisPanelContent>
             {currentAnalysis ? (
               <>
-                {/* Changes Tab */}
-                {activeTab === 'changes' && currentAnalysis && (
+                {/* Prompt Tab */}
+                {activeTab === 'prompt' && currentAnalysis && (
                   <>
-                    {/* Before/After Comparison */}
-                    <div className="comparison-container">
-                      <div className="comparison-title">Before & After Comparison</div>
-                      <div className="comparison-view">
-                        <div className="comparison-half">
-                          <div className="comparison-label">Original</div>
-                          {/* This would be a thumbnail of the original design */}
-                          <img 
-                            src={designs.find(d => d.id === currentAnalysis.parentId)?.imageUrl} 
-                            alt="Original design" 
-                            style={{ width: '100%', height: 'auto', maxHeight: '150px', objectFit: 'contain' }}
-                          />
+                    <div className="prompt-container">
+                      {currentAnalysis.analysis?.userPrompt ? (
+                        <div className="user-prompt">
+                          <p>{currentAnalysis.analysis.userPrompt}</p>
                         </div>
-                        <div className="comparison-half">
-                          <div className="comparison-label">Improved</div>
-                          {/* This would be a thumbnail of the iteration */}
-                          <HtmlDesignRenderer
-                            htmlContent={currentAnalysis.htmlContent}
-                            cssContent={currentAnalysis.cssContent}
-                            width={150}
-                            height={150}
-                            showBorder={false}
-                          />
+                      ) : (
+                        <div className="no-prompt">
+                          <p>No prompt</p>
                         </div>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M14.06 9L15 9.94L5.92 19H5v-0.92L14.06 9M17.66 3c-0.25 0-0.51 0.1-0.7 0.29l-1.83 1.83 3.75 3.75 1.83-1.83c0.39-0.39 0.39-1.02 0-1.41l-2.34-2.34c-0.2-0.2-0.45-0.29-0.71-0.29zm-3.6 3.19L3 17.25V21h3.75L17.81 9.94l-3.75-3.75z" fill="#26D4C8"/>
-                      </svg>
-                      Specific Changes Made
-                    </h4>
-                    <ul className="changes-list">
-                      {currentAnalysis.analysis?.specificChanges?.map((change, i) => (
-                        <li key={i}>{change}</li>
-                      )) || (
-                        currentAnalysis.analysis?.improvementAreas?.map((area, i) => (
-                          <li key={i}>{area}</li>
-                        ))
                       )}
-                    </ul>
-                  </>
-                )}
-                
-                {/* Analysis Tab */}
-                {activeTab === 'analysis' && currentAnalysis && (
-                  <>
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="#4CAF50"/>
-                      </svg>
-                      Strengths
-                    </h4>
-                    <ul>
-                      {currentAnalysis.analysis?.strengths.map((strength, i) => (
-                        <li key={i}>{strength}</li>
-                      ))}
-                    </ul>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="#F44336"/>
-                      </svg>
-                      Weaknesses
-                    </h4>
-                    <ul>
-                      {currentAnalysis.analysis?.weaknesses.map((weakness, i) => (
-                        <li key={i}>{weakness}</li>
-                      ))}
-                    </ul>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#FF9800"/>
-                      </svg>
-                      Improvement Areas
-                    </h4>
-                    <ul>
-                      {currentAnalysis.analysis?.improvementAreas.map((area, i) => (
-                        <li key={i}>{area}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                
-                {/* UX Analysis Tab */}
-                {activeTab === 'uxanalysis' && currentAnalysis && (
-                  <>
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14l-6-6z" fill="#26D4C8"/>
-                      </svg>
-                      Visual Hierarchy
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.visualHierarchy?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.visualHierarchy?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7z" fill="#FF9800"/>
-                        <path d="M12 17c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5z" fill="#FF9800"/>
-                      </svg>
-                      Color Contrast & Accessibility
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.colorContrast?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.colorContrast?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" fill="#4CAF50"/>
-                      </svg>
-                      Component Selection & Placement
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.componentSelection?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.componentSelection?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z" fill="#03A9F4"/>
-                      </svg>
-                      Text Legibility
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.textLegibility?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.textLegibility?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42 2.89 2.87L15 21h6v-6zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#9C27B0"/>
-                      </svg>
-                      Overall Usability
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.usability?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.usability?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    
-                    <h4>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#607D8B"/>
-                      </svg>
-                      Accessibility Considerations
-                    </h4>
-                    <div className="analysis-section">
-                      <div className="analysis-subsection">
-                        <h5>Issues</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.accessibility?.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="analysis-subsection">
-                        <h5>Improvements</h5>
-                        <ul>
-                          {currentAnalysis.analysis?.accessibility?.improvements.map((improvement, i) => (
-                            <li key={i}>{improvement}</li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </>
                 )}
                 
-                {/* Colors & Typography Tab */}
-                {activeTab === 'colors' && currentAnalysis && (
+                {/* Result Tab */}
+                {activeTab === 'result' && currentAnalysis && (
                   <>
-                    <h4>Color Palette</h4>
-                    <div className="color-grid">
-                      {currentAnalysis.analysis?.metadata?.colors?.primary?.map((color, i) => (
-                        <div key={`p-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
-                          <span>{color}</span>
-                        </div>
-                      ))}
-                      {currentAnalysis.analysis?.metadata?.colors?.secondary?.map((color, i) => (
-                        <div key={`s-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
-                          <span>{color}</span>
-                        </div>
-                      ))}
-                      {currentAnalysis.analysis?.metadata?.colors?.background?.map((color, i) => (
-                        <div key={`b-${i}`} className="color-swatch" style={{ backgroundColor: color }}>
-                          <span>{color}</span>
-                        </div>
-                      ))}
+                    <div className="result-container">
+                      {currentAnalysis.analysis?.rawResponse ? (
+                        <pre className="raw-response">
+                          {currentAnalysis.analysis.rawResponse}
+                        </pre>
+                      ) : (
+                        <p>No response data available</p>
+                      )}
                     </div>
-                    
-                    <h4>Typography</h4>
-                    <ul>
-                      {currentAnalysis.analysis?.metadata?.fonts?.map((font, i) => (
-                        <li key={i}>{font}</li>
-                      ))}
-                    </ul>
-                    
-                    <h4>Components</h4>
-                    <ul>
-                      {currentAnalysis.analysis?.metadata?.components?.map((component, i) => (
-                        <li key={i}>{component}</li>
-                      ))}
-                    </ul>
                   </>
                 )}
               </>

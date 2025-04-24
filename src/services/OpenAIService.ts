@@ -35,6 +35,8 @@ interface DesignAnalysisResponse {
       typography: string[];
       components: string[];
     };
+    rawResponse?: string;
+    userPrompt?: string;
   };
   htmlCode: string;
   cssCode: string;
@@ -410,7 +412,7 @@ class OpenAIService {
       const responseContent = data.choices[0].message.content;
       
       // Parse the response to extract HTML, CSS, and analysis
-      return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
+      return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0, userPrompt);
     } catch (error: any) {
       console.error('Error analyzing design:', error);
       
@@ -469,7 +471,7 @@ class OpenAIService {
   }
   
   // Parse the OpenAI response to extract HTML, CSS, and analysis
-  private parseOpenAIResponse(response: string, hasUserInsights: boolean = false): DesignAnalysisResponse {
+  private parseOpenAIResponse(response: string, hasUserInsights: boolean = false, userPrompt: string = ''): DesignAnalysisResponse {
     console.log('Parsing OpenAI response...');
     
     try {
@@ -511,7 +513,9 @@ class OpenAIService {
             colorPalette: [],
             typography: [],
             components: []
-          }
+          },
+          rawResponse: response,
+          userPrompt: userPrompt
         },
         htmlCode: '',
         cssCode: '',
@@ -708,6 +712,8 @@ class OpenAIService {
   
   // Create a fallback demo response for development/testing
   private getFallbackAnalysisResponse(dimensions: {width: number, height: number}): DesignAnalysisResponse {
+    const fallbackResponse = "This is a fallback response for development/testing purposes. In production, this would contain the full GPT-4.1 analysis.";
+    
     return {
       analysis: {
         strengths: [
@@ -825,7 +831,9 @@ class OpenAIService {
             "Cards: White background, subtle shadow (0 2px 5px rgba(0,0,0,0.08)), 16px border radius, 24px padding",
             "Navigation: Consistent 16px spacing between items, 2px accent indicator for active items"
           ]
-        }
+        },
+        rawResponse: fallbackResponse,
+        userPrompt: "This is a fallback prompt for development/testing purposes."
       },
       htmlCode: `<!DOCTYPE html>
 <html lang="en">
@@ -1470,12 +1478,12 @@ footer {
     }
     
     const data = await openaiResponse.json();
+    const responseContent = data.choices[0]?.message?.content || '';
     
-    // Extract the response content
-    const responseContent = data.choices[0].message.content;
+    console.log('Received OpenAI API response, content length:', responseContent.length);
     
-    // Parse the response to extract HTML, CSS, and analysis
-    return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0);
+    // Process the response
+    return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0, userPrompt);
   }
 }
 

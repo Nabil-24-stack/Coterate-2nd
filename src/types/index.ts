@@ -68,6 +68,8 @@ export interface DesignAnalysis {
     fonts?: string[];
     components?: string[];
   };
+  rawResponse?: string; // Store the full raw GPT-4.1 response
+  userPrompt?: string; // Store the user's prompt input
 }
 
 // Interface for Page
