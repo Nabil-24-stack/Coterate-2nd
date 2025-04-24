@@ -75,7 +75,7 @@ const Header: React.FC = () => {
       <HeaderContainer>
         <Logo>
           <LogoImage src="/Logo.png" alt="Coterate Logo" />
-          <LogoText>Coterate</LogoText>
+          <LogoText>coterate</LogoText>
         </Logo>
       </HeaderContainer>
     </>
