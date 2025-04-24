@@ -1400,61 +1400,41 @@ export const Canvas: React.FC = () => {
     const maxScale = 4;
     const panSensitivity = 1.5; // Adjust sensitivity of panning
     
-    // Check if Command+Control is pressed for zooming
-    if (e.metaKey && e.ctrlKey) {
+    // Allow zooming if (Cmd+Ctrl) or (pinch gesture: ctrlKey only)
+    const isZoomGesture = (e.metaKey && e.ctrlKey) || (e.ctrlKey && !e.metaKey);
+    if (isZoomGesture) {
       // ZOOMING BEHAVIOR
-      // Calculate new scale
       let newScale = scale;
       
       if (e.deltaY < 0) {
-        // Zoom in
         newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
       } else {
-        // Zoom out
         newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
       }
       
-      // Get canvas element and its rectangle
       const canvasElement = canvasRef.current;
       if (!canvasElement) return;
-      
       const rect = canvasElement.getBoundingClientRect();
-      
-      // Get cursor position relative to canvas
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      
-      // Calculate the point on the original content where the cursor is
       const originX = mouseX / scale - position.x / scale;
       const originY = mouseY / scale - position.y / scale;
-      
-      // Calculate the new position to keep cursor point fixed
       const newPositionX = mouseX - originX * newScale;
       const newPositionY = mouseY - originY * newScale;
-      
-      // Update state
       setScale(newScale);
       setPosition({ x: newPositionX, y: newPositionY });
-      
-      // Save position immediately after zooming
       if (currentPage?.id) {
         saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
       }
     } else {
       // SCROLLING/PANNING BEHAVIOR
-      // Calculate how much to move the canvas
       const deltaX = e.deltaX * panSensitivity;
       const deltaY = e.deltaY * panSensitivity;
-      
-      // Update position state with the new position
       const newPosition = {
         x: position.x - deltaX,
         y: position.y - deltaY,
       };
-      
       setPosition(newPosition);
-      
-      // Save position after panning
       if (currentPage?.id) {
         saveCanvasPosition(currentPage.id, newPosition, scale);
       }
@@ -2245,56 +2225,37 @@ export const Canvas: React.FC = () => {
       const maxScale = 4;
       const panSensitivity = 1.5; // Adjust sensitivity of panning
       
-      // Check if Command+Control is pressed for zooming
-      if (e.metaKey && e.ctrlKey) {
+      // Allow zooming if (Cmd+Ctrl) or (pinch gesture: ctrlKey only)
+      const isZoomGesture = (e.metaKey && e.ctrlKey) || (e.ctrlKey && !e.metaKey);
+      if (isZoomGesture) {
         // ZOOMING BEHAVIOR
-        // Calculate new scale
         let newScale = scale;
-        
         if (e.deltaY < 0) {
-          // Zoom in
           newScale = Math.min(scale * (1 + zoomSensitivity), maxScale);
         } else {
-          // Zoom out
           newScale = Math.max(scale * (1 - zoomSensitivity), minScale);
         }
-        
-        // Get cursor position relative to canvas
         const rect = canvasElement.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        
-        // Calculate the point on the original content where the cursor is
         const originX = mouseX / scale - position.x / scale;
         const originY = mouseY / scale - position.y / scale;
-        
-        // Calculate the new position to keep cursor point fixed
         const newPositionX = mouseX - originX * newScale;
         const newPositionY = mouseY - originY * newScale;
-        
-        // Apply the new scale and position
         setScale(newScale);
         setPosition({ x: newPositionX, y: newPositionY });
-        
-        // Save position immediately after wheel zoom
         if (currentPage?.id) {
           saveCanvasPosition(currentPage.id, { x: newPositionX, y: newPositionY }, newScale);
         }
       } else {
         // SCROLLING/PANNING BEHAVIOR
-        // Calculate how much to move the canvas
         const deltaX = e.deltaX * panSensitivity;
         const deltaY = e.deltaY * panSensitivity;
-        
-        // Update position state with the new position
         const newPosition = {
           x: position.x - deltaX,
           y: position.y - deltaY,
         };
-        
         setPosition(newPosition);
-        
-        // Save position after panning
         if (currentPage?.id) {
           saveCanvasPosition(currentPage.id, newPosition, scale);
         }
