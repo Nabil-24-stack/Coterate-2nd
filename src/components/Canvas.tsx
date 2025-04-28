@@ -207,7 +207,7 @@ const LoadingSpinner = () => (
 );
 
 // Replace the ProcessingOverlay styled component with a more detailed version
-const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 'recreating' | 'rendering' | null }>`
+const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 'recreating' | 'rendering' | 'reloading' | null }>`
   position: absolute;
   top: 0;
   left: 0;
@@ -313,6 +313,7 @@ const ProcessingOverlay = styled.div<{ visible: boolean; step: 'analyzing' | 're
           case 'analyzing': return '33%';
           case 'recreating': return '66%';
           case 'rendering': return '90%';
+          case 'reloading': return '50%';
           default: return '0%';
         }
       }};
@@ -343,7 +344,7 @@ const Spinner = () => (
 );
 
 // Add component for the processing steps renderings
-const ProcessingSteps = ({ step }: { step: 'analyzing' | 'recreating' | 'rendering' | null }) => {
+const ProcessingSteps = ({ step }: { step: 'analyzing' | 'recreating' | 'rendering' | 'reloading' | null }) => {
   return (
     <ul className="analysis-list">
       <li className={step === 'analyzing' ? 'active' : (step === 'recreating' || step === 'rendering' ? 'completed' : 'pending')}>
@@ -721,6 +722,8 @@ type ExtendedDesign = Design & {
 type ExtendedDesignIteration = DesignIteration & {
   isProcessing?: boolean;
   processingStep?: 'analyzing' | 'recreating' | 'rendering' | null;
+  isReloading?: boolean;
+  _reloadTimestamp?: number;
 };
 
 // Add a debug function to log the designs state
@@ -2489,25 +2492,28 @@ export const Canvas: React.FC = () => {
                     renderedIterationsRef.current.add(iteration.id);
                   }
                 }}
+                key={iteration._reloadTimestamp || iteration.id} // Force re-mount on reload
               />
               
               {/* Add processing overlay for iterations */}
               <ProcessingOverlay 
-                visible={!!iteration.isProcessing} 
-                step={iteration.processingStep || null}
+                visible={!!iteration.isProcessing || !!iteration.isReloading} 
+                step={iteration.isReloading ? 'reloading' : iteration.processingStep || null}
               >
                 <Spinner />
                 <h3>
                   {iteration.processingStep === 'analyzing' && 'Analyzing Design'}
                   {iteration.processingStep === 'recreating' && 'Generating Improved Design'}
                   {iteration.processingStep === 'rendering' && 'Finalizing Design'}
+                  {iteration.isReloading && 'Rebuilding Design'}
                 </h3>
                 <p>
                   {iteration.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
                   {iteration.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
                   {iteration.processingStep === 'rendering' && 'Preparing to display your improved design...'}
+                  {iteration.isReloading && 'Rebuilding design from raw response data...'}
                 </p>
-                <ProcessingSteps step={iteration.processingStep || null} />
+                {!iteration.isReloading && <ProcessingSteps step={iteration.processingStep || null} />}
                 <div className="progress-bar">
                   <div className="progress"></div>
                 </div>
@@ -2515,6 +2521,7 @@ export const Canvas: React.FC = () => {
                   {iteration.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
                   {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
                   {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
+                  {iteration.isReloading && 'Extracting and applying HTML and CSS from raw response...'}
                 </div>
               </ProcessingOverlay>
             </IterationDesignCard>
@@ -2684,13 +2691,60 @@ export const Canvas: React.FC = () => {
     }
     
     try {
+      // Set loading state for this specific iteration
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (!design.iterations) return design;
+          
+          const updatedIterations = design.iterations.map(it => 
+            it.id === iteration.id
+              ? { ...it, isReloading: true }
+              : it
+          );
+          
+          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+            return { ...design, iterations: updatedIterations };
+          }
+          return design;
+        })
+      );
+      
+      // Close the analysis panel to show the loading state
+      setAnalysisVisible(false);
+      
       // Parse the raw response to extract HTML and CSS
+      console.log('Parsing raw response for reload...');
       const parsedResponse = openAIService.parseRawResponse(iteration.analysis.rawResponse);
       
       if (!parsedResponse.htmlCode && !parsedResponse.cssCode) {
         alert('Could not extract valid HTML or CSS from the raw response.');
+        // Reset loading state
+        setDesigns(prevDesigns => 
+          prevDesigns.map(design => {
+            if (!design.iterations) return design;
+            
+            const updatedIterations = design.iterations.map(it => 
+              it.id === iteration.id
+                ? { ...it, isReloading: false }
+                : it
+            );
+            
+            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+              return { ...design, iterations: updatedIterations };
+            }
+            return design;
+          })
+        );
         return;
       }
+
+      console.log('Extracted HTML and CSS:', {
+        htmlLength: parsedResponse.htmlCode.length,
+        cssLength: parsedResponse.cssCode.length
+      });
+      
+      // Add a slight delay to ensure loading state is visible
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Update the designs state with the newly parsed HTML/CSS
       setDesigns(prevDesigns => 
@@ -2701,9 +2755,12 @@ export const Canvas: React.FC = () => {
             it.id === iteration.id
               ? {
                   ...it,
-                  htmlContent: parsedResponse.htmlCode || it.htmlContent,
-                  cssContent: parsedResponse.cssCode || it.cssContent,
-                  isReloaded: true
+                  htmlContent: parsedResponse.htmlCode,
+                  cssContent: parsedResponse.cssCode,
+                  isReloaded: true,
+                  isReloading: false,
+                  // Force a re-render by adding a timestamp
+                  _reloadTimestamp: Date.now()
                 }
               : it
           );
@@ -2717,20 +2774,44 @@ export const Canvas: React.FC = () => {
         })
       );
       
-      // Find and refresh the HTML renderer for this iteration
+      // Find the HTML renderer for this iteration and completely rebuild it
       const designRef = getDesignRef(iteration.id);
       if (designRef && 'refreshContent' in designRef) {
-        (designRef as any).refreshContent();
+        console.log('Refreshing HTML content in iframe...');
+        // Force a complete refresh of the iframe content
+        setTimeout(() => {
+          (designRef as any).refreshContent();
+          
+          // After the component refreshes, show success message
+          setTimeout(() => {
+            alert('Design has been reloaded from the raw response.');
+          }, 500);
+        }, 100); // Small delay to ensure state update completes
+      } else {
+        console.warn('Could not find HTML renderer reference for iteration:', iteration.id);
+        alert('Design has been reloaded from the raw response.');
       }
-      
-      // Show success message
-      alert('Design has been reloaded from the raw response.');
-      
-      // Close the analysis panel
-      setAnalysisVisible(false);
     } catch (error) {
       console.error('Error reloading from raw response:', error);
       alert(`Failed to reload design: ${(error as Error).message}`);
+      
+      // Reset loading state on error
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (!design.iterations) return design;
+          
+          const updatedIterations = design.iterations.map(it => 
+            it.id === iteration.id
+              ? { ...it, isReloading: false }
+              : it
+          );
+          
+          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+            return { ...design, iterations: updatedIterations };
+          }
+          return design;
+        })
+      );
     }
   };
 
