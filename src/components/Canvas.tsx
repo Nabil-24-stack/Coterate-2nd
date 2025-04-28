@@ -577,6 +577,41 @@ const AnalysisPanelContent = styled.div`
   .result-container {
     margin-bottom: 20px;
     
+    .result-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 10px;
+    }
+    
+    .reload-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background-color: #26D4C8;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      color: #383838;
+      transition: background-color 0.2s ease;
+      
+      &:hover {
+        background-color: #1fb9ae;
+      }
+      
+      &:active {
+        background-color: #18a79d;
+      }
+      
+      svg {
+        width: 16px;
+        height: 16px;
+      }
+    }
+    
     .raw-response {
       background-color: #f5f5f5;
       padding: 15px;
@@ -2641,6 +2676,64 @@ export const Canvas: React.FC = () => {
     loadCanvasPosition(currentPage.id);
   }, []); // Empty dependency array = only run once on mount
 
+  // Function to handle reloading a design from the raw response
+  const handleReloadFromRawResponse = async (iteration: DesignIteration) => {
+    if (!iteration.analysis?.rawResponse) {
+      alert('No raw response data available to reload from.');
+      return;
+    }
+    
+    try {
+      // Parse the raw response to extract HTML and CSS
+      const parsedResponse = openAIService.parseRawResponse(iteration.analysis.rawResponse);
+      
+      if (!parsedResponse.htmlCode && !parsedResponse.cssCode) {
+        alert('Could not extract valid HTML or CSS from the raw response.');
+        return;
+      }
+      
+      // Update the designs state with the newly parsed HTML/CSS
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (!design.iterations) return design;
+          
+          const updatedIterations = design.iterations.map(it => 
+            it.id === iteration.id
+              ? {
+                  ...it,
+                  htmlContent: parsedResponse.htmlCode || it.htmlContent,
+                  cssContent: parsedResponse.cssCode || it.cssContent,
+                  isReloaded: true
+                }
+              : it
+          );
+          
+          // Only return a new design if any iterations were updated
+          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
+            return { ...design, iterations: updatedIterations };
+          }
+          
+          return design;
+        })
+      );
+      
+      // Find and refresh the HTML renderer for this iteration
+      const designRef = getDesignRef(iteration.id);
+      if (designRef && 'refreshContent' in designRef) {
+        (designRef as any).refreshContent();
+      }
+      
+      // Show success message
+      alert('Design has been reloaded from the raw response.');
+      
+      // Close the analysis panel
+      setAnalysisVisible(false);
+    } catch (error) {
+      console.error('Error reloading from raw response:', error);
+      alert(`Failed to reload design: ${(error as Error).message}`);
+    }
+  };
+
   return (
     <>
       <GlobalStyle />
@@ -2749,6 +2842,17 @@ export const Canvas: React.FC = () => {
                 {activeTab === 'result' && currentAnalysis && (
                   <>
                     <div className="result-container">
+                      <div className="result-actions">
+                        <button 
+                          className="reload-button" 
+                          onClick={() => handleReloadFromRawResponse(currentAnalysis)}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M13.65 2.35C12.2 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C11.73 16 14.84 13.45 15.74 10H13.65C12.83 12.33 10.61 14 8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35Z" fill="currentColor"/>
+                          </svg>
+                          Reload Design
+                        </button>
+                      </div>
                       {currentAnalysis.analysis?.rawResponse ? (
                         <pre className="raw-response">
                           {currentAnalysis.analysis.rawResponse}

@@ -1485,6 +1485,83 @@ footer {
     // Process the response
     return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0, userPrompt);
   }
+
+  // Public method to parse a raw response and extract HTML/CSS
+  parseRawResponse(response: string): { htmlCode: string; cssCode: string } {
+    console.log('Parsing raw response for reload...');
+    
+    try {
+      // Initialize result with empty strings
+      const result = {
+        htmlCode: '',
+        cssCode: ''
+      };
+      
+      // Extract HTML code with flexible pattern matching
+      const htmlRegexPatterns = [
+        /```html\n([\s\S]*?)```/,       // Standard format
+        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
+        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
+        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
+        /```([\s\S]*?)<\/html>\n```/,   // Code block with HTML ending tag
+        /<!DOCTYPE html>([\s\S]*?)<\/html>/ // Full HTML document
+      ];
+      
+      // Try each HTML pattern
+      for (const pattern of htmlRegexPatterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          result.htmlCode = match[1].trim();
+          break;
+        }
+      }
+      
+      // If we couldn't extract HTML with patterns but <!DOCTYPE html> exists
+      if (!result.htmlCode && response.includes('<!DOCTYPE html>')) {
+        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
+        const endIndex = response.indexOf('</html>', docTypeIndex);
+        if (endIndex > docTypeIndex) {
+          result.htmlCode = response.substring(docTypeIndex, endIndex + 7).trim();
+        }
+      }
+      
+      // Extract CSS code with flexible pattern matching
+      const cssRegexPatterns = [
+        /```css\n([\s\S]*?)```/,       // Standard format
+        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
+        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
+        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
+      ];
+      
+      // Try each CSS pattern
+      for (const pattern of cssRegexPatterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          result.cssCode = match[1].trim();
+          break;
+        }
+      }
+      
+      // If no full match found but there are style tags
+      if (!result.cssCode && response.includes('style>')) {
+        const styleIndex = response.indexOf('<style>');
+        const endIndex = response.indexOf('</style>', styleIndex);
+        if (endIndex > styleIndex && styleIndex !== -1) {
+          result.cssCode = response.substring(styleIndex + 7, endIndex).trim();
+        }
+      }
+      
+      console.log('Extraction results:', { 
+        htmlFound: !!result.htmlCode, 
+        cssFound: !!result.cssCode 
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Error parsing raw response:', error);
+      return { htmlCode: '', cssCode: '' };
+    }
+  }
 }
 
 const openAIService = new OpenAIService();

@@ -13,6 +13,7 @@ interface HtmlDesignRendererProps {
 
 export interface HtmlDesignRendererHandle {
   convertToImage: () => Promise<string | null>;
+  refreshContent: () => void;
 }
 
 const RendererContainer = styled.div<{ width?: number; height?: number; showBorder?: boolean }>`
@@ -416,7 +417,35 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
 
   // Expose the convertToImage method to parent components via ref
   useImperativeHandle(ref, () => ({
-    convertToImage
+    convertToImage,
+    refreshContent: () => {
+      // Rerender the HTML content
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+      
+      try {
+        // Get the iframe document
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iframeDoc) {
+          setError('Could not access iframe document');
+          onRender?.(false);
+          return;
+        }
+        
+        // Write the content to the iframe again
+        iframeDoc.open();
+        iframeDoc.write(combinedContent);
+        iframeDoc.close();
+        
+        console.log('HtmlDesignRenderer: Content refreshed');
+        setError(null);
+        onRender?.(true);
+      } catch (err) {
+        console.error('Error refreshing HTML content:', err);
+        setError(`Refresh error: ${err}`);
+        onRender?.(false);
+      }
+    }
   }));
 
   return (
