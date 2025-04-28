@@ -244,9 +244,25 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
           shape-rendering: geometricPrecision;
           text-rendering: optimizeLegibility;
         }
+
+        /* FIX: Ensure CSS root variables are accessible */
+        :root {
+          /* Fallback colors */
+          --primary-color: #4f46e5;
+          --primary-bg: #ffffff;
+          --text-color: #333333;
+        }
         
         /* Custom CSS */
         ${processedCssContent}
+
+        /* DEBUG: Apply styles for critical elements if they're not working */
+        .debugPrimaryColor {
+          color: var(--primary-color, #4f46e5);
+        }
+        .debugPrimaryBg {
+          background-color: var(--primary-bg, #f9fafb);
+        }
       </style>
       
       <script>
@@ -323,12 +339,46 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
               }
             });
           };
+
+          // DEBUG: Check styles for critical elements 
+          const debugStyles = () => {
+            // Collect CSS diagnostics
+            const styles = {};
+            
+            // Check for external stylesheets
+            document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+              console.log("External stylesheet:", link.href);
+            });
+            
+            // Check CSS variables
+            const rootStyle = getComputedStyle(document.documentElement);
+            const cssVars = ['--primary-color', '--primary-bg', '--text-color'];
+            cssVars.forEach(varName => {
+              styles[varName] = rootStyle.getPropertyValue(varName);
+              console.log("CSS Variable " + varName + ":", styles[varName]);
+            });
+            
+            // Check if body has background color
+            const bodyStyle = getComputedStyle(document.body);
+            styles['body-bg'] = bodyStyle.backgroundColor;
+            
+            console.log("Style diagnostics:", styles);
+            
+            // Log to parent for debugging
+            if (window.parent) {
+              window.parent.postMessage({
+                type: 'style-diagnostics', 
+                data: styles
+              }, '*');
+            }
+          };
           
           // Run all processors
           processImages();
           processIcons();
           processPositionedElements();
           processFormElements();
+          debugStyles();
           
           // Signal that content is loaded and ready
           if (window.parent) {
@@ -368,6 +418,9 @@ export const HtmlDesignRenderer = forwardRef<HtmlDesignRendererHandle, HtmlDesig
             // Mark render as successful
             setError(null);
             onRender?.(true);
+          } else if (event.data && typeof event.data === 'object' && event.data.type === 'style-diagnostics') {
+            // Log style diagnostics for debugging
+            console.log("Style diagnostics from iframe:", event.data.data);
           }
         };
         

@@ -1551,9 +1551,31 @@ footer {
         }
       }
       
+      // If still no CSS found, try to extract it from the raw text using more general regex
+      if (!result.cssCode) {
+        // Look for common CSS patterns like declarations and rules
+        const cssBlockPattern = /\/\* .*? \*\/|:root\s*{[\s\S]*?}|body\s*{[\s\S]*?}|\.[\w-]+\s*{[\s\S]*?}/g;
+        const cssBlocks = response.match(cssBlockPattern);
+        
+        if (cssBlocks && cssBlocks.length > 0) {
+          result.cssCode = cssBlocks.join('\n\n');
+        }
+      }
+      
+      // Fix common issues with extracted CSS
+      if (result.cssCode) {
+        result.cssCode = this.fixCssIssues(result.cssCode);
+      }
+      
+      // Fix HTML to use inline styles instead of external stylesheets
+      if (result.htmlCode && result.cssCode) {
+        result.htmlCode = this.fixHtmlStyleReferences(result.htmlCode, result.cssCode);
+      }
+      
       console.log('Extraction results:', { 
         htmlFound: !!result.htmlCode, 
-        cssFound: !!result.cssCode 
+        cssFound: !!result.cssCode,
+        cssLength: result.cssCode?.length || 0 
       });
       
       return result;
@@ -1561,6 +1583,63 @@ footer {
       console.error('Error parsing raw response:', error);
       return { htmlCode: '', cssCode: '' };
     }
+  }
+  
+  // Helper method to fix common CSS issues
+  private fixCssIssues(css: string): string {
+    console.log('Fixing CSS issues...');
+    let fixedCss = css;
+    
+    // 1. Check for missing semicolons
+    const propertyPattern = /([a-z-]+)\s*:\s*([^;}]+)(?=[}])/g;
+    fixedCss = fixedCss.replace(propertyPattern, '$1: $2;');
+    
+    // 2. Count opening and closing braces
+    const openBraces = (fixedCss.match(/{/g) || []).length;
+    const closeBraces = (fixedCss.match(/}/g) || []).length;
+    const missingCloseBraces = openBraces - closeBraces;
+    
+    // Add missing closing braces
+    if (missingCloseBraces > 0) {
+      console.log(`Adding ${missingCloseBraces} missing closing braces to CSS`);
+      fixedCss = fixedCss + '\n' + '}'.repeat(missingCloseBraces);
+    }
+    
+    // 3. Ensure last property has semicolon
+    const lastPropertyPattern = /([a-z-]+)\s*:\s*([^;}]+)(?=\s*$)/g;
+    fixedCss = fixedCss.replace(lastPropertyPattern, '$1: $2;');
+    
+    return fixedCss;
+  }
+  
+  // Helper method to fix HTML to use inline styles
+  private fixHtmlStyleReferences(html: string, css: string): string {
+    // Replace external stylesheet references with inline style
+    const linkStylesheetPattern = /<link[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/g;
+    const inlineStyleTag = `<style>\n${css}\n</style>`;
+    
+    let fixedHtml = html.replace(linkStylesheetPattern, inlineStyleTag);
+    
+    // If no replacement happened, check if there's a head tag to add the style to
+    if (fixedHtml === html && !fixedHtml.includes('<style>')) {
+      if (fixedHtml.includes('</head>')) {
+        fixedHtml = fixedHtml.replace('</head>', `${inlineStyleTag}\n</head>`);
+      } else if (fixedHtml.includes('<body')) {
+        fixedHtml = fixedHtml.replace('<body', `${inlineStyleTag}\n<body`);
+      }
+    }
+    
+    // Fix viewport settings if they're extreme
+    const viewportPattern = /<meta[^>]*name=["']viewport["'][^>]*content=["']([^"']*)["'][^>]*>/g;
+    fixedHtml = fixedHtml.replace(viewportPattern, (match, content) => {
+      // Check if viewport has extreme width/height values
+      if (content.includes('width=') && content.match(/width=\d{4,}/)) {
+        return '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+      }
+      return match;
+    });
+    
+    return fixedHtml;
   }
 }
 
