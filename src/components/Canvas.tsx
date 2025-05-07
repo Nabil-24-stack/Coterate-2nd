@@ -5,6 +5,7 @@ import { Design, DesignIteration, Page } from '../types';
 import supabaseService from '../services/SupabaseService';
 import openAIService from '../services/OpenAIService';
 import HtmlDesignRenderer, { HtmlDesignRendererHandle } from './HtmlDesignRenderer';
+import { WebGLDesignRenderer, WebGLDesignRendererHandle } from './WebGLDesignRenderer';
 import { isFigmaSelectionLink, parseFigmaSelectionLink, FigmaLinkData } from '../utils/figmaLinkParser';
 
 // Global style to ensure no focus outlines or borders
@@ -1317,6 +1318,9 @@ export const Canvas: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const designRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const htmlRendererRef = useRef<HtmlDesignRendererHandle>(null);
+  const webglRendererRef = useRef<WebGLDesignRendererHandle>(null);
+  const htmlRendererRefs = useRef<{ [key: string]: HtmlDesignRendererHandle | null }>({});
+  const webglRendererRefs = useRef<{ [key: string]: WebGLDesignRendererHandle | null }>({});
   
   // Ref to track which iterations have been logged to avoid repeated console logs
   const renderedIterationsRef = useRef<Set<string>>(new Set());
@@ -2459,111 +2463,117 @@ export const Canvas: React.FC = () => {
   };
 
   // Render an iteration separate from the original design
-  const renderIteration = (iteration: ExtendedDesignIteration, index: number, parentDesign: Design) => {
+  const renderIteration = (iteration: ExtendedDesignIteration, index: number, parentDesign: ExtendedDesign) => {
+    const isProcessing = iteration.isProcessing;
+    const isReloading = iteration.isReloading;
+    
     return (
       <DesignContainer 
-        key={`iteration-container-${iteration.id}`}
+        key={`iteration-${iteration.id}`}
         x={iteration.position.x}
         y={iteration.position.y}
       >
         <DesignWithActionsContainer>
-          <div style={{ position: 'relative' }}>
-            {/* The iteration design itself */}
-            <IterationDesignCard 
-              isSelected={selectedDesignId === iteration.id}
-              onClick={(e) => handleDesignClick(e, iteration.id)}
-              onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-              style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
-            >
-              <HtmlDesignRenderer
-                ref={(el: HtmlDesignRendererHandle | null) => {
-                  if (el) {
-                    designRefs.current[iteration.id] = el as any;
-                  }
-                }}
-                htmlContent={iteration.htmlContent} 
-                cssContent={iteration.cssContent}
-                width={iteration.dimensions?.width} 
-                height={iteration.dimensions?.height}
-                onRender={(success) => {
-                  // Only log the first successful render to avoid console clutter
-                  if (success && !renderedIterationsRef.current.has(iteration.id)) {
-                    LogManager.log(`iteration-${iteration.id}`, `Iteration ${iteration.id} rendered successfully: ${success}`);
-                    renderedIterationsRef.current.add(iteration.id);
-                  }
-                }}
-                key={iteration._reloadTimestamp || iteration.id} // Force re-mount on reload
-              />
-              
-              {/* Add processing overlay for iterations */}
-              <ProcessingOverlay 
-                visible={!!iteration.isProcessing || !!iteration.isReloading} 
-                step={iteration.isReloading ? 'reloading' : iteration.processingStep || null}
-              >
+          <DesignCard 
+            isSelected={selectedDesignId === iteration.id}
+            onClick={(e) => handleDesignClick(e, iteration.id)}
+            onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+            className="iteration"
+            ref={(el) => designRefs.current[iteration.id] = el}
+          >
+            {isProcessing || isReloading ? (
+              <ProcessingOverlay visible={true} step={iteration.processingStep || null}>
                 <Spinner />
                 <h3>
-                  {iteration.processingStep === 'analyzing' && 'Analyzing Design'}
-                  {iteration.processingStep === 'recreating' && 'Generating Improved Design'}
-                  {iteration.processingStep === 'rendering' && 'Finalizing Design'}
-                  {iteration.isReloading && 'Rebuilding Design'}
+                  {isReloading ? 'Reloading Design' : 
+                    (iteration.processingStep === 'analyzing' ? 'Analyzing Design' : 
+                     iteration.processingStep === 'recreating' ? 'Generating Improved Design' : 
+                     'Finalizing Design')}
                 </h3>
                 <p>
-                  {iteration.processingStep === 'analyzing' && 'AI is analyzing your design for visual hierarchy, contrast, and usability...'}
-                  {iteration.processingStep === 'recreating' && 'Creating an improved version based on analysis...'}
-                  {iteration.processingStep === 'rendering' && 'Preparing to display your improved design...'}
-                  {iteration.isReloading && 'Rebuilding design from raw response data...'}
+                  {isReloading ? 'Regenerating design from raw response...' :
+                    (iteration.processingStep === 'analyzing' ? 'AI is analyzing your design for visual hierarchy, contrast, and usability...' : 
+                     iteration.processingStep === 'recreating' ? 'Creating an improved version based on analysis...' : 
+                     'Preparing to display your improved design...')}
                 </p>
-                {!iteration.isReloading && <ProcessingSteps step={iteration.processingStep || null} />}
+                {!isReloading && <ProcessingSteps step={iteration.processingStep || null} />}
                 <div className="progress-bar">
                   <div className="progress"></div>
                 </div>
-                <div className="step-description">
-                  {iteration.processingStep === 'analyzing' && 'Identifying areas for improvement in your design...'}
-                  {iteration.processingStep === 'recreating' && 'Applying improvements to visual hierarchy, contrast, and components...'}
-                  {iteration.processingStep === 'rendering' && 'Final touches and optimizations...'}
-                  {iteration.isReloading && 'Extracting and applying HTML and CSS from raw response...'}
-                </div>
               </ProcessingOverlay>
-            </IterationDesignCard>
-          </div>
+            ) : iteration.sceneDescription ? (
+              // Render using WebGL if we have a scene description
+              <WebGLDesignRenderer
+                ref={(el) => {
+                  if (el) {
+                    // Cast is needed because TypeScript doesn't understand this mixed type assignment
+                    const renderers = webglRendererRefs.current as Record<string, WebGLDesignRendererHandle>;
+                    renderers[iteration.id] = el;
+                  }
+                }}
+                sceneDescription={iteration.sceneDescription}
+                width={iteration.dimensions?.width}
+                height={iteration.dimensions?.height}
+                onRender={(success) => {
+                  // Log only once to avoid console spam
+                  if (!renderedIterationsRef.current.has(iteration.id)) {
+                    console.log(`WebGL Renderer for iteration ${iteration.id} initialized: ${success ? 'success' : 'failed'}`);
+                    renderedIterationsRef.current.add(iteration.id);
+                  }
+                }}
+              />
+            ) : (
+              // Fall back to HTML renderer for backward compatibility
+              <HtmlDesignRenderer
+                ref={(el) => {
+                  if (el) {
+                    // Cast is needed because TypeScript doesn't understand this mixed type assignment
+                    const renderers = htmlRendererRefs.current as Record<string, HtmlDesignRendererHandle>;
+                    renderers[iteration.id] = el;
+                  }
+                }}
+                htmlContent={iteration.htmlContent || ''}
+                cssContent={iteration.cssContent || ''}
+                width={iteration.dimensions?.width}
+                height={iteration.dimensions?.height}
+                onRender={(success) => {
+                  // Log only once to avoid console spam
+                  if (!renderedIterationsRef.current.has(iteration.id)) {
+                    console.log(`HTML Renderer for iteration ${iteration.id} initialized: ${success ? 'success' : 'failed'}`);
+                    renderedIterationsRef.current.add(iteration.id);
+                  }
+                }}
+              />
+            )}
+            
+            <DragHandle 
+              onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+              title="Drag to move"
+            >
+              <DragIcon />
+            </DragHandle>
+            
+            <DesignIndicator>
+              <IterationNumber>#{index + 1}</IterationNumber>
+            </DesignIndicator>
+          </DesignCard>
           
-          {/* New action buttons component */}
-          <ActionButtonsContainer scale={scale}>
-            <ActionButton className="secondary" onMouseDown={(e) => {
-              e.stopPropagation();
-              // Select the design if not already selected
-              if (selectedDesignId !== iteration.id) {
-                setSelectedDesignId(iteration.id);
-              }
-              
-              // Start dragging the design
-              setIsDesignDragging(true);
-              setDesignDragStart({
-                x: e.clientX,
-                y: e.clientY
-              });
-              
-              // Store the initial position for calculation during dragging
-              setDesignInitialPosition(iteration.position);
-            }}>
-              <DragHandleIcon />
-              Drag
-            </ActionButton>
+          <ActionButtonsContainer>
             <ActionButton className="analysis" onClick={(e) => {
               e.stopPropagation();
-              setCurrentAnalysis(iteration);
+              setCurrentAnalysis(iteration as DesignIteration);
               setAnalysisVisible(true);
             }}>
               <ViewIcon />
               View Analysis
             </ActionButton>
-            <ActionButton>
-              <RetryIcon />
-              Retry
+            <ActionButton className="delete" onClick={(e) => handleDeleteIteration(e, iteration.id, parentDesign.id)}>
+              <DeleteIcon />
+              Delete
             </ActionButton>
-            <ActionButton className="primary" onClick={(e) => handleIterationClick(e, iteration.id)}>
-              <IterateIcon />
-              Iterate
+            <ActionButton className="primary" onClick={(e) => handleExportIteration(e, iteration)}>
+              <ExportIcon />
+              Export
             </ActionButton>
           </ActionButtonsContainer>
         </DesignWithActionsContainer>
@@ -2716,86 +2726,46 @@ export const Canvas: React.FC = () => {
       console.log('Parsing raw response for reload...');
       const parsedResponse = openAIService.parseRawResponse(iteration.analysis.rawResponse);
       
-      if (!parsedResponse.htmlCode && !parsedResponse.cssCode) {
-        alert('Could not extract valid HTML or CSS from the raw response.');
-        // Reset loading state
-        setDesigns(prevDesigns => 
-          prevDesigns.map(design => {
-            if (!design.iterations) return design;
-            
-            const updatedIterations = design.iterations.map(it => 
-              it.id === iteration.id
-                ? { ...it, isReloading: false }
-                : it
-            );
-            
-            if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
-              return { ...design, iterations: updatedIterations };
-            }
-            return design;
-          })
-        );
-        return;
+      // Get the parent design
+      const parentDesign = designs.find(d => 
+        d.iterations?.some(it => it.id === iteration.id)
+      );
+      
+      if (!parentDesign) {
+        throw new Error('Could not find parent design for iteration');
       }
-
-      console.log('Extracted HTML and CSS:', {
-        htmlLength: parsedResponse.htmlCode.length,
-        cssLength: parsedResponse.cssCode.length
-      });
       
-      // Add a slight delay to ensure loading state is visible
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Update the designs state with the newly parsed HTML/CSS
+      // Update the iteration with the parsed content
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
-          if (!design.iterations) return design;
+          if (design.id !== parentDesign.id) return design;
           
-          const updatedIterations = design.iterations.map(it => 
+          const updatedIterations = (design.iterations || []).map(it => 
             it.id === iteration.id
-              ? {
-                  ...it,
+              ? { 
+                  ...it, 
+                  isReloading: false,
                   htmlContent: parsedResponse.htmlCode,
                   cssContent: parsedResponse.cssCode,
-                  isReloaded: true,
-                  isReloading: false,
-                  // Force a re-render by adding a timestamp
-                  _reloadTimestamp: Date.now()
+                  sceneDescription: parsedResponse.sceneDescription
                 }
               : it
           );
           
-          // Only return a new design if any iterations were updated
-          if (updatedIterations.some((it, idx) => it !== design.iterations![idx])) {
-            return { ...design, iterations: updatedIterations };
-          }
-          
-          return design;
+          return { ...design, iterations: updatedIterations };
         })
       );
       
-      // Find the HTML renderer for this iteration and completely rebuild it
-      const designRef = getDesignRef(iteration.id);
-      if (designRef && 'refreshContent' in designRef) {
-        console.log('Refreshing HTML content in iframe...');
-        // Force a complete refresh of the iframe content
-        setTimeout(() => {
-          (designRef as any).refreshContent();
-          
-          // After the component refreshes, show success message
-          setTimeout(() => {
-            alert('Design has been reloaded from the raw response.');
-          }, 500);
-        }, 100); // Small delay to ensure state update completes
-      } else {
-        console.warn('Could not find HTML renderer reference for iteration:', iteration.id);
-        alert('Design has been reloaded from the raw response.');
-      }
+      // Re-open the analysis panel
+      setTimeout(() => {
+        setCurrentAnalysis(iteration);
+        setAnalysisVisible(true);
+      }, 500);
+      
     } catch (error) {
       console.error('Error reloading from raw response:', error);
-      alert(`Failed to reload design: ${(error as Error).message}`);
       
-      // Reset loading state on error
+      // Remove the loading state
       setDesigns(prevDesigns => 
         prevDesigns.map(design => {
           if (!design.iterations) return design;
@@ -2812,6 +2782,50 @@ export const Canvas: React.FC = () => {
           return design;
         })
       );
+      
+      alert(`Error reloading design: ${error}`);
+    }
+  };
+
+  // Later, add this method to handle exporting a design iteration that might use either WebGL or HTML renderer
+  const handleExportIteration = async (e: React.MouseEvent, iteration: ExtendedDesignIteration) => {
+    e.stopPropagation();
+    
+    try {
+      console.log(`Canvas: Exporting iteration ${iteration.id}`);
+      
+      // Try to find the renderer for this iteration
+      let imageUrl: string | null = null;
+      
+      if (iteration.sceneDescription) {
+        // Try to get WebGL renderer
+        const renderer = (webglRendererRefs.current as any)[iteration.id];
+        if (renderer && renderer.convertToImage) {
+          imageUrl = await renderer.convertToImage();
+        }
+      } else {
+        // Fall back to HTML renderer
+        const renderer = (htmlRendererRefs.current as any)[iteration.id];
+        if (renderer && renderer.convertToImage) {
+          imageUrl = await renderer.convertToImage();
+        }
+      }
+      
+      if (imageUrl) {
+        // Create temporary link for download
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = `coterate-iteration-${iteration.id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log('Canvas: Iteration export successful');
+      } else {
+        console.error('Canvas: Failed to get image for iteration export');
+      }
+    } catch (error) {
+      console.error('Canvas: Error exporting iteration:', error);
     }
   };
 

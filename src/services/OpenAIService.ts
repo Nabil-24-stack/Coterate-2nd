@@ -38,6 +38,7 @@ interface DesignAnalysisResponse {
     rawResponse?: string;
     userPrompt?: string;
   };
+  sceneDescription: string;
   htmlCode: string;
   cssCode: string;
   metadata: {
@@ -131,288 +132,21 @@ class OpenAIService {
       const dimensions = await this.getImageDimensions(imageUrl);
       return this.getFallbackAnalysisResponse(dimensions);
     }
-    
+
     try {
-      // Get image as base64 if it's a remote URL
-      let base64Image = '';
-      
-      if (imageUrl.startsWith('data:image')) {
-        // Already a data URL, extract the base64 part
-        base64Image = imageUrl.split(',')[1];
-      } else {
-        try {
-          // Get image dimensions first - we need these regardless of fetch method
-          const dimensions = await this.getImageDimensions(imageUrl);
-          
-          // Try to handle CORS issues with Figma images
-          let fetchResponse;
-          try {
-            // First attempt: direct fetch
-            fetchResponse = await fetch(imageUrl, { mode: 'cors' });
-          } catch (directFetchError) {
-            console.log('Direct fetch failed, trying with proxy or CORS mode: no-cors');
-            try {
-              // Second attempt: try with no-cors mode
-              fetchResponse = await fetch(imageUrl, { mode: 'no-cors' });
-            } catch (corsError) {
-              // If both failed, try with a proxy if we have one, otherwise rethrow
-              console.error('Both fetch attempts failed:', corsError);
-              // If the image URL is a Figma URL, try to create a placeholder or use a cached version
-              if (imageUrl.includes('figma-alpha-api.s3') || imageUrl.includes('figma.com')) {
-                // For Figma images that fail with CORS, use a hardcoded data URL as fallback
-                console.log('Figma image detected, using data URL fallback');
-                // Convert the design to a basic data URL by drawing it on a canvas
-                const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-                if (dataUrl) {
-                  base64Image = dataUrl.split(',')[1];
-                  return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
-                }
-              }
-              throw corsError;
-            }
-          }
-          
-          if (!fetchResponse.ok) {
-            throw new Error(`Failed to fetch image: ${fetchResponse.status} ${fetchResponse.statusText}`);
-          }
-          
-          const blob = await fetchResponse.blob();
-          base64Image = await this.blobToBase64(blob);
-        } catch (error: any) {
-          console.error('Error fetching image:', error);
-          
-          // Try to create a data URL from the image as a last resort
-          try {
-            console.log('Attempting to create data URL from image as fallback');
-            const dimensions = await this.getImageDimensions(imageUrl);
-            const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
-            if (dataUrl) {
-              base64Image = dataUrl.split(',')[1];
-              return await this.continueWithAnalysis(base64Image, dimensions, linkedInsights, userPrompt);
-            }
-          } catch (fallbackError) {
-            console.error('Fallback attempt also failed:', fallbackError);
-          }
-          
-          throw new Error(`Failed to process image: ${error.message}`);
-        }
-      }
+      // Convert the image URL to base64
+      const base64Image = await this.imageUrlToBase64(imageUrl);
       
       // Get image dimensions
       const dimensions = await this.getImageDimensions(imageUrl);
       
-      // Process linked insights if available
-      let insightsPrompt = '';
-      if (linkedInsights && linkedInsights.length > 0) {
-        insightsPrompt = '\n\nImportant user insights to consider:\n';
-        linkedInsights.forEach((insight, index) => {
-          const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
-          insightsPrompt += `${index + 1}. ${summary}\n`;
-        });
-        insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
-      }
-      
-      // Add the user prompt if provided
-      const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
-      
-      const requestBody = {
-        model: 'gpt-4.1',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
-
-            MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
-
-            DESIGN SYSTEM EXTRACTION:
-            First, you must carefully extract and document the EXACT design system from the original design:
-            
-            1. Color palette: 
-               - Document every single color used in the UI with precise hex codes
-               - Identify primary, secondary, accent, background, and text colors
-               - Note the exact usage pattern of each color (e.g., which color is used for primary buttons vs secondary buttons)
-            
-            2. Typography:
-               - Document every font family used
-               - Note the exact font sizes used for each text element type (headings, body, buttons, labels, etc.)
-               - Document font weights, line heights, and letter spacing
-               - Map out the typographic hierarchy exactly as used in the design
-            
-            3. UI Components:
-               - Document every UI component type (buttons, inputs, checkboxes, etc.)
-               - For each component, note its exact styling (colors, borders, shadows, padding)
-               - Document different states if visible (hover, active, disabled)
-               - Identify any consistent padding or spacing patterns between components
-            
-            This design system extraction is CRITICAL - you must use these EXACT same values in your improved version.
-            
-            DESIGN ANALYSIS REQUIREMENTS:
-            Perform a comprehensive analysis of the design focusing on:
-            
-            1. Visual hierarchy:
-              - Analyze how effectively the design guides the user's attention
-              - Identify elements that compete for attention or are not properly emphasized
-              - Evaluate the use of size, color, contrast, and spacing to establish hierarchy
-            
-            2. Color contrast and accessibility:
-              - Identify text elements with insufficient contrast ratios (per WCAG guidelines)
-              - Analyze color combinations that may cause visibility or accessibility issues
-              - Evaluate overall color harmony and effective use of color to convey information
-            
-            3. Component selection and placement:
-              - Evaluate the appropriateness of UI components for their intended functions
-              - Identify issues with component placement, grouping, or organization
-              - Assess consistency in component usage throughout the design
-            
-            4. Text legibility:
-              - Identify any text that is too small, has poor contrast, or uses inappropriate fonts
-              - Evaluate line length, line height, letter spacing, and overall readability
-              - Assess font choices for appropriateness to the content and brand
-            
-            5. Overall usability:
-              - Analyze the intuitiveness of interactions and flows
-              - Identify potential points of confusion or friction
-              - Evaluate spacing, alignment, and overall layout effectiveness
-            
-            6. Accessibility considerations:
-              - Identify potential issues for users with disabilities
-              - Assess keyboard navigability, screen reader compatibility, and semantic structure
-              - Evaluate compliance with WCAG guidelines
-            
-            IMPROVEMENT REQUIREMENTS:
-            Based on your analysis, create an IMPROVED VERSION that:
-            
-            1. ALWAYS USES THE EXACT SAME DESIGN SYSTEM - colors, typography, and component styles must be identical to the original
-            2. MAINTAINS THE ORIGINAL DESIGN'S VISUAL STRUCTURE - at least 85% of the original layout must remain unchanged
-            3. Makes targeted improvements ONLY to:
-               - Visual hierarchy through component rearrangement where appropriate
-               - Component selection where a more appropriate component type serves the same function better
-               - Spacing and alignment to improve clarity and flow
-               - Text size or weight adjustments ONLY when needed for legibility (but keep the same font family)
-            4. When swapping a UI component for a more appropriate one (e.g., radio button to checkbox), you MUST style the new component using the EXACT SAME design system (colors, borders, etc.) as the original component
-            5. Never changes the core brand identity or visual language
-            6. Makes only the necessary changes to fix problems - avoid redesigning elements that work well
-            7. Ensures the improved version is immediately recognizable as an iteration of the original
-            
-            DIMENSIONS REQUIREMENT:
-            The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
-            
-            CSS REQUIREMENTS:
-            1. Use CSS Grid and Flexbox for layouts that need to be responsive
-            2. Use absolute positioning for pixel-perfect placement when needed
-            3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
-            4. Ensure clean, well-organized CSS with descriptive class names
-            5. Include detailed comments in CSS explaining design decisions
-            6. Avoid arbitrary magic numbers - document any precise pixel measurements
-            
-            ICON REQUIREMENTS:
-            For any icons identified in the UI:
-            1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
-            2. If no perfect Font Awesome match exists, create the icon using CSS
-            3. Ensure icon sizing and positioning exactly matches the original
-            4. Apply the EXACT SAME colors from the original design to the icons
-            
-            IMAGE REQUIREMENTS:
-            For any images identified in the original design:
-            1. DO NOT use any external image URLs, placeholders, or Unsplash images
-            2. Instead, replace each image with a simple colored div (rectangle or square)
-            3. Use a background color that makes sense in the context (gray, light blue, etc.)
-            4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
-            5. Add a subtle 1px border to the div to indicate it's an image placeholder
-            6. You can add a simple CSS pattern or gradient if appropriate
-            
-            OUTPUT FORMAT:
-            Your response MUST be structured as follows:
-            
-            1. DESIGN SYSTEM:
-               Document the extracted design system in detail (colors, typography, components)
-            
-            2. ANALYSIS:
-               Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
-            
-            3. HTML CODE:
-               Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
-            
-            4. CSS CODE:
-               Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
-            
-            5. IMPROVEMENTS SUMMARY:
-               List the specific improvements made to the design and explain the rationale behind each one
-            ${insightsPrompt}${userPromptContent}`
-          },
-          {
-            role: 'user',
-            content: [{
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${base64Image}`
-              }
-            }]
-          }
-        ],
-        max_tokens: 4000
-      };
-      
-      console.log('Sending request to OpenAI API for design analysis...');
-      
-      // Since direct fetch may face CORS issues in browser environment, use a proxy 
-      // or fallback to server-side processing if needed
-      let openaiResponse;
-      
-      try {
-        // First try direct API call
-        openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`
-          },
-          body: JSON.stringify(requestBody)
-        });
-      } catch (error: any) {
-        console.error('Direct OpenAI API call failed, error details:', error);
-        
-        // In production, never use fallback
-        if (this.isProductionEnvironment()) {
-          throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-        }
-        
-        // Only use fallback during development
-        if (this.isDevEnvironment()) {
-          console.log('Development environment detected, using fallback response for testing');
-          return this.getFallbackAnalysisResponse(dimensions);
-        }
-        
-        // Default behavior for unknown environments - throw the error
-        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-      }
-      
-      if (!openaiResponse.ok) {
-        const errorText = await openaiResponse.text();
-        console.error('OpenAI API error response:', errorText);
-        
-        // In production, never use fallback
-        if (this.isProductionEnvironment()) {
-          throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
-        }
-        
-        // Only use fallback in development
-        if (this.isDevEnvironment()) {
-          console.log('Development environment detected, using fallback response for testing');
-          return this.getFallbackAnalysisResponse(dimensions);
-        }
-        
-        // Default behavior
-        throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
-      }
-      
-      const data = await openaiResponse.json();
-      
-      // Extract the response content
-      const responseContent = data.choices[0].message.content;
-      
-      // Parse the response to extract HTML, CSS, and analysis
-      return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0, userPrompt);
+      // Start analysis with linked insights if provided
+      return await this.continueWithAnalysis(
+        base64Image,
+        dimensions,
+        linkedInsights,
+        userPrompt
+      );
     } catch (error: any) {
       console.error('Error analyzing design:', error);
       
@@ -470,9 +204,9 @@ class OpenAIService {
     });
   }
   
-  // Parse the OpenAI response to extract HTML, CSS, and analysis
-  private parseOpenAIResponse(response: string, hasUserInsights: boolean = false, userPrompt: string = ''): DesignAnalysisResponse {
-    console.log('Parsing OpenAI response...');
+  // Parse the OpenAI WebGL scene response
+  private parseWebGLResponse(response: string, hasUserInsights: boolean = false, userPrompt: string = ''): DesignAnalysisResponse {
+    console.log('Parsing OpenAI WebGL response...');
     
     try {
       // Log the first 200 characters of the response to help with debugging
@@ -517,8 +251,9 @@ class OpenAIService {
           rawResponse: response,
           userPrompt: userPrompt
         },
-        htmlCode: '',
-        cssCode: '',
+        sceneDescription: '',
+        htmlCode: '', // Keep for backward compatibility
+        cssCode: '', // Keep for backward compatibility
         metadata: {
           colors: {
             primary: [],
@@ -531,155 +266,100 @@ class OpenAIService {
         }
       };
       
-      // Extract HTML code between ```html and ``` tags with more flexible pattern matching
-      const htmlRegexPatterns = [
-        /```html\n([\s\S]*?)```/,       // Standard format
-        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
-        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
-        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
-        /```([\s\S]*?)<\/html>\n```/    // Code block with HTML ending tag
-      ];
+      // Extract JSON content from the response
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
       
-      let htmlContent = '';
-      for (const pattern of htmlRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          htmlContent = match[1].trim();
-          break;
-        }
+      if (!jsonMatch) {
+        console.error('Failed to extract JSON from OpenAI response');
+        throw new Error('Invalid response format: Could not find JSON block');
       }
       
-      // If no match found but there's a <!DOCTYPE html> in the response, try to extract it
-      if (!htmlContent && response.includes('<!DOCTYPE html>')) {
-        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
-        const endIndex = response.indexOf('</html>', docTypeIndex);
-        if (endIndex > docTypeIndex) {
-          htmlContent = response.substring(docTypeIndex, endIndex + 7).trim();
-        }
-      }
+      const jsonContent = jsonMatch[1];
       
-      result.htmlCode = htmlContent || '';
-      
-      // Extract CSS code between ```css and ``` tags with more flexible pattern matching
-      const cssRegexPatterns = [
-        /```css\n([\s\S]*?)```/,       // Standard format
-        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
-      ];
-      
-      let cssContent = '';
-      for (const pattern of cssRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          cssContent = match[1].trim();
-          break;
-        }
-      }
-      
-      // If no full match found but there are CSS properties in the response, try to extract style block
-      if (!cssContent && response.includes('style>')) {
-        const styleIndex = response.indexOf('<style>');
-        const endIndex = response.indexOf('</style>', styleIndex);
-        if (endIndex > styleIndex && styleIndex !== -1) {
-          cssContent = response.substring(styleIndex + 7, endIndex).trim();
-        }
-      }
-      
-      result.cssCode = cssContent || '';
-      
-      // Extract design system information
-      result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
-      result.analysis.designSystem.typography = this.extractListItems(response, 'Typography|Design System Extraction.*?Typography');
-      result.analysis.designSystem.components = this.extractListItems(response, 'UI Components|Design System Extraction.*?Components');
-      
-      // Extract general analysis sections
-      result.analysis.strengths = this.extractListItems(response, 'Strengths|General Strengths');
-      result.analysis.weaknesses = this.extractListItems(response, 'Weaknesses|General Weaknesses');
-      result.analysis.improvementAreas = this.extractListItems(response, 'Improvements|Improvement Areas|Areas for Improvement');
-      result.analysis.specificChanges = this.extractListItems(response, 'Specific Changes|Changes Made|Implemented Changes');
-      
-      // Extract specific analysis categories
-      result.analysis.visualHierarchy.issues = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.visualHierarchy.improvements = this.extractListItems(response, 'Visual Hierarchy(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      result.analysis.colorContrast.issues = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.colorContrast.improvements = this.extractListItems(response, 'Color Contrast(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      result.analysis.componentSelection.issues = this.extractListItems(response, 'Component Selection(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Component Placement(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.componentSelection.improvements = this.extractListItems(response, 'Component Selection(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Component Placement(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      result.analysis.textLegibility.issues = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.textLegibility.improvements = this.extractListItems(response, 'Text Legibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      result.analysis.usability.issues = this.extractListItems(response, 'Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Overall Usability(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.usability.improvements = this.extractListItems(response, 'Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Overall Usability(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      result.analysis.accessibility.issues = this.extractListItems(response, 'Accessibility(?:[:\\s]*Issues|[\\s\\-]*Issues|:)|Accessibility Considerations(?:[:\\s]*Issues|[\\s\\-]*Issues|:)');
-      result.analysis.accessibility.improvements = this.extractListItems(response, 'Accessibility(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)|Accessibility Considerations(?:[:\\s]*Improvements|[\\s\\-]*Improvements|[\\s\\-]*Recommendations)');
-      
-      // Extract colors
-      result.metadata.colors.primary = this.extractColors(response, 'Primary');
-      result.metadata.colors.secondary = this.extractColors(response, 'Secondary');
-      result.metadata.colors.background = this.extractColors(response, 'Background');
-      result.metadata.colors.text = this.extractColors(response, 'Text');
-      
-      // Extract all colors from CSS as a fallback
-      if (result.cssCode) {
-        const allCssColors = result.cssCode.match(/#[0-9A-Fa-f]{3,6}|rgba?\([^)]+\)/g) || [];
+      try {
+        const parsedContent = JSON.parse(jsonContent);
         
-        // If we couldn't extract colors from the analysis, use the CSS colors
-        if (
-          result.metadata.colors.primary.length === 0 &&
-          result.metadata.colors.secondary.length === 0 &&
-          result.metadata.colors.background.length === 0 &&
-          result.metadata.colors.text.length === 0
-        ) {
-          // Add unique colors from CSS - using Array.from instead of spread to handle Set in TypeScript
-          const uniqueColors = Array.from(new Set(allCssColors));
-          result.metadata.colors.primary = uniqueColors.slice(0, 2);
-          result.metadata.colors.secondary = uniqueColors.slice(2, 4);
-          result.metadata.colors.background = uniqueColors.slice(4, 6);
-          result.metadata.colors.text = uniqueColors.slice(6, 8);
+        // Extract analysis
+        if (parsedContent.analysis) {
+          // Map analysis fields
+          if (parsedContent.analysis.strengths) {
+            result.analysis.strengths = parsedContent.analysis.strengths;
+          }
+          
+          if (parsedContent.analysis.weaknesses) {
+            result.analysis.weaknesses = parsedContent.analysis.weaknesses;
+          }
+          
+          if (parsedContent.analysis.improvementAreas) {
+            result.analysis.improvementAreas = parsedContent.analysis.improvementAreas;
+          }
+          
+          if (parsedContent.analysis.specificChanges) {
+            result.analysis.specificChanges = parsedContent.analysis.specificChanges;
+          }
+          
+          // Map detailed analysis categories
+          const categories = [
+            'visualHierarchy', 'colorContrast', 'componentSelection',
+            'textLegibility', 'usability', 'accessibility'
+          ];
+          
+          categories.forEach(category => {
+            if (parsedContent.analysis[category]) {
+              if (parsedContent.analysis[category].issues) {
+                result.analysis[category].issues = parsedContent.analysis[category].issues;
+              }
+              
+              if (parsedContent.analysis[category].improvements) {
+                result.analysis[category].improvements = parsedContent.analysis[category].improvements;
+              }
+            }
+          });
+          
+          // Map design system
+          if (parsedContent.analysis.designSystem) {
+            if (parsedContent.analysis.designSystem.colorPalette) {
+              result.analysis.designSystem.colorPalette = 
+                Array.isArray(parsedContent.analysis.designSystem.colorPalette)
+                  ? parsedContent.analysis.designSystem.colorPalette
+                  : [parsedContent.analysis.designSystem.colorPalette];
+            }
+            
+            if (parsedContent.analysis.designSystem.typography) {
+              result.analysis.designSystem.typography = 
+                Array.isArray(parsedContent.analysis.designSystem.typography)
+                  ? parsedContent.analysis.designSystem.typography
+                  : [parsedContent.analysis.designSystem.typography];
+            }
+            
+            if (parsedContent.analysis.designSystem.components) {
+              result.analysis.designSystem.components = 
+                Array.isArray(parsedContent.analysis.designSystem.components)
+                  ? parsedContent.analysis.designSystem.components
+                  : [parsedContent.analysis.designSystem.components];
+            }
+          }
+          
+          // Extract metadata from the analysis
+          this.extractMetadata(parsedContent.analysis, result.metadata);
         }
-      }
-      
-      // Extract fonts from CSS as a fallback
-      if (result.cssCode && result.metadata.fonts.length === 0) {
-        const fontFamilies = result.cssCode.match(/font-family:\s*([^;]+)/g) || [];
-        result.metadata.fonts = fontFamilies
-          .map(f => f.replace('font-family:', '').trim())
-          .filter((f, i, self) => self.indexOf(f) === i); // Unique values only
-      }
-      
-      // Extract fonts
-      result.metadata.fonts = this.extractListItems(response, 'Fonts|Typography');
-      
-      // Extract components
-      result.metadata.components = this.extractListItems(response, 'Components|UI Components');
-      
-      // Extract user insights applied if relevant
-      if (hasUserInsights) {
-        result.userInsightsApplied = this.extractListItems(response, 'User Insights Applied|User Insights|User Research Applied');
+        
+        // Extract scene description
+        if (parsedContent.sceneDescription) {
+          result.sceneDescription = JSON.stringify(parsedContent.sceneDescription);
+        } else {
+          console.error('No scene description found in OpenAI response');
+          throw new Error('Invalid response format: Missing scene description');
+        }
+        
+      } catch (error) {
+        console.error('Error parsing JSON content:', error);
+        throw new Error(`Failed to parse JSON content: ${error}`);
       }
       
       return result;
     } catch (error: any) {
-      console.error('Error parsing OpenAI response:', error);
-      
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
-        throw new Error(`Failed to parse OpenAI response: ${error.message}`);
-      }
-      
-      // Only use fallback in development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response');
-        // Use default dimensions since we don't have access to imageUrl here
-        return this.getFallbackAnalysisResponse({ width: 800, height: 600 });
-      }
-      
-      // Default behavior
+      console.error('Error parsing OpenAI WebGL response:', error);
       throw new Error(`Failed to parse OpenAI response: ${error.message}`);
     }
   }
@@ -713,6 +393,97 @@ class OpenAIService {
   // Create a fallback demo response for development/testing
   private getFallbackAnalysisResponse(dimensions: {width: number, height: number}): DesignAnalysisResponse {
     const fallbackResponse = "This is a fallback response for development/testing purposes. In production, this would contain the full GPT-4.1 analysis.";
+    
+    // Simple scene description for testing
+    const fallbackSceneDescription = {
+      width: dimensions.width,
+      height: dimensions.height,
+      root: {
+        id: "root",
+        type: "container",
+        x: 0,
+        y: 0,
+        width: dimensions.width,
+        height: dimensions.height,
+        backgroundColor: {r: 1, g: 1, b: 1, a: 1},
+        children: [
+          {
+            id: "header",
+            type: "container",
+            x: 0,
+            y: 0,
+            width: dimensions.width,
+            height: 80,
+            backgroundColor: {r: 0.95, g: 0.95, b: 0.95, a: 1},
+            children: [
+              {
+                id: "logo",
+                type: "text",
+                x: 20,
+                y: 20,
+                width: 200,
+                height: 40,
+                text: "COTERATE",
+                fontFamily: "Inter",
+                fontSize: 24,
+                fontWeight: "bold",
+                textColor: {r: 0.2, g: 0.2, b: 0.8, a: 1}
+              }
+            ]
+          },
+          {
+            id: "content",
+            type: "container",
+            x: 0,
+            y: 80,
+            width: dimensions.width,
+            height: dimensions.height - 80,
+            backgroundColor: {r: 1, g: 1, b: 1, a: 1},
+            children: [
+              {
+                id: "heading",
+                type: "text",
+                x: 40,
+                y: 40,
+                width: dimensions.width - 80,
+                height: 50,
+                text: "Welcome to Coterate Demo",
+                fontFamily: "Inter",
+                fontSize: 28,
+                fontWeight: "bold",
+                textColor: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+              },
+              {
+                id: "description",
+                type: "text",
+                x: 40,
+                y: 100,
+                width: dimensions.width - 80,
+                height: 80,
+                text: "This is a fallback UI rendered with WebGL for testing purposes.",
+                fontFamily: "Inter",
+                fontSize: 16,
+                textColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+              },
+              {
+                id: "cta-button",
+                type: "button",
+                x: 40,
+                y: 200,
+                width: 180,
+                height: 50,
+                text: "Get Started",
+                fontFamily: "Inter",
+                fontSize: 16,
+                backgroundColor: {r: 0.2, g: 0.4, b: 0.8, a: 1},
+                textColor: {r: 1, g: 1, b: 1, a: 1},
+                borderRadius: 8
+              }
+            ]
+          }
+        ]
+      }
+    };
     
     return {
       analysis: {
@@ -835,372 +606,9 @@ class OpenAIService {
         rawResponse: fallbackResponse,
         userPrompt: "This is a fallback prompt for development/testing purposes."
       },
-      htmlCode: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Improved Design</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-  <!-- This is a demo fallback response. In production, this would be an iterated version of the original UI -->
-  <div class="container">
-    <!-- Preserving original header structure -->
-    <header class="header">
-      <div class="logo">
-        <h1>Original Logo</h1>
-      </div>
-      <nav class="main-nav">
-        <ul>
-          <li><a href="#" class="active">Home</a></li>
-          <li><a href="#">Features</a></li>
-          <li><a href="#">Pricing</a></li>
-          <li><a href="#">About</a></li>
-        </ul>
-      </nav>
-      <!-- Enhancement: Improved button with better contrast -->
-      <div class="cta-button">
-        <button class="primary-button">Get Started</button>
-      </div>
-    </header>
-    
-    <main>
-      <!-- Preserving original hero structure with improved contrast -->
-      <section class="hero">
-        <div class="hero-content">
-          <h2>Original Headline Text</h2>
-          <p>Original description text with improved line height and spacing.</p>
-          <button class="primary-button">Try It Now</button>
-        </div>
-        <div class="hero-image">
-          <!-- Image placeholder preserving original dimensions -->
-          <div class="image-placeholder"></div>
-        </div>
-      </section>
-      
-      <!-- Original features section with improved spacing -->
-      <section class="features">
-        <h3>Key Features</h3>
-        <div class="feature-cards">
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-magic"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-users"></i></div>
-            <h4>Original Feature Title</h4>
-            <p>Original feature description with improved legibility.</p>
-          </div>
-        </div>
-      </section>
-    </main>
-    
-    <!-- Preserving original footer structure -->
-    <footer>
-      <div class="footer-links">
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-        <div class="footer-column">
-          <h5>Original Footer Title</h5>
-          <ul>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-            <li><a href="#">Original Link</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>Original copyright text.</p>
-      </div>
-    </footer>
-  </div>
-</body>
-</html>`,
-      cssCode: `/* CSS Variables for consistent theming */
-:root {
-  /* Preserving original color values with adjustments for accessibility */
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --secondary-color: #6b7280;
-  --text-color: #1f2937;
-  --light-text: #4b5563; /* Slightly darker than original for better contrast */
-  --background: #ffffff;
-  --light-bg: #f9fafb;
-  --border-color: #e5e7eb;
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --border-radius: 0.375rem;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Base styles - preserving original with minor enhancements */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  /* Preserving original font stack */
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  color: var(--text-color);
-  line-height: 1.5; /* Improved from original 1.3 */
-  background-color: var(--background);
-  font-size: 16px; /* Preserved from original */
-}
-
-.container {
-  width: ${dimensions.width}px; /* Preserving original width */
-  margin: 0 auto;
-  overflow: hidden;
-}
-
-/* Typography - preserving original with minor enhancements for readability */
-h1, h2, h3, h4, h5, h6 {
-  margin-bottom: var(--spacing-md);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-h1 {
-  font-size: 1.875rem; /* Preserved from original */
-}
-
-h2 {
-  font-size: 2.25rem; /* Preserved from original */
-  color: var(--text-color);
-}
-
-h3 {
-  font-size: 1.5rem; /* Preserved from original */
-  text-align: center;
-  margin-bottom: var(--spacing-xl);
-}
-
-h4 {
-  font-size: 1.25rem; /* Preserved from original */
-  margin-bottom: var(--spacing-sm);
-}
-
-h5 {
-  font-size: 1rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-  color: var(--secondary-color);
-}
-
-p {
-  margin-bottom: var(--spacing-md);
-  color: var(--light-text); /* Adjusted for better contrast */
-}
-
-a {
-  color: var(--primary-color);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-/* Enhancement: Better hover states while preserving original styling */
-a:hover, a:focus {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-
-/* Buttons - preserving original with accessibility enhancements */
-.primary-button {
-  background-color: var(--primary-color);
-  color: white;
-  padding: 0.75rem 1.5rem; /* Preserved from original */
-  border-radius: var(--border-radius);
-  border: none;
-  font-weight: 500;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  box-shadow: var(--shadow-sm);
-}
-
-.primary-button:hover {
-  background-color: var(--primary-hover);
-}
-
-/* Enhancement: Better focus states */
-.primary-button:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-.primary-button:active {
-  transform: translateY(1px);
-}
-
-/* Header - preserving original structure */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-lg) 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.logo h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0;
-}
-
-.main-nav ul {
-  display: flex;
-  list-style: none;
-  gap: var(--spacing-lg);
-}
-
-.main-nav a {
-  color: var(--light-text);
-  font-weight: 500;
-}
-
-.main-nav a.active {
-  color: var(--primary-color);
-}
-
-/* Hero Section - preserving original layout */
-.hero {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-xl) 0;
-  gap: var(--spacing-xl);
-}
-
-.hero-content {
-  flex: 1;
-}
-
-.hero-content h2 {
-  font-size: 2.5rem; /* Preserved from original */
-  margin-bottom: var(--spacing-md);
-}
-
-.hero-content p {
-  font-size: 1.125rem; /* Preserved from original */
-  margin-bottom: var(--spacing-lg);
-}
-
-.hero-image {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.image-placeholder {
-  width: 100%;
-  height: 300px; /* Preserved from original */
-  background-color: #e5e7eb;
-  border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
-}
-
-/* Features Section - preserving original with minor improvements */
-.features {
-  padding: var(--spacing-xl) 0;
-  background-color: var(--light-bg);
-}
-
-.feature-cards {
-  display: flex;
-  gap: var(--spacing-lg);
-  justify-content: space-between;
-}
-
-.feature-card {
-  flex: 1;
-  background-color: var(--background);
-  padding: var(--spacing-lg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow-md);
-  transition: transform 0.2s ease;
-}
-
-/* Enhancement: Subtle hover effect */
-.feature-card:hover {
-  transform: translateY(-2px); /* More subtle than original */
-}
-
-.feature-icon {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-  margin-bottom: var(--spacing-md);
-}
-
-/* Footer - preserving original structure */
-footer {
-  background-color: var(--light-bg);
-  padding: var(--spacing-xl) 0;
-  margin-top: var(--spacing-xl);
-}
-
-.footer-links {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-xl);
-}
-
-.footer-column ul {
-  list-style: none;
-}
-
-.footer-column li {
-  margin-bottom: var(--spacing-sm);
-}
-
-.footer-column a {
-  color: var(--light-text);
-  font-size: 0.875rem; /* Preserved from original */
-}
-
-.footer-bottom {
-  text-align: center;
-  padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
-  color: var(--light-text);
-  font-size: 0.875rem;
-}
-
-/* Accessibility Enhancements */
-:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-/* High contrast focus for keyboard navigation */
-:focus-visible {
-  outline: 3px solid var(--primary-color);
-  outline-offset: 3px;
-}`,
+      sceneDescription: JSON.stringify(fallbackSceneDescription),
+      htmlCode: '<div class="fallback-html">Fallback HTML</div>', // Keep for backward compatibility
+      cssCode: '.fallback-html { color: #333; }', // Keep for backward compatibility
       metadata: {
         colors: {
           primary: ['#4f46e5', '#4338ca'],
@@ -1273,25 +681,22 @@ footer {
   // Add this method to continue with the OpenAI analysis once we have the base64 image
   private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[], userPrompt: string): Promise<DesignAnalysisResponse> {
     // Process linked insights if available
-    let insightsPrompt = '';
-    if (linkedInsights && linkedInsights.length > 0) {
-      insightsPrompt = '\n\nImportant user insights to consider:\n';
-      linkedInsights.forEach((insight, index) => {
-        const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
-        insightsPrompt += `${index + 1}. ${summary}\n`;
-      });
-      insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
-    }
+    const insightsPrompt = 
+      linkedInsights.length > 0 
+        ? `ADDITIONAL USER INSIGHTS:\n${linkedInsights.map(i => `- ${i}`).join('\n')}\n\nPlease incorporate these user insights into your analysis and improvements.`
+        : '';
     
-    // Add the user prompt if provided
-    const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
+    const userPromptContent = 
+      userPrompt 
+        ? `USER REQUEST:\n${userPrompt}\n\nPlease address this specific user request in your analysis and improvements.`
+        : '';
     
     const requestBody = {
       model: 'gpt-4.1',
       messages: [
         {
           role: 'system',
-          content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE HTML/CSS version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
+          content: `You are a top-tier UI/UX designer with exceptional pixel-perfect reproduction skills and deep expertise in design analysis and improvement. Your task is to analyze a design image, provide detailed feedback on its strengths and weaknesses, and create an ITERATIVE GPU-RENDERED version that addresses those issues while MAINTAINING THE ORIGINAL DESIGN'S EXACT VISUAL STYLE.
 
           MOST IMPORTANT: The iteration should clearly be a refined version of the original design, NOT a completely new design. Users should immediately recognize it as the same UI but with targeted improvements.
 
@@ -1366,73 +771,140 @@ footer {
           7. Ensures the improved version is immediately recognizable as an iteration of the original
           
           DIMENSIONS REQUIREMENT:
-          The generated HTML/CSS MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px width by ${dimensions.height}px height. All elements must be properly positioned and sized to match the original layout's scale and proportions.
-          
-          CSS REQUIREMENTS:
-          1. Use CSS Grid and Flexbox for layouts that need to be responsive
-          2. Use absolute positioning for pixel-perfect placement when needed
-          3. Include CSS variables for colors, spacing, and typography - USING THE EXACT VALUES from the original design
-          4. Ensure clean, well-organized CSS with descriptive class names
-          5. Include detailed comments in CSS explaining design decisions
-          6. Avoid arbitrary magic numbers - document any precise pixel measurements
-          
-          ICON REQUIREMENTS:
-          For any icons identified in the UI:
-          1. Use Font Awesome icons that EXACTLY match the original icons (via CDN: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css")
-          2. If no perfect Font Awesome match exists, create the icon using CSS
-          3. Ensure icon sizing and positioning exactly matches the original
-          4. Apply the EXACT SAME colors from the original design to the icons
-          
-          IMAGE REQUIREMENTS:
-          For any images identified in the original design:
-          1. DO NOT use any external image URLs, placeholders, or Unsplash images
-          2. Instead, replace each image with a simple colored div (rectangle or square)
-          3. Use a background color that makes sense in the context (gray, light blue, etc.)
-          4. Maintain the exact same dimensions, positioning, and styling (borders, etc.) as the original image
-          5. Add a subtle 1px border to the div to indicate it's an image placeholder
-          6. You can add a simple CSS pattern or gradient if appropriate
-          
+          The generated scene MUST match the EXACT dimensions of the original design, which is ${dimensions.width}px × ${dimensions.height}px.
+
+          JSON SCENE DESCRIPTION REQUIREMENTS:
+          Instead of outputting HTML/CSS, you must create a JSON scene description that can be rendered by a WebGL engine. The JSON must follow this structure:
+
+          {
+            "width": ${dimensions.width},
+            "height": ${dimensions.height},
+            "root": {
+              "id": "root",
+              "type": "container",
+              "x": 0,
+              "y": 0,
+              "width": ${dimensions.width},
+              "height": ${dimensions.height},
+              "children": [
+                // Child UI elements go here
+              ]
+            }
+          }
+
+          Each UI element should be one of these types:
+          1. "container" - For grouping elements, similar to a div
+          2. "rect" - Basic rectangle shape with fill color
+          3. "text" - For displaying text
+          4. "button" - Interactive button element
+          5. "image" - For image placeholders
+          6. "input" - For input fields
+
+          Each element must include:
+          - "id": unique string ID
+          - "type": one of the types above
+          - "x", "y": position relative to parent
+          - "width", "height": dimensions
+          - "visible": boolean (optional, defaults to true)
+          - Additional properties based on type (see examples below)
+
+          Example container:
+          {
+            "id": "header",
+            "type": "container",
+            "x": 0,
+            "y": 0,
+            "width": 1200,
+            "height": 80,
+            "backgroundColor": {"r": 0.95, "g": 0.95, "b": 0.95, "a": 1},
+            "borderRadius": 4,
+            "shadowColor": {"r": 0, "g": 0, "b": 0, "a": 0.1},
+            "shadowBlur": 5,
+            "shadowOffsetX": 0,
+            "shadowOffsetY": 2,
+            "children": [...]
+          }
+
+          Example text:
+          {
+            "id": "headline",
+            "type": "text",
+            "x": 20,
+            "y": 30,
+            "width": 300,
+            "height": 40,
+            "text": "Welcome to Coterate",
+            "fontFamily": "Inter",
+            "fontSize": 24,
+            "fontWeight": "bold",
+            "textColor": {"r": 0.1, "g": 0.1, "b": 0.1, "a": 1},
+            "textAlign": "left"
+          }
+
+          Example button:
+          {
+            "id": "submit-btn",
+            "type": "button",
+            "x": 100,
+            "y": 200,
+            "width": 120,
+            "height": 40,
+            "text": "Submit",
+            "fontFamily": "Inter",
+            "fontSize": 16,
+            "backgroundColor": {"r": 0.2, "g": 0.4, "b": 0.8, "a": 1},
+            "textColor": {"r": 1, "g": 1, "b": 1, "a": 1},
+            "borderRadius": 8
+          }
+
+          IMPORTANT COLOR REPRESENTATION:
+          All colors must be represented as RGB values between 0 and 1, not as hex codes or 0-255 values. For example:
+          - Black: {"r": 0, "g": 0, "b": 0, "a": 1}
+          - White: {"r": 1, "g": 1, "b": 1, "a": 1}
+          - Red: {"r": 1, "g": 0, "b": 0, "a": 1}
+
           OUTPUT FORMAT:
-          Your response MUST be structured as follows:
+          Your response must follow this exact format:
+
+          ```json
+          {
+            "analysis": {
+              // Full analysis details as a JSON object
+            },
+            "sceneDescription": {
+              // Your complete scene JSON here
+            }
+          }
+          ```
+
+          The analysis section should include the same detailed analysis as before, just in JSON format instead of markdown.
+
+          ${insightsPrompt}
           
-          1. DESIGN SYSTEM:
-             Document the extracted design system in detail (colors, typography, components)
-          
-          2. ANALYSIS:
-             Provide a detailed analysis of the design's strengths and weaknesses, organized by category (visual hierarchy, color contrast, etc.)
-          
-          3. HTML CODE:
-             Provide the complete HTML code for the improved design between \`\`\`html\`\`\` tags
-          
-          4. CSS CODE:
-             Provide the complete CSS code for the improved design between \`\`\`css\`\`\` tags
-          
-          5. IMPROVEMENTS SUMMARY:
-             List the specific improvements made to the design and explain the rationale behind each one
-          ${insightsPrompt}${userPromptContent}`
+          ${userPromptContent}`
         },
         {
           role: 'user',
-          content: [{
-            type: 'image_url',
-            image_url: {
-              url: `data:image/png;base64,${base64Image}`
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`
+              }
+            },
+            {
+              type: 'text',
+              text: 'Please analyze this UI design and create an improved version following the requirements.'
             }
-          }]
+          ]
         }
-      ],
-      max_tokens: 4000
+      ]
     };
     
-    console.log('Sending request to OpenAI API for design analysis...');
-    
-    // Since direct fetch may face CORS issues in browser environment, use a proxy 
-    // or fallback to server-side processing if needed
-    let openaiResponse;
-    
     try {
-      // First try direct API call
-      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      console.log('Sending request to OpenAI API...');
+      
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1440,148 +912,49 @@ footer {
         },
         body: JSON.stringify(requestBody)
       });
-    } catch (error: any) {
-      console.error('Direct OpenAI API call failed, error details:', error);
       
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
-        throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-      }
-      
-      // Only use fallback during development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response for testing');
-        return this.getFallbackAnalysisResponse(dimensions);
-      }
-      
-      // Default behavior for unknown environments - throw the error
-      throw new Error(`OpenAI API call failed: ${error.message}. Please check your API key and try again.`);
-    }
-    
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI API error response:', errorText);
-      
-      // In production, never use fallback
-      if (this.isProductionEnvironment()) {
+      if (!openaiResponse.ok) {
+        const errorText = await openaiResponse.text();
+        console.error('OpenAI API error response:', errorText);
+        
+        // In production, never use fallback
+        if (this.isProductionEnvironment()) {
+          throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
+        }
+        
+        // Only use fallback in development
+        if (this.isDevEnvironment()) {
+          console.log('Development environment detected, using fallback response for testing');
+          return this.getFallbackAnalysisResponse(dimensions);
+        }
+        
+        // Default behavior
         throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
       }
       
-      // Only use fallback in development
-      if (this.isDevEnvironment()) {
-        console.log('Development environment detected, using fallback response for testing');
-        return this.getFallbackAnalysisResponse(dimensions);
-      }
+      const data = await openaiResponse.json();
       
-      // Default behavior
-      throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}. ${errorText}`);
+      // Extract the response content
+      const responseContent = data.choices[0].message.content;
+      
+      // Parse the response to extract the scene description and analysis
+      return this.parseWebGLResponse(responseContent, linkedInsights.length > 0, userPrompt);
+    } catch (error: any) {
+      console.error('Error in continueWithAnalysis:', error);
+      throw error;
     }
-    
-    const data = await openaiResponse.json();
-    const responseContent = data.choices[0]?.message?.content || '';
-    
-    console.log('Received OpenAI API response, content length:', responseContent.length);
-    
-    // Process the response
-    return this.parseOpenAIResponse(responseContent, linkedInsights.length > 0, userPrompt);
   }
 
   // Public method to parse a raw response and extract HTML/CSS
-  parseRawResponse(response: string): { htmlCode: string; cssCode: string } {
+  parseRawResponse(rawResponse: string): DesignAnalysisResponse {
     console.log('Parsing raw response for reload...');
     
     try {
-      // Initialize result with empty strings
-      const result = {
-        htmlCode: '',
-        cssCode: ''
-      };
-      
-      // Extract HTML code with flexible pattern matching
-      const htmlRegexPatterns = [
-        /```html\n([\s\S]*?)```/,       // Standard format
-        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
-        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
-        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
-        /```([\s\S]*?)<\/html>\n```/,   // Code block with HTML ending tag
-        /<!DOCTYPE html>([\s\S]*?)<\/html>/ // Full HTML document
-      ];
-      
-      // Try each HTML pattern
-      for (const pattern of htmlRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          result.htmlCode = match[1].trim();
-          break;
-        }
-      }
-      
-      // If we couldn't extract HTML with patterns but <!DOCTYPE html> exists
-      if (!result.htmlCode && response.includes('<!DOCTYPE html>')) {
-        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
-        const endIndex = response.indexOf('</html>', docTypeIndex);
-        if (endIndex > docTypeIndex) {
-          result.htmlCode = response.substring(docTypeIndex, endIndex + 7).trim();
-        }
-      }
-      
-      // Extract CSS code with flexible pattern matching
-      const cssRegexPatterns = [
-        /```css\n([\s\S]*?)```/,       // Standard format
-        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
-      ];
-      
-      // Try each CSS pattern
-      for (const pattern of cssRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          result.cssCode = match[1].trim();
-          break;
-        }
-      }
-      
-      // If no full match found but there are style tags
-      if (!result.cssCode && response.includes('style>')) {
-        const styleIndex = response.indexOf('<style>');
-        const endIndex = response.indexOf('</style>', styleIndex);
-        if (endIndex > styleIndex && styleIndex !== -1) {
-          result.cssCode = response.substring(styleIndex + 7, endIndex).trim();
-        }
-      }
-      
-      // If still no CSS found, try to extract it from the raw text using more general regex
-      if (!result.cssCode) {
-        // Look for common CSS patterns like declarations and rules
-        const cssBlockPattern = /\/\* .*? \*\/|:root\s*{[\s\S]*?}|body\s*{[\s\S]*?}|\.[\w-]+\s*{[\s\S]*?}/g;
-        const cssBlocks = response.match(cssBlockPattern);
-        
-        if (cssBlocks && cssBlocks.length > 0) {
-          result.cssCode = cssBlocks.join('\n\n');
-        }
-      }
-      
-      // Fix common issues with extracted CSS
-      if (result.cssCode) {
-        result.cssCode = this.fixCssIssues(result.cssCode);
-      }
-      
-      // Fix HTML to use inline styles instead of external stylesheets
-      if (result.htmlCode && result.cssCode) {
-        result.htmlCode = this.fixHtmlStyleReferences(result.htmlCode, result.cssCode);
-      }
-      
-      console.log('Extraction results:', { 
-        htmlFound: !!result.htmlCode, 
-        cssFound: !!result.cssCode,
-        cssLength: result.cssCode?.length || 0 
-      });
-      
-      return result;
+      // Use the same parsing method used for initial analysis
+      return this.parseWebGLResponse(rawResponse, false);
     } catch (error) {
       console.error('Error parsing raw response:', error);
-      return { htmlCode: '', cssCode: '' };
+      throw new Error(`Failed to parse raw response: ${error}`);
     }
   }
   
@@ -1640,6 +1013,94 @@ footer {
     });
     
     return fixedHtml;
+  }
+
+  // Add this method to extract metadata from the analysis
+  private extractMetadata(analysis: any, metadata: any): void {
+    // Extract colors if available
+    if (analysis.designSystem && analysis.designSystem.colorPalette) {
+      const colorPalette = analysis.designSystem.colorPalette;
+      
+      // Extract primary colors
+      const primaryColors = colorPalette.filter((item: string) => 
+        item.toLowerCase().includes('primary')
+      );
+      if (primaryColors.length > 0) {
+        metadata.colors.primary = primaryColors.map((item: string) => {
+          const match = item.match(/#[0-9A-Fa-f]{3,6}/);
+          return match ? match[0] : null;
+        }).filter(Boolean);
+      }
+      
+      // Extract secondary colors
+      const secondaryColors = colorPalette.filter((item: string) => 
+        item.toLowerCase().includes('secondary')
+      );
+      if (secondaryColors.length > 0) {
+        metadata.colors.secondary = secondaryColors.map((item: string) => {
+          const match = item.match(/#[0-9A-Fa-f]{3,6}/);
+          return match ? match[0] : null;
+        }).filter(Boolean);
+      }
+      
+      // Extract background colors
+      const backgroundColors = colorPalette.filter((item: string) => 
+        item.toLowerCase().includes('background')
+      );
+      if (backgroundColors.length > 0) {
+        metadata.colors.background = backgroundColors.map((item: string) => {
+          const match = item.match(/#[0-9A-Fa-f]{3,6}/);
+          return match ? match[0] : null;
+        }).filter(Boolean);
+      }
+      
+      // Extract text colors
+      const textColors = colorPalette.filter((item: string) => 
+        item.toLowerCase().includes('text')
+      );
+      if (textColors.length > 0) {
+        metadata.colors.text = textColors.map((item: string) => {
+          const match = item.match(/#[0-9A-Fa-f]{3,6}/);
+          return match ? match[0] : null;
+        }).filter(Boolean);
+      }
+    }
+    
+    // Extract fonts if available
+    if (analysis.designSystem && analysis.designSystem.typography) {
+      const typography = analysis.designSystem.typography;
+      
+      // Extract font families
+      const fonts = typography.reduce((acc: string[], item: string) => {
+        const fontMatches = item.match(/['"]([^'"]+)['"]/g) || [];
+        const extractedFonts = fontMatches.map((font: string) => 
+          font.replace(/['"]/g, '')
+        );
+        return [...acc, ...extractedFonts];
+      }, []);
+      
+      if (fonts.length > 0) {
+        metadata.fonts = Array.from(new Set(fonts)); // Deduplicate
+      }
+    }
+    
+    // Extract components if available
+    if (analysis.designSystem && analysis.designSystem.components) {
+      const components = analysis.designSystem.components;
+      
+      // Extract component names
+      const componentNames = components.reduce((acc: string[], item: string) => {
+        const matches = item.match(/^([^:]+):/);
+        if (matches && matches[1]) {
+          acc.push(matches[1].trim());
+        }
+        return acc;
+      }, []);
+      
+      if (componentNames.length > 0) {
+        metadata.components = componentNames;
+      }
+    }
   }
 }
 

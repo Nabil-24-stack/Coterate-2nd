@@ -20,8 +20,9 @@ export interface Design {
 export interface DesignIteration {
   id: string;
   parentId: string;
-  htmlContent: string;
-  cssContent: string;
+  htmlContent?: string;
+  cssContent?: string;
+  sceneDescription?: string;
   position: { x: number; y: number };
   dimensions?: { width: number; height: number };
   analysis?: DesignAnalysis;
