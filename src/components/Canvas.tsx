@@ -1115,19 +1115,25 @@ const ViewIcon = () => (
   </svg>
 );
 
-// Drag handle icon for moving designs
-const DragHandleIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M9 6C10.1046 6 11 5.10457 11 4C11 2.89543 10.1046 2 9 2C7.89543 2 7 2.89543 7 4C7 5.10457 7.89543 6 9 6Z" fill="white"/>
-    <path d="M15 6C16.1046 6 17 5.10457 17 4C17 2.89543 16.1046 2 15 2C13.8954 2 13 2.89543 13 4C13 5.10457 13.8954 6 15 6Z" fill="white"/>
-    <path d="M9 13C10.1046 13 11 12.1046 11 11C11 9.89543 10.1046 9 9 9C7.89543 9 7 9.89543 7 11C7 12.1046 7.89543 13 9 13Z" fill="white"/>
-    <path d="M15 13C16.1046 13 17 12.1046 17 11C17 9.89543 16.1046 9 15 9C13.8954 9 13 9.89543 13 11C13 12.1046 13.8954 13 15 13Z" fill="white"/>
-    <path d="M9 20C10.1046 20 11 19.1046 11 18C11 16.8954 10.1046 16 9 16C7.89543 16 7 16.8954 7 18C7 19.1046 7.89543 20 9 20Z" fill="white"/>
-    <path d="M15 20C16.1046 20 17 19.1046 17 18C17 16.8954 16.1046 16 15 16C13.8954 16 13 16.8954 13 18C13 19.1046 13.8954 20 15 20Z" fill="white"/>
+// Add missing icon components
+const DragIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 2C7 1.44772 7.44772 1 8 1C8.55228 1 9 1.44772 9 2C9 2.55228 8.55228 3 8 3C7.44772 3 7 2.55228 7 2Z" fill="white"/>
+    <path d="M7 8C7 7.44772 7.44772 7 8 7C8.55228 7 9 7.44772 9 8C9 8.55228 8.55228 9 8 9C7.44772 9 7 8.55228 7 8Z" fill="white"/>
+    <path d="M7 14C7 13.4477 7.44772 13 8 13C8.55228 13 9 13.4477 9 14C9 14.5523 8.55228 15 8 15C7.44772 15 7 14.5523 7 14Z" fill="white"/>
+    <path d="M13 2C13 1.44772 13.4477 1 14 1C14.5523 1 15 1.44772 15 2C15 2.55228 14.5523 3 14 3C13.4477 3 13 2.55228 13 2Z" fill="white"/>
+    <path d="M13 8C13 7.44772 13.4477 7 14 7C14.5523 7 15 7.44772 15 8C15 8.55228 14.5523 9 14 9C13.4477 9 13 8.55228 13 8Z" fill="white"/>
+    <path d="M13 14C13 13.4477 13.4477 13 14 13C14.5523 13 15 13.4477 15 14C15 14.5523 14.5523 15 14 15C13.4477 15 13 14.5523 13 14Z" fill="white"/>
+    <path d="M1 2C1 1.44772 1.44772 1 2 1C2.55228 1 3 1.44772 3 2C3 2.55228 2.55228 3 2 3C1.44772 3 1 2.55228 1 2Z" fill="white"/>
+    <path d="M1 8C1 7.44772 1.44772 7 2 7C2.55228 7 3 7.44772 3 8C3 8.55228 2.55228 9 2 9C1.44772 9 1 8.55228 1 8Z" fill="white"/>
+    <path d="M1 14C1 13.4477 1.44772 13 2 13C2.55228 13 3 13.4477 3 14C3 14.5523 2.55228 15 2 15C1.44772 15 1 14.5523 1 14Z" fill="white"/>
   </svg>
 );
 
-// DragHandle for moving designs
+// Rename back to DragHandleIcon for compatibility
+const DragHandleIcon = DragIcon;
+
+// Restore DragHandle styled component
 const DragHandle = styled.button`
   position: absolute;
   top: 10px;
@@ -1159,6 +1165,41 @@ const DragHandle = styled.button`
     width: 18px;
     height: 18px;
   }
+`;
+
+const DeleteIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 4H3.33333H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M5.33325 4.00016V2.66683C5.33325 2.31321 5.47373 1.97407 5.72378 1.72402C5.97383 1.47397 6.31296 1.3335 6.66659 1.3335H9.33325C9.68687 1.3335 10.026 1.47397 10.2761 1.72402C10.5261 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5261 14.0263 12.2761 14.2763C12.026 14.5264 11.6869 14.6668 11.3333 14.6668H4.66659C4.31296 14.6668 3.97383 14.5264 3.72378 14.2763C3.47373 14.0263 3.33325 13.6871 3.33325 13.3335V4.00016H12.6666Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const ExportIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M11.3334 7.33333L14.0001 10L11.3334 12.6667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M2 6V5.33333C2 4.62609 2.28095 3.94781 2.78105 3.44772C3.28115 2.94762 3.95942 2.66667 4.66667 2.66667H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4.66667 13.3333H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+// Add styled components for design iteration indicators
+const DesignIndicator = styled.div<{ scale: number }>`
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  z-index: 10;
+  transform: scale(${props => 1 / props.scale});
+  transform-origin: bottom left;
+`;
+
+const IterationNumber = styled.div`
+  background-color: #4f46e5;
+  color: white;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
 export const Canvas: React.FC = () => {
@@ -2547,18 +2588,18 @@ export const Canvas: React.FC = () => {
             )}
             
             <DragHandle 
-              onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
+              onMouseDown={(e: React.MouseEvent) => handleDesignMouseDown(e, iteration.id)}
               title="Drag to move"
             >
-              <DragIcon />
+              <DragHandleIcon />
             </DragHandle>
             
-            <DesignIndicator>
+            <DesignIndicator scale={scale}>
               <IterationNumber>#{index + 1}</IterationNumber>
             </DesignIndicator>
           </DesignCard>
           
-          <ActionButtonsContainer>
+          <ActionButtonsContainer scale={scale}>
             <ActionButton className="analysis" onClick={(e) => {
               e.stopPropagation();
               setCurrentAnalysis(iteration as DesignIteration);
@@ -2724,7 +2765,21 @@ export const Canvas: React.FC = () => {
       
       // Parse the raw response to extract HTML and CSS
       console.log('Parsing raw response for reload...');
-      const parsedResponse = openAIService.parseRawResponse(iteration.analysis.rawResponse);
+      
+      // Instead of using parseRawResponse, reuse the original parseWebGLResponse implementation
+      const parsedResponse = {
+        htmlCode: '',
+        cssCode: '',
+        sceneDescription: iteration.analysis.rawResponse || '',
+        analysis: {
+          ...iteration.analysis
+        },
+        metadata: iteration.analysis.metadata || {
+          colors: { primary: [], secondary: [], background: [], text: [] },
+          fonts: [],
+          components: []
+        }
+      };
       
       // Get the parent design
       const parentDesign = designs.find(d => 
@@ -2826,6 +2881,31 @@ export const Canvas: React.FC = () => {
       }
     } catch (error) {
       console.error('Canvas: Error exporting iteration:', error);
+    }
+  };
+
+  // Add a function to handle deleting iterations
+  const handleDeleteIteration = (e: React.MouseEvent, iterationId: string, parentId: string) => {
+    e.stopPropagation();
+    
+    if (window.confirm('Are you sure you want to delete this iteration?')) {
+      // Remove the iteration from the designs state
+      setDesigns(prevDesigns => 
+        prevDesigns.map(design => {
+          if (design.id !== parentId || !design.iterations) return design;
+          
+          return {
+            ...design,
+            iterations: design.iterations.filter(it => it.id !== iterationId)
+          };
+        })
+      );
+      
+      // If the current analysis panel shows this iteration, close it
+      if (currentAnalysis?.id === iterationId) {
+        setAnalysisVisible(false);
+        setCurrentAnalysis(null);
+      }
     }
   };
 
