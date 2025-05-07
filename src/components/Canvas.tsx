@@ -951,8 +951,7 @@ const ActionButtonsContainer = styled.div<{ scale: number }>`
   z-index: 20;
   opacity: 0;
   transition: opacity 0.2s ease;
-  min-width: 420px;
-  justify-content: space-between;
+  justify-content: center;
 `;
 
 // Individual action button style
@@ -969,7 +968,6 @@ const ActionButton = styled.button`
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 120px;
   white-space: nowrap;
   color: #FFFFFF;
   
@@ -1007,7 +1005,7 @@ const ActionButton = styled.button`
   }
   
   &.analysis {
-    min-width: 140px;
+    // Removed min-width property
   }
 `;
 
