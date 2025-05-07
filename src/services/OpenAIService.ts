@@ -306,12 +306,15 @@ class OpenAIService {
           
           categories.forEach(category => {
             if (parsedContent.analysis[category]) {
-              if (parsedContent.analysis[category].issues) {
-                result.analysis[category].issues = parsedContent.analysis[category].issues;
+              const analysisCategory = category as keyof typeof result.analysis;
+              const categoryData = parsedContent.analysis[category];
+              
+              if (categoryData.issues && typeof result.analysis[analysisCategory] === 'object') {
+                (result.analysis[analysisCategory] as any).issues = categoryData.issues;
               }
               
-              if (parsedContent.analysis[category].improvements) {
-                result.analysis[category].improvements = parsedContent.analysis[category].improvements;
+              if (categoryData.improvements && typeof result.analysis[analysisCategory] === 'object') {
+                (result.analysis[analysisCategory] as any).improvements = categoryData.improvements;
               }
             }
           });
@@ -866,16 +869,20 @@ class OpenAIService {
           OUTPUT FORMAT:
           Your response must follow this exact format:
 
-          ```json
+          \`\`\`json
           {
             "analysis": {
-              // Full analysis details as a JSON object
+              "strengths": ["array of strengths"],
+              "weaknesses": ["array of weaknesses"],
+              "improvementAreas": ["array of improvement areas"]
             },
             "sceneDescription": {
-              // Your complete scene JSON here
+              "width": 800,
+              "height": 600,
+              "root": {}
             }
           }
-          ```
+          \`\`\`
 
           The analysis section should include the same detailed analysis as before, just in JSON format instead of markdown.
 
@@ -1100,6 +1107,31 @@ class OpenAIService {
       if (componentNames.length > 0) {
         metadata.components = componentNames;
       }
+    }
+  }
+
+  // Helper method to convert image URL to base64
+  private async imageUrlToBase64(imageUrl: string): Promise<string> {
+    try {
+      // Handle data URLs - already in base64 format
+      if (imageUrl.startsWith('data:')) {
+        const base64Data = imageUrl.split(',')[1];
+        return base64Data;
+      }
+
+      // For Figma URLs or others that might have CORS issues, try to use a data URL first
+      const dataUrl = await this.createDataUrlFromFigmaImage(imageUrl);
+      if (dataUrl) {
+        return dataUrl.split(',')[1];
+      }
+      
+      // Fallback to direct fetch for URLs we can access
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      return await this.blobToBase64(blob);
+    } catch (error) {
+      console.error('Error converting image URL to base64:', error);
+      throw new Error('Failed to convert image URL to base64');
     }
   }
 }
