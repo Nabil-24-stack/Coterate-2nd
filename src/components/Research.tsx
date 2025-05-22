@@ -102,10 +102,10 @@ const Card = styled.div`
 const Notes = styled.textarea`
   background-color: transparent;
   border: none;
-  color: #CFCFCF;
+  color: #FFFFFF;
   font-size: 16px;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-weight: 600;
+  font-weight: 500;
   resize: none;
   flex: 1;
   outline: none;
