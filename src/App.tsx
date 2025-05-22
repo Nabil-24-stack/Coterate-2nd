@@ -23,10 +23,10 @@ const AppContainer = styled.div`
 // Tabs container for switching between Iteration and Research
 const TabsContainer = styled.div`
   display: flex;
-  gap: 0;
+  gap: 8px;
   position: absolute;
-  top: 0;
-  left: 262px;
+  top: 12px;
+  right: 20px;
   z-index: 1001;
 `;
 

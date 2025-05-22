@@ -80,8 +80,9 @@ const UploadContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   height: 100%;
+  padding-top: 20px;
 `;
 
 const UploadButton = styled.div`
@@ -91,7 +92,7 @@ const UploadButton = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 61px 28px;
+  padding: 40px 28px;
   cursor: pointer;
   width: 100%;
   
@@ -126,7 +127,7 @@ const Research: React.FC = () => {
           <Section>
             <SectionTitle>Notes</SectionTitle>
             <Card>
-              <Notes placeholder="Write any had-hoc notes here..." />
+              <Notes placeholder="Write any ad-hoc notes here..." />
             </Card>
           </Section>
           
