@@ -155,6 +155,18 @@ const UploadText = styled.p`
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
+const NoPageMessage = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #CFCFCF;
+  font-size: 16px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  text-align: center;
+  padding: 24px;
+`;
+
 const Research: React.FC = () => {
   const { currentPage } = usePageContext();
   const [notesContent, setNotesContent] = useState('');
@@ -162,13 +174,22 @@ const Research: React.FC = () => {
   const [isSaved, setIsSaved] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Load saved notes from localStorage when component mounts
+  // Generate a storage key based on the current page ID
+  const getStorageKey = (type: string) => {
+    if (!currentPage) return null;
+    return `coterate_${type}_${currentPage.id}`;
+  };
+  
+  // Load saved notes from localStorage when component mounts or current page changes
   useEffect(() => {
-    const savedNotes = localStorage.getItem('coterate_notes');
-    if (savedNotes) {
-      setNotesContent(savedNotes);
+    if (!currentPage) return;
+    
+    const notesKey = getStorageKey('notes');
+    if (notesKey) {
+      const savedNotes = localStorage.getItem(notesKey);
+      setNotesContent(savedNotes || '');
     }
-  }, []);
+  }, [currentPage]);
   
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -188,17 +209,22 @@ const Research: React.FC = () => {
   };
   
   const saveNotes = (content: string) => {
-    // Save notes to localStorage
-    localStorage.setItem('coterate_notes', content);
+    if (!currentPage) return;
     
-    // Show saved status
-    setIsSaving(false);
-    setIsSaved(true);
-    
-    // Clear saved indicator after 3 seconds
-    setTimeout(() => {
-      setIsSaved(false);
-    }, 3000);
+    // Save notes to localStorage with page-specific key
+    const notesKey = getStorageKey('notes');
+    if (notesKey) {
+      localStorage.setItem(notesKey, content);
+      
+      // Show saved status
+      setIsSaving(false);
+      setIsSaved(true);
+      
+      // Clear saved indicator after 3 seconds
+      setTimeout(() => {
+        setIsSaved(false);
+      }, 3000);
+    }
   };
   
   // Clean up timeout on unmount
@@ -209,6 +235,19 @@ const Research: React.FC = () => {
       }
     };
   }, []);
+  
+  // If no page is selected, show a message
+  if (!currentPage) {
+    return (
+      <ResearchContainer>
+        <ResearchContent>
+          <NoPageMessage>
+            Please select or create a page in the sidebar to view research.
+          </NoPageMessage>
+        </ResearchContent>
+      </ResearchContainer>
+    );
+  }
   
   return (
     <>
