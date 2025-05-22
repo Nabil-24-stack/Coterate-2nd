@@ -23,11 +23,14 @@ const AppContainer = styled.div`
 // Tabs container for switching between Iteration and Research
 const TabsContainer = styled.div`
   display: flex;
-  gap: 8px;
+  gap: 0;
   position: absolute;
   top: 12px;
   right: 20px;
   z-index: 1001;
+  background-color: #393A3A;
+  border: 1px solid #6A6A6A;
+  border-radius: 8px;
 `;
 
 const Tab = styled.div<{ active: boolean }>`
@@ -35,13 +38,14 @@ const Tab = styled.div<{ active: boolean }>`
   padding: 6px 0px 8px;
   text-align: center;
   cursor: pointer;
-  background-color: ${props => props.active ? '#444444' : '#393A3A'};
+  background-color: ${props => props.active ? '#444444' : 'transparent'};
   color: #FFFFFF;
   font-weight: ${props => props.active ? '600' : '500'};
   font-size: 14px;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  border: ${props => props.active ? '1px solid #26D4C8' : '1px solid #6A6A6A'};
+  border: ${props => props.active ? '1px solid #26D4C8' : 'none'};
   border-radius: 8px;
+  line-height: 1.26em;
 `;
 
 function App() {
