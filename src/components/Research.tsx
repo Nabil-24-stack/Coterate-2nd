@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 
@@ -43,11 +43,50 @@ const Section = styled.div`
   flex: 1;
 `;
 
+const SectionTitleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
 const SectionTitle = styled.h2`
   font-size: 16px;
   font-weight: 600;
   color: #FFFFFF;
   font-family: 'Plus Jakarta Sans', sans-serif;
+  margin: 0;
+`;
+
+const SaveStatus = styled.span<{ isSaving: boolean; isSaved: boolean }>`
+  font-size: 12px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: ${props => 
+    props.isSaving ? '#CFCFCF' : 
+    props.isSaved ? '#26D4C8' : 'transparent'};
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.3s ease;
+`;
+
+const SavedIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 13L9 17L19 7" stroke="#26D4C8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const LoadingIcon = styled.div`
+  width: 14px;
+  height: 14px;
+  border: 2px solid #CFCFCF;
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 `;
 
 const Card = styled.div`
@@ -118,6 +157,58 @@ const UploadText = styled.p`
 
 const Research: React.FC = () => {
   const { currentPage } = usePageContext();
+  const [notesContent, setNotesContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Load saved notes from localStorage when component mounts
+  useEffect(() => {
+    const savedNotes = localStorage.getItem('coterate_notes');
+    if (savedNotes) {
+      setNotesContent(savedNotes);
+    }
+  }, []);
+  
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setNotesContent(newValue);
+    setIsSaving(true);
+    setIsSaved(false);
+    
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Set a new timeout for saving
+    saveTimeoutRef.current = setTimeout(() => {
+      saveNotes(newValue);
+    }, 1000); // 1 second debounce
+  };
+  
+  const saveNotes = (content: string) => {
+    // Save notes to localStorage
+    localStorage.setItem('coterate_notes', content);
+    
+    // Show saved status
+    setIsSaving(false);
+    setIsSaved(true);
+    
+    // Clear saved indicator after 3 seconds
+    setTimeout(() => {
+      setIsSaved(false);
+    }, 3000);
+  };
+  
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
   
   return (
     <>
@@ -125,9 +216,28 @@ const Research: React.FC = () => {
       <ResearchContainer>
         <ResearchContent>
           <Section>
-            <SectionTitle>Notes</SectionTitle>
+            <SectionTitleContainer>
+              <SectionTitle>Notes</SectionTitle>
+              <SaveStatus isSaving={isSaving} isSaved={isSaved}>
+                {isSaving ? (
+                  <>
+                    <LoadingIcon />
+                    Saving...
+                  </>
+                ) : isSaved ? (
+                  <>
+                    <SavedIcon />
+                    Saved
+                  </>
+                ) : null}
+              </SaveStatus>
+            </SectionTitleContainer>
             <Card>
-              <Notes placeholder="Write any ad-hoc notes here..." />
+              <Notes 
+                placeholder="Write any ad-hoc notes here..." 
+                value={notesContent}
+                onChange={handleNotesChange}
+              />
             </Card>
           </Section>
           
