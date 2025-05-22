@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import Header from './components/Header';
+import Research from './components/Research';
 import { PageProvider } from './contexts/PageContext';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import FigmaAuthCallback from './components/FigmaAuthCallback';
@@ -19,7 +20,33 @@ const AppContainer = styled.div`
   font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
+// Tabs container for switching between Iteration and Research
+const TabsContainer = styled.div`
+  display: flex;
+  gap: 0;
+  position: absolute;
+  top: 0;
+  left: 262px;
+  z-index: 1001;
+`;
+
+const Tab = styled.div<{ active: boolean }>`
+  width: 120px;
+  padding: 6px 0px 8px;
+  text-align: center;
+  cursor: pointer;
+  background-color: ${props => props.active ? '#444444' : '#393A3A'};
+  color: #FFFFFF;
+  font-weight: ${props => props.active ? '600' : '500'};
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  border: ${props => props.active ? '1px solid #26D4C8' : '1px solid #6A6A6A'};
+  border-radius: 8px;
+`;
+
 function App() {
+  const [activeTab, setActiveTab] = useState<'design' | 'research'>('design');
+
   return (
     <Router>
       <PageProvider>
@@ -31,8 +58,22 @@ function App() {
           <Route path="/" element={
             <AppContainer>
               <Header />
+              <TabsContainer>
+                <Tab 
+                  active={activeTab === 'design'} 
+                  onClick={() => setActiveTab('design')}
+                >
+                  Design
+                </Tab>
+                <Tab 
+                  active={activeTab === 'research'} 
+                  onClick={() => setActiveTab('research')}
+                >
+                  Research
+                </Tab>
+              </TabsContainer>
               <Sidebar />
-              <Canvas />
+              {activeTab === 'design' ? <Canvas /> : <Research />}
             </AppContainer>
           } />
         </Routes>
