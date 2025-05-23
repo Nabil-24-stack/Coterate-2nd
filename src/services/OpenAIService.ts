@@ -531,62 +531,17 @@ class OpenAIService {
         }
       };
       
-      // Extract HTML code between ```html and ``` tags with more flexible pattern matching
-      const htmlRegexPatterns = [
-        /```html\n([\s\S]*?)```/,       // Standard format
-        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
-        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
-        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
-        /```([\s\S]*?)<\/html>\n```/    // Code block with HTML ending tag
-      ];
+      // Use the more robust parsing logic from parseRawResponse
+      const parsedCode = this.parseRawResponse(response);
+      result.htmlCode = parsedCode.htmlCode;
+      result.cssCode = parsedCode.cssCode;
       
-      let htmlContent = '';
-      for (const pattern of htmlRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          htmlContent = match[1].trim();
-          break;
-        }
-      }
-      
-      // If no match found but there's a <!DOCTYPE html> in the response, try to extract it
-      if (!htmlContent && response.includes('<!DOCTYPE html>')) {
-        const docTypeIndex = response.indexOf('<!DOCTYPE html>');
-        const endIndex = response.indexOf('</html>', docTypeIndex);
-        if (endIndex > docTypeIndex) {
-          htmlContent = response.substring(docTypeIndex, endIndex + 7).trim();
-        }
-      }
-      
-      result.htmlCode = htmlContent || '';
-      
-      // Extract CSS code between ```css and ``` tags with more flexible pattern matching
-      const cssRegexPatterns = [
-        /```css\n([\s\S]*?)```/,       // Standard format
-        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
-      ];
-      
-      let cssContent = '';
-      for (const pattern of cssRegexPatterns) {
-        const match = response.match(pattern);
-        if (match && match[1]) {
-          cssContent = match[1].trim();
-          break;
-        }
-      }
-      
-      // If no full match found but there are CSS properties in the response, try to extract style block
-      if (!cssContent && response.includes('style>')) {
-        const styleIndex = response.indexOf('<style>');
-        const endIndex = response.indexOf('</style>', styleIndex);
-        if (endIndex > styleIndex && styleIndex !== -1) {
-          cssContent = response.substring(styleIndex + 7, endIndex).trim();
-        }
-      }
-      
-      result.cssCode = cssContent || '';
+      console.log('HTML/CSS extraction results:', { 
+        htmlFound: !!result.htmlCode, 
+        cssFound: !!result.cssCode,
+        htmlLength: result.htmlCode?.length || 0,
+        cssLength: result.cssCode?.length || 0 
+      });
       
       // Extract design system information
       result.analysis.designSystem.colorPalette = this.extractListItems(response, 'Color Palette|Design System Extraction.*?Color[s]?\\s*Palette');
@@ -1497,40 +1452,65 @@ footer {
         cssCode: ''
       };
       
-      // Extract HTML code with flexible pattern matching
+      // Extract HTML code with flexible pattern matching - improved patterns
       const htmlRegexPatterns = [
-        /```html\n([\s\S]*?)```/,       // Standard format
-        /```html\s+([\s\S]*?)```/,      // Without newline after 'html'
-        /<html>([\s\S]*?)<\/html>/,     // Directly wrapped in html tags
-        /```\n<html>([\s\S]*?)<\/html>\n```/, // Code block with HTML tags
-        /```([\s\S]*?)<\/html>\n```/,   // Code block with HTML ending tag
+        /```html\s*\n([\s\S]*?)```/,       // Standard format with newline
+        /```html\s+([\s\S]*?)```/,         // Without newline after 'html'
+        /```html([\s\S]*?)```/,            // No space after 'html'
+        /<html>([\s\S]*?)<\/html>/,        // Directly wrapped in html tags
+        /```\s*<html>([\s\S]*?)<\/html>\s*```/, // Code block with HTML tags
+        /```([\s\S]*?)<\/html>\s*```/,     // Code block with HTML ending tag
         /<!DOCTYPE html>([\s\S]*?)<\/html>/ // Full HTML document
       ];
       
       // Try each HTML pattern
       for (const pattern of htmlRegexPatterns) {
         const match = response.match(pattern);
-        if (match && match[1]) {
-          result.htmlCode = match[1].trim();
-          break;
+        if (match) {
+          // For patterns that capture the content inside the tags
+          if (match[1]) {
+            result.htmlCode = match[1].trim();
+          } else {
+            // For patterns that capture the full HTML including tags
+            result.htmlCode = match[0].trim();
+          }
+          
+          // If we found HTML, break out of the loop
+          if (result.htmlCode) {
+            console.log('HTML extracted using pattern:', pattern.source);
+            break;
+          }
         }
       }
       
-      // If we couldn't extract HTML with patterns but <!DOCTYPE html> exists
+      // If we still couldn't extract HTML but <!DOCTYPE html> exists, try a more manual approach
       if (!result.htmlCode && response.includes('<!DOCTYPE html>')) {
         const docTypeIndex = response.indexOf('<!DOCTYPE html>');
         const endIndex = response.indexOf('</html>', docTypeIndex);
         if (endIndex > docTypeIndex) {
           result.htmlCode = response.substring(docTypeIndex, endIndex + 7).trim();
+          console.log('HTML extracted using manual DOCTYPE search');
         }
       }
       
-      // Extract CSS code with flexible pattern matching
+      // If still no HTML, try to find any HTML-like content
+      if (!result.htmlCode) {
+        // Look for any content between <html> and </html> tags
+        const basicHtmlMatch = response.match(/<html[\s\S]*?<\/html>/);
+        if (basicHtmlMatch) {
+          result.htmlCode = basicHtmlMatch[0].trim();
+          console.log('HTML extracted using basic HTML tag search');
+        }
+      }
+      
+      // Extract CSS code with flexible pattern matching - improved patterns
       const cssRegexPatterns = [
-        /```css\n([\s\S]*?)```/,       // Standard format
-        /```css\s+([\s\S]*?)```/,      // Without newline after 'css'
-        /<style>([\s\S]*?)<\/style>/,  // Directly wrapped in style tags
-        /```\n<style>([\s\S]*?)<\/style>\n```/ // Code block with style tags
+        /```css\s*\n([\s\S]*?)```/,        // Standard format with newline
+        /```css\s+([\s\S]*?)```/,          // Without newline after 'css'
+        /```css([\s\S]*?)```/,             // No space after 'css'
+        /<style>([\s\S]*?)<\/style>/,      // Directly wrapped in style tags
+        /```\s*<style>([\s\S]*?)<\/style>\s*```/, // Code block with style tags
+        /## \d+\. CSS CODE\s*```css\s*\n([\s\S]*?)```/  // Specifically for the format in user's response
       ];
       
       // Try each CSS pattern
@@ -1538,6 +1518,7 @@ footer {
         const match = response.match(pattern);
         if (match && match[1]) {
           result.cssCode = match[1].trim();
+          console.log('CSS extracted using pattern:', pattern.source);
           break;
         }
       }
@@ -1548,17 +1529,61 @@ footer {
         const endIndex = response.indexOf('</style>', styleIndex);
         if (endIndex > styleIndex && styleIndex !== -1) {
           result.cssCode = response.substring(styleIndex + 7, endIndex).trim();
+          console.log('CSS extracted using manual style tag search');
+        }
+      }
+      
+      // If still no CSS found, try to extract it using section headers
+      if (!result.cssCode) {
+        // Look for CSS section with various possible headers
+        const cssSectionPatterns = [
+          /## \d+\.\s*CSS CODE[\s\S]*?```css\s*\n([\s\S]*?)```/,  // Numbered section
+          /CSS CODE[\s\S]*?```css\s*\n([\s\S]*?)```/,            // Direct section
+          /CSS\s*```\s*\n([\s\S]*?)```/,                         // Simple CSS section
+          /:root\s*\{[\s\S]*?\}/                                 // CSS variables block
+        ];
+        
+        for (const pattern of cssSectionPatterns) {
+          const match = response.match(pattern);
+          if (match) {
+            if (match[1]) {
+              result.cssCode = match[1].trim();
+              console.log('CSS extracted using section pattern:', pattern.source);
+              break;
+            } else if (match[0] && pattern.source.includes(':root')) {
+              // For :root pattern, we want the whole match
+              // Find all CSS rules starting from :root
+              const rootIndex = response.indexOf(':root');
+              if (rootIndex !== -1) {
+                // Extract from :root to the end of CSS-like content
+                let cssContent = response.substring(rootIndex);
+                // Try to find the end of the CSS block
+                const endPatterns = [/\n\n---/, /\n\n##/, /\n\n\*\*/];
+                for (const endPattern of endPatterns) {
+                  const endMatch = cssContent.match(endPattern);
+                  if (endMatch) {
+                    cssContent = cssContent.substring(0, endMatch.index);
+                    break;
+                  }
+                }
+                result.cssCode = cssContent.trim();
+                console.log('CSS extracted using :root search');
+                break;
+              }
+            }
+          }
         }
       }
       
       // If still no CSS found, try to extract it from the raw text using more general regex
       if (!result.cssCode) {
         // Look for common CSS patterns like declarations and rules
-        const cssBlockPattern = /\/\* .*? \*\/|:root\s*{[\s\S]*?}|body\s*{[\s\S]*?}|\.[\w-]+\s*{[\s\S]*?}/g;
+        const cssBlockPattern = /\/\* .*? \*\/|:root\s*{[\s\S]*?}|\.[\w-]+\s*{[\s\S]*?}|[\w-]+\s*{[\s\S]*?}/g;
         const cssBlocks = response.match(cssBlockPattern);
         
         if (cssBlocks && cssBlocks.length > 0) {
           result.cssCode = cssBlocks.join('\n\n');
+          console.log('CSS extracted using general pattern matching');
         }
       }
       
@@ -1572,9 +1597,10 @@ footer {
         result.htmlCode = this.fixHtmlStyleReferences(result.htmlCode, result.cssCode);
       }
       
-      console.log('Extraction results:', { 
+      console.log('Final extraction results:', { 
         htmlFound: !!result.htmlCode, 
         cssFound: !!result.cssCode,
+        htmlLength: result.htmlCode?.length || 0,
         cssLength: result.cssCode?.length || 0 
       });
       
