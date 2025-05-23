@@ -2080,67 +2080,79 @@ export const Canvas: React.FC = () => {
     }
   };
 
-  // Handle image pasting
-  useEffect(() => {
-    function handlePaste(event: ClipboardEvent) {
-      // Get clipboard text content
-      const clipboardText = event.clipboardData?.getData('text') || '';
+  // Function to handle image paste
+  const handleImagePaste = async (file: File) => {
+    try {
+      console.log('Image paste detected:', file.type, file.size);
       
-      console.log('Paste event detected!', {
-        textLength: clipboardText.length,
-        text: clipboardText.substring(0, 50) + (clipboardText.length > 50 ? '...' : ''),
-        containsFigma: clipboardText.includes('figma.com'),
-        isFigmaLink: isFigmaSelectionLink(clipboardText),
-        isDesignLink: clipboardText.includes('figma.com/design/')
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please paste a valid image file.');
+        return;
+      }
+      
+      // Check file size (limit to 10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        alert('Image file is too large. Please use an image smaller than 10MB.');
+        return;
+      }
+      
+      // Convert file to data URL
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result && typeof e.target.result === 'string') {
+            resolve(e.target.result);
+          } else {
+            reject(new Error('Failed to read file as data URL'));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
       });
       
-      // Check if it's a Figma selection link (use our utility function)
-      if (isFigmaSelectionLink(clipboardText)) {
-        console.log('Figma selection link detected!', clipboardText);
+      // Get image dimensions
+      const dimensions = await getImageDimensions(dataUrl);
+      
+      // Calculate display dimensions (scale down if too large)
+      const maxDisplayWidth = 600;
+      const maxDisplayHeight = 600;
+      let displayWidth = dimensions.width;
+      let displayHeight = dimensions.height;
+      
+      if (displayWidth > maxDisplayWidth || displayHeight > maxDisplayHeight) {
+        const widthRatio = maxDisplayWidth / displayWidth;
+        const heightRatio = maxDisplayHeight / displayHeight;
+        const ratio = Math.min(widthRatio, heightRatio);
         
-        // Parse the Figma selection link to get file key and node ID
-        const linkData = parseFigmaSelectionLink(clipboardText);
-        console.log('Parsed Figma link data:', linkData);
-
-        // First, check if we have a valid file key
-        if (!linkData.fileKey) {
-          console.error('No file key found in the Figma link');
-          return; // Don't do anything if we can't get a file key
-        }
-        
-        // For all links, whether design or file format, we need a valid node ID
-        if (!linkData.nodeId || linkData.nodeId === '0:1') {
-          alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
-          return;
-        }
-        
-        // If we have a valid file key and node ID, try to import
-        if (linkData.fileKey && linkData.nodeId) {
-          // First make sure Figma is authenticated
-          if (!supabaseService.isAuthenticatedWithFigma()) {
-            console.log('Not authenticated with Figma, showing auth prompt');
-            setPendingFigmaLink(linkData);
-            return;
-          }
-          
-          // Prevent the default paste behavior
-          event.preventDefault();
-          
-          // If already authenticated, try to fetch the Figma node
-          console.log('Fetching Figma node:', linkData);
-          setPendingFigmaLink(linkData);
-          fetchFigmaNode(linkData.fileKey, linkData.nodeId);
-        } else {
-          console.error('Failed to parse Figma selection link:', clipboardText);
-        }
+        displayWidth = Math.round(displayWidth * ratio);
+        displayHeight = Math.round(displayHeight * ratio);
       }
+      
+      // Create a new design object from the pasted image
+      const designId = crypto.randomUUID();
+      const newDesign: Design = {
+        id: designId,
+        imageUrl: dataUrl,
+        position: { x: 0, y: 0 }, // Center position
+        dimensions: { width: displayWidth, height: displayHeight },
+        isFromFigma: false, // Mark as not from Figma
+      };
+      
+      // Add the design to the canvas
+      setDesigns(prev => [...prev, newDesign]);
+      
+      // Select the newly added design
+      setSelectedDesignId(designId);
+      
+      console.log('Image design created:', newDesign);
+      
+    } catch (error) {
+      console.error('Error handling image paste:', error);
+      alert('Failed to paste image. Please try again.');
     }
-    
-    document.addEventListener('paste', handlePaste);
-    return () => {
-      document.removeEventListener('paste', handlePaste);
-    };
-  }, []);
+  };
   
   async function fetchFigmaNode(fileKey: string, nodeId: string) {
     try {
@@ -2813,6 +2825,88 @@ export const Canvas: React.FC = () => {
     }
   };
 
+  // Handle image pasting
+  useEffect(() => {
+    function handlePaste(event: ClipboardEvent) {
+      // Get clipboard text content
+      const clipboardText = event.clipboardData?.getData('text') || '';
+      
+      console.log('Paste event detected!', {
+        textLength: clipboardText.length,
+        text: clipboardText.substring(0, 50) + (clipboardText.length > 50 ? '...' : ''),
+        containsFigma: clipboardText.includes('figma.com'),
+        isFigmaLink: isFigmaSelectionLink(clipboardText),
+        isDesignLink: clipboardText.includes('figma.com/design/')
+      });
+      
+      // Check if there are files (images) in the clipboard
+      const clipboardItems = event.clipboardData?.items;
+      let hasImage = false;
+      
+      if (clipboardItems) {
+        for (let i = 0; i < clipboardItems.length; i++) {
+          const item = clipboardItems[i];
+          if (item.type.indexOf('image') !== -1) {
+            hasImage = true;
+            // Handle image paste
+            const file = item.getAsFile();
+            if (file) {
+              handleImagePaste(file);
+              event.preventDefault();
+              return;
+            }
+          }
+        }
+      }
+      
+      // If no image found, proceed with existing Figma link logic
+      if (!hasImage && isFigmaSelectionLink(clipboardText)) {
+        console.log('Figma selection link detected!', clipboardText);
+        
+        // Parse the Figma selection link to get file key and node ID
+        const linkData = parseFigmaSelectionLink(clipboardText);
+        console.log('Parsed Figma link data:', linkData);
+
+        // First, check if we have a valid file key
+        if (!linkData.fileKey) {
+          console.error('No file key found in the Figma link');
+          return; // Don't do anything if we can't get a file key
+        }
+        
+        // For all links, whether design or file format, we need a valid node ID
+        if (!linkData.nodeId || linkData.nodeId === '0:1') {
+          alert('Please select a specific component in Figma and copy its selection link.\n\nTo get a selection link in Figma:\n1. Select a specific frame or component\n2. Right-click > Copy/Paste > Copy link to selection');
+          return;
+        }
+        
+        // If we have a valid file key and node ID, try to import
+        if (linkData.fileKey && linkData.nodeId) {
+          // First make sure Figma is authenticated
+          if (!supabaseService.isAuthenticatedWithFigma()) {
+            console.log('Not authenticated with Figma, showing auth prompt');
+            setPendingFigmaLink(linkData);
+            return;
+          }
+          
+          // Prevent the default paste behavior
+          event.preventDefault();
+          
+          // If already authenticated, try to fetch the Figma node
+          console.log('Fetching Figma node:', linkData);
+          setPendingFigmaLink(linkData);
+          fetchFigmaNode(linkData.fileKey, linkData.nodeId);
+        } else {
+          console.error('Failed to parse Figma selection link:', clipboardText);
+        }
+      }
+    }
+    
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, []);
+
   return (
     <>
       <GlobalStyle />
@@ -2859,8 +2953,8 @@ export const Canvas: React.FC = () => {
                 </>
               ) : (
                 <EmptyCanvasMessage>
-                  <h2>Paste a Figma frame selection</h2>
-                  <p>Select a frame and press Command+L on your keyboard</p>
+                  <h2>Paste a UI for iteration</h2>
+                  <p>Copy a Figma frame selection (Command+L) or paste any UI image</p>
                 </EmptyCanvasMessage>
               )}
             </CanvasContent>
