@@ -1301,8 +1301,8 @@ export const Canvas: React.FC = () => {
   // Track design initialization
   const [designsInitialized, setDesignsInitialized] = useState(false);
   
-  // Selected design state
-  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
+  // Selected design state - updated for multi-selection
+  const [selectedDesignIds, setSelectedDesignIds] = useState<string[]>([]);
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
@@ -1420,8 +1420,8 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Find the selected design
-  const selectedDesign = designs.find(d => d.id === selectedDesignId);
+  // Find the selected designs
+  const selectedDesigns = designs.filter(d => selectedDesignIds.includes(d.id));
   
   // Helper to get a specific design reference
   const getDesignRef = (id: string) => {
@@ -1498,7 +1498,7 @@ export const Canvas: React.FC = () => {
     }
     
     // Deselect designs when clicking on empty canvas
-    setSelectedDesignId(null);
+    setSelectedDesignIds([]);
     
     // Handle canvas panning
     setIsDragging(true);
@@ -1510,7 +1510,9 @@ export const Canvas: React.FC = () => {
   
   // Handle mouse move for panning and design dragging
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDesignDragging && selectedDesignId) {
+    if (isDesignDragging && selectedDesignIds.length > 0) {
+      // For simplicity, we'll drag the first selected design
+      const primarySelectedId = selectedDesignIds[0];
       // Calculate the delta in screen coordinates
       const deltaX = e.clientX - designDragStart.x;
       const deltaY = e.clientY - designDragStart.y;
@@ -1521,7 +1523,7 @@ export const Canvas: React.FC = () => {
 
       // Determine if the selected item is a design or an iteration
       const isIteration = designs.some(design => 
-        design.iterations?.some(iteration => iteration.id === selectedDesignId)
+        design.iterations?.some(iteration => iteration.id === primarySelectedId)
       );
       
       if (isIteration) {
@@ -1531,7 +1533,7 @@ export const Canvas: React.FC = () => {
             if (!design.iterations) return design;
             
             const updatedIterations = design.iterations.map(iteration => 
-              iteration.id === selectedDesignId
+              iteration.id === primarySelectedId
                 ? {
                     ...iteration,
                     position: {
@@ -1557,7 +1559,7 @@ export const Canvas: React.FC = () => {
         // Update design position
         setDesigns(prevDesigns => 
           prevDesigns.map(design => 
-            design.id === selectedDesignId
+            design.id === primarySelectedId
               ? {
                   ...design,
                   position: {
@@ -1581,12 +1583,25 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Handle click on a design
+  // Handle click on a design - updated for multi-selection
   const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
     
-    // Set the selected design ID
-    setSelectedDesignId(designId);
+    if (e.shiftKey) {
+      // Shift+click: toggle selection
+      setSelectedDesignIds(prev => {
+        if (prev.includes(designId)) {
+          // Remove from selection
+          return prev.filter(id => id !== designId);
+        } else {
+          // Add to selection
+          return [...prev, designId];
+        }
+      });
+    } else {
+      // Normal click: select only this design
+      setSelectedDesignIds([designId]);
+    }
     
     // Note: We no longer automatically open the analysis panel for iterations
     // as we've moved that functionality to the View Analysis button
