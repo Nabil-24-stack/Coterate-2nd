@@ -2589,7 +2589,7 @@ export const Canvas: React.FC = () => {
     return (
       <DesignWithActionsContainer key={design.id}>
         <DesignCard 
-          isSelected={selectedDesignId === design.id}
+          isSelected={isDesignSelected(design.id)}
           cursorMode={effectiveCursorMode}
           onClick={(e) => handleDesignClick(e, design.id)}
           onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
@@ -2637,8 +2637,8 @@ export const Canvas: React.FC = () => {
           <ActionButton className="secondary" onMouseDown={(e) => {
             e.stopPropagation();
             // Select the design if not already selected
-            if (selectedDesignId !== design.id) {
-              setSelectedDesignId(design.id);
+            if (!isDesignSelected(design.id)) {
+              selectDesign(design.id);
             }
             
             // Start dragging the design
@@ -2703,11 +2703,11 @@ export const Canvas: React.FC = () => {
           <div style={{ position: 'relative' }}>
             {/* The iteration design itself */}
             <IterationDesignCard 
-              isSelected={selectedDesignId === iteration.id}
+              isSelected={isDesignSelected(iteration.id)}
               cursorMode={effectiveCursorMode}
               onClick={(e) => handleDesignClick(e, iteration.id)}
               onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
-              style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
+              style={{ cursor: isDesignSelected(iteration.id) ? 'move' : 'pointer' }}
             >
               <HtmlDesignRenderer
                 ref={(el: HtmlDesignRendererHandle | null) => {
@@ -2766,8 +2766,8 @@ export const Canvas: React.FC = () => {
             <ActionButton className="secondary" onMouseDown={(e) => {
               e.stopPropagation();
               // Select the design if not already selected
-              if (selectedDesignId !== iteration.id) {
-                setSelectedDesignId(iteration.id);
+              if (!isDesignSelected(iteration.id)) {
+                selectDesign(iteration.id);
               }
               
               // Start dragging the design
@@ -2864,9 +2864,9 @@ export const Canvas: React.FC = () => {
     }
     
     // Check if we were dragging a design and save its new position
-    if (isDesignDragging && selectedDesignId) {
+    if (isDesignDragging && selectedDesignIds.length === 1) {
       // Position is already saved in the designs state, no extra save needed
-      console.log(`Design dragging ended for design: ${selectedDesignId}`);
+      console.log(`Design dragging ended for design: ${selectedDesignIds[0]}`);
     }
     
     // End marquee selection
