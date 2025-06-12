@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
+import { useCursorContext } from '../contexts/CursorContext';
 import { Design, DesignIteration, Page } from '../types';
 import supabaseService from '../services/SupabaseService';
 import openAIService from '../services/OpenAIService';
@@ -30,17 +31,17 @@ const CanvasContainer = styled.div`
 `;
 
 // The infinite canvas with grid background
-const InfiniteCanvas = styled.div<{ scale: number }>`
+const InfiniteCanvas = styled.div<{ scale: number; cursorMode: string }>`
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 0;
   background-color: #767676;
-  cursor: grab;
+  cursor: ${props => props.cursorMode === 'hand' ? 'grab' : 'default'};
   
   &:active {
-    cursor: grabbing;
+    cursor: ${props => props.cursorMode === 'hand' ? 'grabbing' : 'default'};
   }
 `;
 
@@ -67,7 +68,7 @@ const DesignContainer = styled.div<{ x: number; y: number }>`
 `;
 
 // Design card that holds the image, now with isSelected prop
-const DesignCard = styled.div<{ isSelected: boolean }>`
+const DesignCard = styled.div<{ isSelected: boolean; cursorMode: string }>`
   position: relative;
   border-radius: 8px;
   overflow: visible;
@@ -75,12 +76,22 @@ const DesignCard = styled.div<{ isSelected: boolean }>`
     ? '0 0 0 2px #26D4C8, 0 4px 12px rgba(0, 0, 0, 0.15)' 
     : '0 4px 12px rgba(0, 0, 0, 0.08)'};
   background: white;
-  cursor: ${props => props.isSelected ? 'move' : 'pointer'};
+  cursor: ${props => {
+    if (props.cursorMode === 'hand') return 'grab';
+    return props.isSelected ? 'move' : 'pointer';
+  }};
   
   &:hover {
     box-shadow: ${props => props.isSelected 
       ? '0 0 0 2px #26D4C8, 0 6px 16px rgba(0, 0, 0, 0.18)' 
       : '0 6px 16px rgba(0, 0, 0, 0.12)'};
+  }
+  
+  &:active {
+    cursor: ${props => {
+      if (props.cursorMode === 'hand') return 'grabbing';
+      return props.isSelected ? 'move' : 'pointer';
+    }};
   }
 `;
 
@@ -1160,6 +1171,7 @@ const DragHandle = styled.button`
 
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
+  const { cursorMode } = useCursorContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -1301,8 +1313,8 @@ export const Canvas: React.FC = () => {
   // Track design initialization
   const [designsInitialized, setDesignsInitialized] = useState(false);
   
-  // Selected design state - updated for multi-selection
-  const [selectedDesignIds, setSelectedDesignIds] = useState<string[]>([]);
+  // Selected design state
+  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
@@ -1420,8 +1432,8 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Find the selected designs
-  const selectedDesigns = designs.filter(d => selectedDesignIds.includes(d.id));
+  // Find the selected design
+  const selectedDesign = designs.find(d => d.id === selectedDesignId);
   
   // Helper to get a specific design reference
   const getDesignRef = (id: string) => {
@@ -1498,21 +1510,21 @@ export const Canvas: React.FC = () => {
     }
     
     // Deselect designs when clicking on empty canvas
-    setSelectedDesignIds([]);
+    setSelectedDesignId(null);
     
-    // Handle canvas panning
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
+    // Handle canvas panning only in hand mode
+    if (cursorMode === 'hand') {
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      });
+    }
   };
   
   // Handle mouse move for panning and design dragging
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDesignDragging && selectedDesignIds.length > 0) {
-      // For simplicity, we'll drag the first selected design
-      const primarySelectedId = selectedDesignIds[0];
+    if (isDesignDragging && selectedDesignId) {
       // Calculate the delta in screen coordinates
       const deltaX = e.clientX - designDragStart.x;
       const deltaY = e.clientY - designDragStart.y;
@@ -1523,7 +1535,7 @@ export const Canvas: React.FC = () => {
 
       // Determine if the selected item is a design or an iteration
       const isIteration = designs.some(design => 
-        design.iterations?.some(iteration => iteration.id === primarySelectedId)
+        design.iterations?.some(iteration => iteration.id === selectedDesignId)
       );
       
       if (isIteration) {
@@ -1533,7 +1545,7 @@ export const Canvas: React.FC = () => {
             if (!design.iterations) return design;
             
             const updatedIterations = design.iterations.map(iteration => 
-              iteration.id === primarySelectedId
+              iteration.id === selectedDesignId
                 ? {
                     ...iteration,
                     position: {
@@ -1559,7 +1571,7 @@ export const Canvas: React.FC = () => {
         // Update design position
         setDesigns(prevDesigns => 
           prevDesigns.map(design => 
-            design.id === primarySelectedId
+            design.id === selectedDesignId
               ? {
                   ...design,
                   position: {
@@ -1583,25 +1595,12 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Handle click on a design - updated for multi-selection
+  // Handle click on a design
   const handleDesignClick = (e: React.MouseEvent, designId: string) => {
     e.stopPropagation();
     
-    if (e.shiftKey) {
-      // Shift+click: toggle selection
-      setSelectedDesignIds(prev => {
-        if (prev.includes(designId)) {
-          // Remove from selection
-          return prev.filter(id => id !== designId);
-        } else {
-          // Add to selection
-          return [...prev, designId];
-        }
-      });
-    } else {
-      // Normal click: select only this design
-      setSelectedDesignIds([designId]);
-    }
+    // Set the selected design ID
+    setSelectedDesignId(designId);
     
     // Note: We no longer automatically open the analysis panel for iterations
     // as we've moved that functionality to the View Analysis button
@@ -1609,46 +1608,56 @@ export const Canvas: React.FC = () => {
   
   // Add the handleDesignMouseDown function back
   const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
-    // If we already have a design selected, just focus on this one
-    if (selectedDesignId) {
+    // In hand mode, prioritize canvas panning over design interaction
+    if (cursorMode === 'hand') {
+      // Only select the design but don't prevent canvas panning
       setSelectedDesignId(designId);
-      
-      // If this is a left-click, start dragging the design
-      if (e.button === 0) {
-        e.stopPropagation(); // Stop event propagation
-        setIsDesignDragging(true);
-        setDesignDragStart({
-          x: e.clientX,
-          y: e.clientY
-        });
+      return;
+    }
+    
+    // In pointer mode, handle design selection and dragging
+    if (cursorMode === 'pointer') {
+      // If we already have a design selected, just focus on this one
+      if (selectedDesignId) {
+        setSelectedDesignId(designId);
         
-        // Find the initial position of the selected design
-        const isIteration = designs.some(design => 
-          design.iterations?.some(iteration => iteration.id === designId)
-        );
-        
-        if (isIteration) {
-          // Find the iteration's position
-          for (const design of designs) {
-            if (!design.iterations) continue;
-            
-            const iteration = design.iterations.find(it => it.id === designId);
-            if (iteration && iteration.position) {
-              setDesignInitialPosition(iteration.position);
-              break;
+        // If this is a left-click, start dragging the design
+        if (e.button === 0) {
+          e.stopPropagation(); // Stop event propagation
+          setIsDesignDragging(true);
+          setDesignDragStart({
+            x: e.clientX,
+            y: e.clientY
+          });
+          
+          // Find the initial position of the selected design
+          const isIteration = designs.some(design => 
+            design.iterations?.some(iteration => iteration.id === designId)
+          );
+          
+          if (isIteration) {
+            // Find the iteration's position
+            for (const design of designs) {
+              if (!design.iterations) continue;
+              
+              const iteration = design.iterations.find(it => it.id === designId);
+              if (iteration && iteration.position) {
+                setDesignInitialPosition(iteration.position);
+                break;
+              }
+            }
+          } else {
+            // Find the design's position
+            const design = designs.find(d => d.id === designId);
+            if (design && design.position) {
+              setDesignInitialPosition(design.position);
             }
           }
-        } else {
-          // Find the design's position
-          const design = designs.find(d => d.id === designId);
-          if (design && design.position) {
-            setDesignInitialPosition(design.position);
-          }
         }
+      } else {
+        // Otherwise just select it (this will also trigger the analysis panel if needed)
+        handleDesignClick(e, designId);
       }
-    } else {
-      // Otherwise just select it (this will also trigger the analysis panel if needed)
-      handleDesignClick(e, designId);
     }
   };
   
@@ -2412,6 +2421,7 @@ export const Canvas: React.FC = () => {
       <DesignWithActionsContainer key={design.id}>
         <DesignCard 
           isSelected={selectedDesignId === design.id}
+          cursorMode={cursorMode}
           onClick={(e) => handleDesignClick(e, design.id)}
           onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
           style={{ position: 'relative' }}
@@ -2525,6 +2535,7 @@ export const Canvas: React.FC = () => {
             {/* The iteration design itself */}
             <IterationDesignCard 
               isSelected={selectedDesignId === iteration.id}
+              cursorMode={cursorMode}
               onClick={(e) => handleDesignClick(e, iteration.id)}
               onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
               style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
@@ -2964,6 +2975,7 @@ export const Canvas: React.FC = () => {
           <InfiniteCanvas
             ref={canvasRef}
             scale={scale}
+            cursorMode={cursorMode}
             onMouseDown={handleCanvasMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

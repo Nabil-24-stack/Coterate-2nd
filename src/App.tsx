@@ -4,7 +4,9 @@ import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
 import Header from './components/Header';
 import Research from './components/Research';
+import BottomToolbar from './components/BottomToolbar';
 import { PageProvider } from './contexts/PageContext';
+import { CursorProvider } from './contexts/CursorContext';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import FigmaAuthCallback from './components/FigmaAuthCallback';
 import AuthCallback from './components/AuthCallback';
@@ -54,33 +56,36 @@ function App() {
   return (
     <Router>
       <PageProvider>
-        <Routes>
-          <Route path="/auth/figma/callback" element={<FigmaAuthCallback />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/test-auth" element={<TestAuthPage />} />
-          <Route path="/migrate" element={<MigratePage />} />
-          <Route path="/" element={
-            <AppContainer>
-              <Header />
-              <TabsContainer>
-                <Tab 
-                  active={activeTab === 'design'} 
-                  onClick={() => setActiveTab('design')}
-                >
-                  Design
-                </Tab>
-                <Tab 
-                  active={activeTab === 'research'} 
-                  onClick={() => setActiveTab('research')}
-                >
-                  Research
-                </Tab>
-              </TabsContainer>
-              <Sidebar />
-              {activeTab === 'design' ? <Canvas /> : <Research />}
-            </AppContainer>
-          } />
-        </Routes>
+        <CursorProvider>
+          <Routes>
+            <Route path="/auth/figma/callback" element={<FigmaAuthCallback />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/test-auth" element={<TestAuthPage />} />
+            <Route path="/migrate" element={<MigratePage />} />
+            <Route path="/" element={
+              <AppContainer>
+                <Header />
+                <TabsContainer>
+                  <Tab 
+                    active={activeTab === 'design'} 
+                    onClick={() => setActiveTab('design')}
+                  >
+                    Design
+                  </Tab>
+                  <Tab 
+                    active={activeTab === 'research'} 
+                    onClick={() => setActiveTab('research')}
+                  >
+                    Research
+                  </Tab>
+                </TabsContainer>
+                <Sidebar />
+                {activeTab === 'design' ? <Canvas /> : <Research />}
+                <BottomToolbar />
+              </AppContainer>
+            } />
+          </Routes>
+        </CursorProvider>
       </PageProvider>
     </Router>
   );
