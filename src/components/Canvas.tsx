@@ -1734,6 +1734,34 @@ export const Canvas: React.FC = () => {
       alert('OpenAI API key is not configured. Please set it in your environment variables.');
       return;
     }
+
+    // Get research notes from localStorage for the current page
+    const getResearchNotes = () => {
+      if (!currentPage) return '';
+      const notesKey = `coterate_notes_${currentPage.id}`;
+      return localStorage.getItem(notesKey) || '';
+    };
+
+    // Format research notes as linkedInsights for the AI
+    const formatResearchInsights = (notes: string) => {
+      if (!notes.trim()) return [];
+      
+      return [{
+        type: 'research_notes',
+        content: notes,
+        summary: notes.length > 200 ? notes.substring(0, 200) + '...' : notes,
+        priority: 'high' // Research notes should have high priority
+      }];
+    };
+
+    const researchNotes = getResearchNotes();
+    const linkedInsights = formatResearchInsights(researchNotes);
+    
+    if (linkedInsights.length > 0) {
+      LogManager.log('research-integration', `Found research notes for page ${currentPage?.id}: ${researchNotes.substring(0, 100)}...`, true);
+    } else {
+      LogManager.log('research-integration', `No research notes found for page ${currentPage?.id}`, true);
+    }
     
     // Set processing state for this specific design or iteration
     setDesigns(prevDesigns => 
@@ -1810,10 +1838,10 @@ export const Canvas: React.FC = () => {
         // For iterations, we need to call a specialized method that can analyze HTML/CSS
         // For now, we'll use the same method with the parent's image URL
         // This is a temporary solution until we implement proper HTML/CSS analysis
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt, linkedInsights);
       } else {
         // For base designs, we use the existing method with the image URL
-        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt);
+        result = await openAIService.analyzeDesignAndGenerateHTML(sourceImageUrl, prompt, linkedInsights);
       }
       
       // Update the processing step to "Generating Improved Design"
@@ -1899,7 +1927,8 @@ export const Canvas: React.FC = () => {
             components: result.metadata.components
           },
           rawResponse: result.analysis.rawResponse, // Store the raw GPT-4.1 response
-          userPrompt: prompt // Store the user's prompt input
+          userPrompt: prompt, // Store the user's prompt input
+          researchInsightsApplied: linkedInsights.length > 0 ? linkedInsights.map(insight => insight.content || insight.summary) : undefined // Track which research insights were used
         },
         dimensions: originalDimensions, // Add the original dimensions to the iteration
         created_at: new Date().toISOString()

@@ -70,6 +70,7 @@ export interface DesignAnalysis {
   };
   rawResponse?: string; // Store the full raw GPT-4.1 response
   userPrompt?: string; // Store the user's prompt input
+  researchInsightsApplied?: string[]; // Track which research insights were used in this iteration
 }
 
 // Interface for Page

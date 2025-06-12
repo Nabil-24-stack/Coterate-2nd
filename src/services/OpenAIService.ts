@@ -1227,19 +1227,35 @@ footer {
 
   // Add this method to continue with the OpenAI analysis once we have the base64 image
   private async continueWithAnalysis(base64Image: string, dimensions: {width: number, height: number}, linkedInsights: any[], userPrompt: string): Promise<DesignAnalysisResponse> {
-    // Process linked insights if available
+    // Process linked insights if available - research notes get the highest priority
     let insightsPrompt = '';
     if (linkedInsights && linkedInsights.length > 0) {
-      insightsPrompt = '\n\nImportant user insights to consider:\n';
-      linkedInsights.forEach((insight, index) => {
-        const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
-        insightsPrompt += `${index + 1}. ${summary}\n`;
-      });
-      insightsPrompt += '\nMake sure to address these specific user needs and pain points in your design improvements.';
+      // Separate research notes from other insights
+      const researchNotes = linkedInsights.filter(insight => insight.type === 'research_notes');
+      const otherInsights = linkedInsights.filter(insight => insight.type !== 'research_notes');
+      
+      if (researchNotes.length > 0) {
+        insightsPrompt = '\n\n🎯 CRITICAL USER RESEARCH INSIGHTS (HIGHEST PRIORITY):\n';
+        insightsPrompt += 'These are actual user research findings that MUST guide your design improvements:\n\n';
+        researchNotes.forEach((insight, index) => {
+          const content = insight.content || insight.summary || 'No content';
+          insightsPrompt += `📝 Research Note ${index + 1}:\n${content}\n\n`;
+        });
+        insightsPrompt += '⚠️ IMPORTANT: These research insights should be your PRIMARY guide for design improvements. ';
+        insightsPrompt += 'Address these user needs and pain points before considering any other changes.\n';
+      }
+      
+      if (otherInsights.length > 0) {
+        insightsPrompt += '\n\nAdditional user insights to consider:\n';
+        otherInsights.forEach((insight, index) => {
+          const summary = insight.summary || (insight.content ? insight.content.substring(0, 200) + '...' : 'No content');
+          insightsPrompt += `${index + 1}. ${summary}\n`;
+        });
+      }
     }
     
-    // Add the user prompt if provided
-    const userPromptContent = userPrompt ? `\n\nSpecific user requirements to focus on:\n${userPrompt}\n\nConcentrate on these specific aspects in your design improvements.` : '';
+    // Add the user prompt if provided - but with lower priority than research notes
+    const userPromptContent = userPrompt ? `\n\nAdditional user requirements to consider (secondary priority):\n${userPrompt}\n\nApply these requirements only if they don't conflict with the research insights above.` : '';
     
     const requestBody = {
       model: 'gpt-4.1',
