@@ -70,7 +70,7 @@ const HandIcon = () => (
 );
 
 const BottomToolbar: React.FC = () => {
-  const { cursorMode, effectiveCursorMode, setCursorMode, isSpacebarPressed } = useCursorContext();
+  const { effectiveCursorMode, setCursorMode, isSpacebarPressed, isMiddleMousePressed } = useCursorContext();
 
   const handleCursorModeChange = (mode: CursorMode) => {
     setCursorMode(mode);
@@ -88,7 +88,11 @@ const BottomToolbar: React.FC = () => {
       <ToolbarButton
         active={effectiveCursorMode === 'hand'}
         onClick={() => handleCursorModeChange('hand')}
-        title={`Hand Tool - Drag to pan the canvas${isSpacebarPressed ? ' (Spacebar held)' : ' (or hold Spacebar)'}`}
+        title={`Hand Tool - Drag to pan the canvas${
+          isSpacebarPressed ? ' (Spacebar held)' : 
+          isMiddleMousePressed ? ' (Middle mouse held)' : 
+          ' (or hold Spacebar/Middle mouse)'
+        }`}
       >
         <HandIcon />
       </ToolbarButton>

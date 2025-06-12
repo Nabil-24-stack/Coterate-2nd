@@ -4,9 +4,10 @@ export type CursorMode = 'pointer' | 'hand';
 
 interface CursorContextType {
   cursorMode: CursorMode;
-  effectiveCursorMode: CursorMode; // The actual mode including spacebar override
+  effectiveCursorMode: CursorMode; // The actual mode including spacebar/middle mouse override
   setCursorMode: (mode: CursorMode) => void;
   isSpacebarPressed: boolean;
+  isMiddleMousePressed: boolean;
 }
 
 const CursorContext = createContext<CursorContextType>({
@@ -14,6 +15,7 @@ const CursorContext = createContext<CursorContextType>({
   effectiveCursorMode: 'pointer',
   setCursorMode: () => {},
   isSpacebarPressed: false,
+  isMiddleMousePressed: false,
 });
 
 export const useCursorContext = () => useContext(CursorContext);
@@ -25,9 +27,10 @@ interface CursorProviderProps {
 export const CursorProvider: React.FC<CursorProviderProps> = ({ children }) => {
   const [cursorMode, setCursorMode] = useState<CursorMode>('pointer');
   const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
+  const [isMiddleMousePressed, setIsMiddleMousePressed] = useState(false);
 
-  // Calculate the effective cursor mode (considering spacebar override)
-  const effectiveCursorMode: CursorMode = isSpacebarPressed ? 'hand' : cursorMode;
+  // Calculate the effective cursor mode (considering spacebar or middle mouse override)
+  const effectiveCursorMode: CursorMode = (isSpacebarPressed || isMiddleMousePressed) ? 'hand' : cursorMode;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -52,30 +55,51 @@ export const CursorProvider: React.FC<CursorProviderProps> = ({ children }) => {
       }
     };
 
-    // Handle window blur to reset spacebar state if user switches tabs/windows
+    const handleMouseDown = (event: MouseEvent) => {
+      // Check for middle mouse button (button 1)
+      if (event.button === 1 && !isMiddleMousePressed) {
+        event.preventDefault(); // Prevent default middle-click behavior (auto-scroll)
+        setIsMiddleMousePressed(true);
+      }
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      // Check for middle mouse button (button 1)
+      if (event.button === 1) {
+        setIsMiddleMousePressed(false);
+      }
+    };
+
+    // Handle window blur to reset both spacebar and middle mouse state
     const handleWindowBlur = () => {
       setIsSpacebarPressed(false);
+      setIsMiddleMousePressed(false);
     };
 
     // Add event listeners
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleWindowBlur);
 
     // Cleanup
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [isSpacebarPressed]);
+  }, [isSpacebarPressed, isMiddleMousePressed]);
 
   return (
     <CursorContext.Provider value={{ 
       cursorMode, 
       effectiveCursorMode, 
       setCursorMode, 
-      isSpacebarPressed 
+      isSpacebarPressed,
+      isMiddleMousePressed
     }}>
       {children}
     </CursorContext.Provider>
