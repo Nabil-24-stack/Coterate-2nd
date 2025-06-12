@@ -1401,10 +1401,13 @@ export const Canvas: React.FC = () => {
   const getSharedActionButtonsPosition = () => {
     if (selectedDesignIds.length === 0) return null;
     
-    const selectedElements: Element[] = [];
+    const selectedElements: HTMLElement[] = [];
     selectedDesignIds.forEach(id => {
       const element = getDesignRef(id);
-      if (element) selectedElements.push(element);
+      // Make sure element exists and is actually a DOM element with getBoundingClientRect
+      if (element && typeof element.getBoundingClientRect === 'function') {
+        selectedElements.push(element);
+      }
     });
     
     if (selectedElements.length === 0) return null;
@@ -1419,18 +1422,22 @@ export const Canvas: React.FC = () => {
     let maxBottom = -Infinity;
     
     selectedElements.forEach(element => {
-      const rect = element.getBoundingClientRect();
-      const relativeRect = {
-        left: rect.left - canvasRect.left,
-        top: rect.top - canvasRect.top,
-        right: rect.right - canvasRect.left,
-        bottom: rect.bottom - canvasRect.top
-      };
-      
-      minLeft = Math.min(minLeft, relativeRect.left);
-      minTop = Math.min(minTop, relativeRect.top);
-      maxRight = Math.max(maxRight, relativeRect.right);
-      maxBottom = Math.max(maxBottom, relativeRect.bottom);
+      try {
+        const rect = element.getBoundingClientRect();
+        const relativeRect = {
+          left: rect.left - canvasRect.left,
+          top: rect.top - canvasRect.top,
+          right: rect.right - canvasRect.left,
+          bottom: rect.bottom - canvasRect.top
+        };
+        
+        minLeft = Math.min(minLeft, relativeRect.left);
+        minTop = Math.min(minTop, relativeRect.top);
+        maxRight = Math.max(maxRight, relativeRect.right);
+        maxBottom = Math.max(maxBottom, relativeRect.bottom);
+      } catch (error) {
+        console.warn('Error getting bounding rect for element:', element, error);
+      }
     });
     
     // Position the action buttons above the selection
@@ -2589,6 +2596,11 @@ export const Canvas: React.FC = () => {
     return (
       <DesignWithActionsContainer key={design.id}>
         <DesignCard 
+          ref={(el: HTMLDivElement | null) => {
+            if (el) {
+              designRefs.current[design.id] = el;
+            }
+          }}
           isSelected={isDesignSelected(design.id)}
           cursorMode={effectiveCursorMode}
           onClick={(e) => handleDesignClick(e, design.id)}
@@ -2889,19 +2901,23 @@ export const Canvas: React.FC = () => {
         designs.forEach(design => {
           // Check the main design
           const designElement = getDesignRef(design.id);
-          if (designElement) {
-            const designRect = designElement.getBoundingClientRect();
-            const relativeRect = {
-              left: designRect.left - canvasRect.left,
-              top: designRect.top - canvasRect.top,
-              right: designRect.right - canvasRect.left,
-              bottom: designRect.bottom - canvasRect.top
-            };
-            
-            // Check if design intersects with marquee
-            if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
-                relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
-              selectedIds.push(design.id);
+          if (designElement && typeof designElement.getBoundingClientRect === 'function') {
+            try {
+              const designRect = designElement.getBoundingClientRect();
+              const relativeRect = {
+                left: designRect.left - canvasRect.left,
+                top: designRect.top - canvasRect.top,
+                right: designRect.right - canvasRect.left,
+                bottom: designRect.bottom - canvasRect.top
+              };
+              
+              // Check if design intersects with marquee
+              if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
+                  relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
+                selectedIds.push(design.id);
+              }
+            } catch (error) {
+              console.warn('Error getting bounding rect for design:', design.id, error);
             }
           }
           
@@ -2909,19 +2925,23 @@ export const Canvas: React.FC = () => {
           if (design.iterations) {
             design.iterations.forEach(iteration => {
               const iterationElement = getDesignRef(iteration.id);
-              if (iterationElement) {
-                const iterationRect = iterationElement.getBoundingClientRect();
-                const relativeRect = {
-                  left: iterationRect.left - canvasRect.left,
-                  top: iterationRect.top - canvasRect.top,
-                  right: iterationRect.right - canvasRect.left,
-                  bottom: iterationRect.bottom - canvasRect.top
-                };
-                
-                // Check if iteration intersects with marquee
-                if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
-                    relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
-                  selectedIds.push(iteration.id);
+              if (iterationElement && typeof iterationElement.getBoundingClientRect === 'function') {
+                try {
+                  const iterationRect = iterationElement.getBoundingClientRect();
+                  const relativeRect = {
+                    left: iterationRect.left - canvasRect.left,
+                    top: iterationRect.top - canvasRect.top,
+                    right: iterationRect.right - canvasRect.left,
+                    bottom: iterationRect.bottom - canvasRect.top
+                  };
+                  
+                  // Check if iteration intersects with marquee
+                  if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
+                      relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
+                    selectedIds.push(iteration.id);
+                  }
+                } catch (error) {
+                  console.warn('Error getting bounding rect for iteration:', iteration.id, error);
                 }
               }
             });
