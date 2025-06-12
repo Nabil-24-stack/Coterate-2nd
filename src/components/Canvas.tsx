@@ -1509,11 +1509,14 @@ export const Canvas: React.FC = () => {
       return;
     }
     
-    // Deselect designs when clicking on empty canvas
-    setSelectedDesignId(null);
+    // Deselect designs when clicking on empty canvas (only for left clicks)
+    if (e.button === 0) {
+      setSelectedDesignId(null);
+    }
     
-    // Handle canvas panning only in hand mode
-    if (effectiveCursorMode === 'hand') {
+    // Handle canvas panning in hand mode OR when middle mouse button is pressed
+    if (effectiveCursorMode === 'hand' || e.button === 1) {
+      e.preventDefault(); // Prevent default middle-click behavior
       setIsDragging(true);
       setDragStart({
         x: e.clientX - position.x,
@@ -1608,6 +1611,18 @@ export const Canvas: React.FC = () => {
   
   // Add the handleDesignMouseDown function back
   const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
+    // Handle middle mouse button for canvas panning even on designs
+    if (e.button === 1) {
+      e.preventDefault(); // Prevent default middle-click behavior
+      e.stopPropagation(); // Stop propagation to allow canvas panning
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      });
+      return;
+    }
+    
     // In hand mode, prioritize canvas panning over design interaction
     if (effectiveCursorMode === 'hand') {
       // Only select the design but don't prevent canvas panning
