@@ -3289,6 +3289,107 @@ export const Canvas: React.FC = () => {
               }}
             >
               <SharedActionButton
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  // Start dragging (only works if exactly one is selected)
+                  if (selectedDesignIds.length === 1) {
+                    const designId = selectedDesignIds[0];
+                    setIsDesignDragging(true);
+                    setDesignDragStart({
+                      x: e.clientX,
+                      y: e.clientY
+                    });
+                    
+                    // Find the design/iteration to get its initial position
+                    let initialPosition = { x: 0, y: 0 };
+                    const design = designs.find(d => d.id === designId);
+                    if (design) {
+                      initialPosition = design.position;
+                    } else {
+                      // Check if it's an iteration
+                      for (const d of designs) {
+                        if (d.iterations) {
+                          const iteration = d.iterations.find(it => it.id === designId);
+                          if (iteration) {
+                            initialPosition = iteration.position;
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    setDesignInitialPosition(initialPosition);
+                  }
+                }}
+                title={selectedDesignIds.length === 1 ? "Drag" : "Drag (only available for single selection)"}
+                style={{ 
+                  opacity: selectedDesignIds.length === 1 ? 1 : 0.5,
+                  cursor: selectedDesignIds.length === 1 ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <DragHandleIcon />
+              </SharedActionButton>
+
+              <SharedActionButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // View analysis for the first selected design
+                  if (selectedDesignIds.length > 0) {
+                    const firstDesignId = selectedDesignIds[0];
+                    let analysisData: DesignIteration | null = null;
+                    
+                    // Check if it's a main design
+                    const design = designs.find(d => d.id === firstDesignId);
+                    if (design) {
+                      analysisData = {
+                        id: design.id,
+                        parentId: '',
+                        htmlContent: design.htmlContent || '',
+                        cssContent: design.cssContent || '',
+                        analysis: {
+                          strengths: [],
+                          weaknesses: [],
+                          improvementAreas: []
+                        },
+                        position: design.position,
+                        dimensions: design.dimensions,
+                        imageUrl: design.imageUrl
+                      } as DesignIteration;
+                    } else {
+                      // Check if it's an iteration
+                      for (const d of designs) {
+                        if (d.iterations) {
+                          const iteration = d.iterations.find(it => it.id === firstDesignId);
+                          if (iteration) {
+                            analysisData = iteration;
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    
+                    if (analysisData) {
+                      setCurrentAnalysis(analysisData);
+                      setAnalysisVisible(true);
+                    }
+                  }
+                }}
+                title={selectedDesignIds.length === 1 ? "View Analysis" : `View Analysis (${selectedDesignIds.length} selected, showing first)`}
+              >
+                <ViewIcon />
+              </SharedActionButton>
+
+              <SharedActionButton
+                onClick={() => {
+                  // Retry functionality - could be adapted for multiple designs
+                  console.log('Retry action for selected designs:', selectedDesignIds);
+                  // Add retry logic here when implemented
+                }}
+                title="Retry"
+              >
+                <RetryIcon />
+              </SharedActionButton>
+              
+              <SharedActionButton
                 onClick={() => {
                   // Iterate all selected designs
                   selectedDesignIds.forEach(id => {
@@ -3296,24 +3397,9 @@ export const Canvas: React.FC = () => {
                     openPromptDialog(e, id);
                   });
                 }}
-                title="Iterate selected designs"
+                title="Iterate"
               >
                 <IterateIcon />
-              </SharedActionButton>
-              
-              <SharedActionButton
-                onClick={() => {
-                  // Delete all selected designs
-                  setDesigns(prevDesigns => 
-                    prevDesigns.filter(d => !selectedDesignIds.includes(d.id))
-                  );
-                  clearSelection();
-                }}
-                title="Delete selected designs"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 5.883 16h4.234a2 2 0 0 0 1.992-1.84L12.962 3.5H13.5a.5.5 0 0 0 0-1H11Z" fill="currentColor"/>
-                </svg>
               </SharedActionButton>
             </SharedActionButtons>
           ) : null;
