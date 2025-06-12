@@ -394,7 +394,7 @@ const AnalysisPanel = styled.div<{ visible: boolean }>`
   height: 100vh;
   background-color: #fff;
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
+  z-index: 1002;
   transform: translateX(${props => props.visible ? 0 : '100%'});
   transition: transform 0.3s ease-in-out;
   display: flex;
