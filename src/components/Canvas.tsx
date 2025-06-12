@@ -56,6 +56,26 @@ const CanvasContent = styled.div<{ x: number; y: number; scale: number }>`
   transform-origin: 0 0;
 `;
 
+// Marquee selection box
+const MarqueeSelection = styled.div<{ 
+  x: number; 
+  y: number; 
+  width: number; 
+  height: number; 
+  visible: boolean 
+}>`
+  position: absolute;
+  left: ${props => props.x}px;
+  top: ${props => props.y}px;
+  width: ${props => props.width}px;
+  height: ${props => props.height}px;
+  border: 1px solid #26D4C8;
+  background-color: rgba(38, 212, 200, 0.1);
+  pointer-events: none;
+  display: ${props => props.visible ? 'block' : 'none'};
+  z-index: 1000;
+`;
+
 // Container for designs
 const DesignContainer = styled.div<{ x: number; y: number }>`
   position: absolute;
@@ -1319,6 +1339,11 @@ export const Canvas: React.FC = () => {
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
   
+  // Marquee selection state
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState({ x: 0, y: 0 });
+  const [marqueeEnd, setMarqueeEnd] = useState({ x: 0, y: 0 });
+  
   // Analysis panel state
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<DesignIteration | null>(null);
@@ -1523,6 +1548,18 @@ export const Canvas: React.FC = () => {
         y: e.clientY - position.y,
       });
     }
+    // Handle marquee selection in pointer mode with left click
+    else if (effectiveCursorMode === 'pointer' && e.button === 0) {
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (canvasRect) {
+        const startX = e.clientX - canvasRect.left;
+        const startY = e.clientY - canvasRect.top;
+        
+        setIsMarqueeSelecting(true);
+        setMarqueeStart({ x: startX, y: startY });
+        setMarqueeEnd({ x: startX, y: startY });
+      }
+    }
   };
   
   // Handle mouse move for panning and design dragging
@@ -1595,6 +1632,17 @@ export const Canvas: React.FC = () => {
         y: e.clientY - dragStart.y,
       };
       setPosition(newPosition);
+    }
+    
+    // Handle marquee selection dragging
+    if (isMarqueeSelecting) {
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (canvasRect) {
+        const currentX = e.clientX - canvasRect.left;
+        const currentY = e.clientY - canvasRect.top;
+        
+        setMarqueeEnd({ x: currentX, y: currentY });
+      }
     }
   };
   
@@ -2715,6 +2763,12 @@ export const Canvas: React.FC = () => {
       console.log(`Design dragging ended for design: ${selectedDesignId}`);
     }
     
+    // End marquee selection
+    if (isMarqueeSelecting) {
+      setIsMarqueeSelecting(false);
+      // Here you could add logic to select designs within the marquee area
+    }
+    
     setIsDragging(false);
     setIsDesignDragging(false);
     
@@ -3031,6 +3085,15 @@ export const Canvas: React.FC = () => {
             </CanvasContent>
           </InfiniteCanvas>
         )}
+        
+        {/* Marquee Selection Box */}
+        <MarqueeSelection
+          x={Math.min(marqueeStart.x, marqueeEnd.x)}
+          y={Math.min(marqueeStart.y, marqueeEnd.y)}
+          width={Math.abs(marqueeEnd.x - marqueeStart.x)}
+          height={Math.abs(marqueeEnd.y - marqueeStart.y)}
+          visible={isMarqueeSelecting}
+        />
         
         {/* Debug Controls - only in development mode */}
         {process.env.NODE_ENV === 'development' && (
