@@ -1780,15 +1780,15 @@ export const Canvas: React.FC = () => {
     // In hand mode, prioritize canvas panning over design interaction
     if (effectiveCursorMode === 'hand') {
       // Only select the design but don't prevent canvas panning
-      setSelectedDesignId(designId);
+      selectDesign(designId);
       return;
     }
     
     // In pointer mode, handle design selection and dragging
     if (effectiveCursorMode === 'pointer') {
       // If we already have a design selected, just focus on this one
-      if (selectedDesignId) {
-        setSelectedDesignId(designId);
+      if (selectedDesignIds.length > 0) {
+        selectDesign(designId);
         
         // If this is a left-click, start dragging the design
         if (e.button === 0) {
@@ -2366,7 +2366,7 @@ export const Canvas: React.FC = () => {
       setDesigns(prev => [...prev, newDesign]);
       
       // Select the newly added design
-      setSelectedDesignId(designId);
+      selectDesign(designId);
       
       console.log('Image design created:', newDesign);
       
@@ -2563,15 +2563,15 @@ export const Canvas: React.FC = () => {
         setScale((prev: number) => Math.max(prev * 0.9, 0.1));
       }
       
-      // Delete/Backspace: Remove selected design
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDesignId) {
-        setDesigns(prevDesigns => prevDesigns.filter(d => d.id !== selectedDesignId));
-        setSelectedDesignId(null);
+      // Delete/Backspace: Remove selected designs
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDesignIds.length > 0) {
+        setDesigns(prevDesigns => prevDesigns.filter(d => !selectedDesignIds.includes(d.id)));
+        clearSelection();
       }
       
-      // Escape: Deselect design
-      if (e.key === 'Escape' && selectedDesignId) {
-        setSelectedDesignId(null);
+      // Escape: Deselect designs
+      if (e.key === 'Escape' && selectedDesignIds.length > 0) {
+        clearSelection();
       }
     };
     
@@ -2579,7 +2579,7 @@ export const Canvas: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedDesignId]);
+  }, [selectedDesignIds]);
   
   // Add state for active tab
   const [activeTab, setActiveTab] = useState<'prompt' | 'result'>('prompt');
