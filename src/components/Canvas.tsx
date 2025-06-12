@@ -80,37 +80,13 @@ const MarqueeSelection = styled.div<{
 const SharedActionButtons = styled.div`
   position: absolute;
   display: flex;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  gap: 12px;
+  background-color: #383838;
+  padding: 8px 16px;
   border-radius: 8px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 1001;
-`;
-
-const SharedActionButton = styled.button`
-  display: flex;
-  align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  &:hover {
-    background: rgba(0, 0, 0, 0.1);
-  }
-  
-  svg {
-    width: 16px;
-    height: 16px;
-    color: #333;
-  }
 `;
 
 // Container for designs
@@ -3288,8 +3264,9 @@ export const Canvas: React.FC = () => {
                 top: buttonPosition.top
               }}
             >
-              <SharedActionButton
-                onMouseDown={(e) => {
+              <ActionButton
+                className="secondary"
+                onMouseDown={(e: React.MouseEvent) => {
                   e.stopPropagation();
                   // Start dragging (only works if exactly one is selected)
                   if (selectedDesignIds.length === 1) {
@@ -3327,10 +3304,12 @@ export const Canvas: React.FC = () => {
                 }}
               >
                 <DragHandleIcon />
-              </SharedActionButton>
+                Drag
+              </ActionButton>
 
-              <SharedActionButton
-                onClick={(e) => {
+              <ActionButton
+                className="analysis"
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
                   // View analysis for the first selected design
                   if (selectedDesignIds.length > 0) {
@@ -3376,9 +3355,11 @@ export const Canvas: React.FC = () => {
                 title={selectedDesignIds.length === 1 ? "View Analysis" : `View Analysis (${selectedDesignIds.length} selected, showing first)`}
               >
                 <ViewIcon />
-              </SharedActionButton>
+                View Analysis
+              </ActionButton>
 
-              <SharedActionButton
+              <ActionButton
+                className="secondary"
                 onClick={() => {
                   // Retry functionality - could be adapted for multiple designs
                   console.log('Retry action for selected designs:', selectedDesignIds);
@@ -3387,9 +3368,11 @@ export const Canvas: React.FC = () => {
                 title="Retry"
               >
                 <RetryIcon />
-              </SharedActionButton>
+                Retry
+              </ActionButton>
               
-              <SharedActionButton
+              <ActionButton
+                className="primary"
                 onClick={() => {
                   // Iterate all selected designs
                   selectedDesignIds.forEach(id => {
@@ -3400,7 +3383,8 @@ export const Canvas: React.FC = () => {
                 title="Iterate"
               >
                 <IterateIcon />
-              </SharedActionButton>
+                Iterate
+              </ActionButton>
             </SharedActionButtons>
           ) : null;
         })()}
