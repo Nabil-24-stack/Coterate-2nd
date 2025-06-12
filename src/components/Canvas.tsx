@@ -76,6 +76,43 @@ const MarqueeSelection = styled.div<{
   z-index: 1000;
 `;
 
+
+const SharedActionButtons = styled.div`
+  position: absolute;
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+`;
+
+const SharedActionButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+    color: #333;
+  }
+`;
+
 // Container for designs
 const DesignContainer = styled.div<{ x: number; y: number }>`
   position: absolute;
@@ -1333,11 +1370,78 @@ export const Canvas: React.FC = () => {
   // Track design initialization
   const [designsInitialized, setDesignsInitialized] = useState(false);
   
-  // Selected design state
-  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
+  // Selected design state - now supports multiple selections
+  const [selectedDesignIds, setSelectedDesignIds] = useState<string[]>([]);
   const [isDesignDragging, setIsDesignDragging] = useState(false);
   const [designDragStart, setDesignDragStart] = useState({ x: 0, y: 0 });
   const [designInitialPosition, setDesignInitialPosition] = useState({ x: 0, y: 0 });
+
+  // Helper functions for selection management
+  const isDesignSelected = (designId: string) => selectedDesignIds.includes(designId);
+  const selectDesign = (designId: string, multiSelect = false) => {
+    if (multiSelect) {
+      setSelectedDesignIds(prev => 
+        prev.includes(designId) 
+          ? prev.filter(id => id !== designId)
+          : [...prev, designId]
+      );
+    } else {
+      setSelectedDesignIds([designId]);
+    }
+  };
+  const clearSelection = () => setSelectedDesignIds([]);
+  const getSelectedDesign = () => {
+    if (selectedDesignIds.length === 1) {
+      return designs.find(d => d.id === selectedDesignIds[0]);
+    }
+    return null;
+  };
+
+  // Calculate position for shared action buttons
+  const getSharedActionButtonsPosition = () => {
+    if (selectedDesignIds.length === 0) return null;
+    
+    const selectedElements: Element[] = [];
+    selectedDesignIds.forEach(id => {
+      const element = getDesignRef(id);
+      if (element) selectedElements.push(element);
+    });
+    
+    if (selectedElements.length === 0) return null;
+    
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect) return null;
+    
+    // Find the bounding box of all selected designs
+    let minLeft = Infinity;
+    let minTop = Infinity;
+    let maxRight = -Infinity;
+    let maxBottom = -Infinity;
+    
+    selectedElements.forEach(element => {
+      const rect = element.getBoundingClientRect();
+      const relativeRect = {
+        left: rect.left - canvasRect.left,
+        top: rect.top - canvasRect.top,
+        right: rect.right - canvasRect.left,
+        bottom: rect.bottom - canvasRect.top
+      };
+      
+      minLeft = Math.min(minLeft, relativeRect.left);
+      minTop = Math.min(minTop, relativeRect.top);
+      maxRight = Math.max(maxRight, relativeRect.right);
+      maxBottom = Math.max(maxBottom, relativeRect.bottom);
+    });
+    
+    // Position the action buttons above the selection
+    const centerX = (minLeft + maxRight) / 2;
+    const topY = minTop - 50; // Position 50px above the top of the selection
+    
+    return {
+      left: centerX - 60, // Center the buttons (assuming ~120px width)
+      top: Math.max(10, topY) // Don't go above the canvas
+    };
+  };
   
   // Marquee selection state
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
@@ -1457,8 +1561,8 @@ export const Canvas: React.FC = () => {
     }
   };
   
-  // Find the selected design
-  const selectedDesign = designs.find(d => d.id === selectedDesignId);
+  // Find the selected design (only works with single selection)
+  const selectedDesign = getSelectedDesign();
   
   // Helper to get a specific design reference
   const getDesignRef = (id: string) => {
@@ -1536,7 +1640,7 @@ export const Canvas: React.FC = () => {
     
     // Deselect designs when clicking on empty canvas (only for left clicks)
     if (e.button === 0) {
-      setSelectedDesignId(null);
+      clearSelection();
     }
     
     // Handle canvas panning in hand mode OR when middle mouse button is pressed
@@ -1564,7 +1668,9 @@ export const Canvas: React.FC = () => {
   
   // Handle mouse move for panning and design dragging
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDesignDragging && selectedDesignId) {
+    // Only allow dragging if exactly one design is selected
+    if (isDesignDragging && selectedDesignIds.length === 1) {
+      const draggedDesignId = selectedDesignIds[0];
       // Calculate the delta in screen coordinates
       const deltaX = e.clientX - designDragStart.x;
       const deltaY = e.clientY - designDragStart.y;
@@ -1575,7 +1681,7 @@ export const Canvas: React.FC = () => {
 
       // Determine if the selected item is a design or an iteration
       const isIteration = designs.some(design => 
-        design.iterations?.some(iteration => iteration.id === selectedDesignId)
+        design.iterations?.some(iteration => iteration.id === draggedDesignId)
       );
       
       if (isIteration) {
@@ -1585,7 +1691,7 @@ export const Canvas: React.FC = () => {
             if (!design.iterations) return design;
             
             const updatedIterations = design.iterations.map(iteration => 
-              iteration.id === selectedDesignId
+              iteration.id === draggedDesignId
                 ? {
                     ...iteration,
                     position: {
@@ -1611,7 +1717,7 @@ export const Canvas: React.FC = () => {
         // Update design position
         setDesigns(prevDesigns => 
           prevDesigns.map(design => 
-            design.id === selectedDesignId
+            design.id === draggedDesignId
               ? {
                   ...design,
                   position: {
@@ -1651,7 +1757,7 @@ export const Canvas: React.FC = () => {
     e.stopPropagation();
     
     // Set the selected design ID
-    setSelectedDesignId(designId);
+    selectDesign(designId);
     
     // Note: We no longer automatically open the analysis panel for iterations
     // as we've moved that functionality to the View Analysis button
@@ -2766,7 +2872,64 @@ export const Canvas: React.FC = () => {
     // End marquee selection
     if (isMarqueeSelecting) {
       setIsMarqueeSelecting(false);
-      // Here you could add logic to select designs within the marquee area
+      
+      // Find designs within the marquee selection area
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (canvasRect) {
+        const marqueeRect = {
+          left: Math.min(marqueeStart.x, marqueeEnd.x),
+          top: Math.min(marqueeStart.y, marqueeEnd.y),
+          right: Math.max(marqueeStart.x, marqueeEnd.x),
+          bottom: Math.max(marqueeStart.y, marqueeEnd.y)
+        };
+        
+        const selectedIds: string[] = [];
+        
+        // Check all designs and their iterations
+        designs.forEach(design => {
+          // Check the main design
+          const designElement = getDesignRef(design.id);
+          if (designElement) {
+            const designRect = designElement.getBoundingClientRect();
+            const relativeRect = {
+              left: designRect.left - canvasRect.left,
+              top: designRect.top - canvasRect.top,
+              right: designRect.right - canvasRect.left,
+              bottom: designRect.bottom - canvasRect.top
+            };
+            
+            // Check if design intersects with marquee
+            if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
+                relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
+              selectedIds.push(design.id);
+            }
+          }
+          
+          // Check iterations
+          if (design.iterations) {
+            design.iterations.forEach(iteration => {
+              const iterationElement = getDesignRef(iteration.id);
+              if (iterationElement) {
+                const iterationRect = iterationElement.getBoundingClientRect();
+                const relativeRect = {
+                  left: iterationRect.left - canvasRect.left,
+                  top: iterationRect.top - canvasRect.top,
+                  right: iterationRect.right - canvasRect.left,
+                  bottom: iterationRect.bottom - canvasRect.top
+                };
+                
+                // Check if iteration intersects with marquee
+                if (relativeRect.left < marqueeRect.right && relativeRect.right > marqueeRect.left &&
+                    relativeRect.top < marqueeRect.bottom && relativeRect.bottom > marqueeRect.top) {
+                  selectedIds.push(iteration.id);
+                }
+              }
+            });
+          }
+        });
+        
+        setSelectedDesignIds(selectedIds);
+      }
     }
     
     setIsDragging(false);
@@ -3094,6 +3257,47 @@ export const Canvas: React.FC = () => {
           height={Math.abs(marqueeEnd.y - marqueeStart.y)}
           visible={isMarqueeSelecting}
         />
+        
+        {/* Shared Action Buttons for Multiple Selected Designs */}
+        {selectedDesignIds.length > 0 && (() => {
+          const buttonPosition = getSharedActionButtonsPosition();
+          return buttonPosition ? (
+            <SharedActionButtons
+              style={{
+                left: buttonPosition.left,
+                top: buttonPosition.top
+              }}
+            >
+              <SharedActionButton
+                onClick={() => {
+                  // Iterate all selected designs
+                  selectedDesignIds.forEach(id => {
+                    const e = { stopPropagation: () => {} } as React.MouseEvent;
+                    openPromptDialog(e, id);
+                  });
+                }}
+                title="Iterate selected designs"
+              >
+                <IterateIcon />
+              </SharedActionButton>
+              
+              <SharedActionButton
+                onClick={() => {
+                  // Delete all selected designs
+                  setDesigns(prevDesigns => 
+                    prevDesigns.filter(d => !selectedDesignIds.includes(d.id))
+                  );
+                  clearSelection();
+                }}
+                title="Delete selected designs"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 5.883 16h4.234a2 2 0 0 0 1.992-1.84L12.962 3.5H13.5a.5.5 0 0 0 0-1H11Z" fill="currentColor"/>
+                </svg>
+              </SharedActionButton>
+            </SharedActionButtons>
+          ) : null;
+        })()}
         
         {/* Debug Controls - only in development mode */}
         {process.env.NODE_ENV === 'development' && (
