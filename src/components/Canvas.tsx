@@ -1171,7 +1171,7 @@ const DragHandle = styled.button`
 
 export const Canvas: React.FC = () => {
   const { currentPage, updatePage, loading } = usePageContext();
-  const { cursorMode } = useCursorContext();
+  const { effectiveCursorMode } = useCursorContext();
   
   // Canvas state
   const [scale, setScale] = useState(1);
@@ -1513,7 +1513,7 @@ export const Canvas: React.FC = () => {
     setSelectedDesignId(null);
     
     // Handle canvas panning only in hand mode
-    if (cursorMode === 'hand') {
+    if (effectiveCursorMode === 'hand') {
       setIsDragging(true);
       setDragStart({
         x: e.clientX - position.x,
@@ -1609,14 +1609,14 @@ export const Canvas: React.FC = () => {
   // Add the handleDesignMouseDown function back
   const handleDesignMouseDown = (e: React.MouseEvent, designId: string) => {
     // In hand mode, prioritize canvas panning over design interaction
-    if (cursorMode === 'hand') {
+    if (effectiveCursorMode === 'hand') {
       // Only select the design but don't prevent canvas panning
       setSelectedDesignId(designId);
       return;
     }
     
     // In pointer mode, handle design selection and dragging
-    if (cursorMode === 'pointer') {
+    if (effectiveCursorMode === 'pointer') {
       // If we already have a design selected, just focus on this one
       if (selectedDesignId) {
         setSelectedDesignId(designId);
@@ -2421,7 +2421,7 @@ export const Canvas: React.FC = () => {
       <DesignWithActionsContainer key={design.id}>
         <DesignCard 
           isSelected={selectedDesignId === design.id}
-          cursorMode={cursorMode}
+          cursorMode={effectiveCursorMode}
           onClick={(e) => handleDesignClick(e, design.id)}
           onMouseDown={(e) => handleDesignMouseDown(e, design.id)}
           style={{ position: 'relative' }}
@@ -2535,7 +2535,7 @@ export const Canvas: React.FC = () => {
             {/* The iteration design itself */}
             <IterationDesignCard 
               isSelected={selectedDesignId === iteration.id}
-              cursorMode={cursorMode}
+              cursorMode={effectiveCursorMode}
               onClick={(e) => handleDesignClick(e, iteration.id)}
               onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
               style={{ cursor: selectedDesignId === iteration.id ? 'move' : 'pointer' }}
@@ -2975,7 +2975,7 @@ export const Canvas: React.FC = () => {
           <InfiniteCanvas
             ref={canvasRef}
             scale={scale}
-            cursorMode={cursorMode}
+            cursorMode={effectiveCursorMode}
             onMouseDown={handleCanvasMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

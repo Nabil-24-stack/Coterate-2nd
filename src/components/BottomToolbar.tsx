@@ -70,7 +70,7 @@ const HandIcon = () => (
 );
 
 const BottomToolbar: React.FC = () => {
-  const { cursorMode, setCursorMode } = useCursorContext();
+  const { cursorMode, effectiveCursorMode, setCursorMode, isSpacebarPressed } = useCursorContext();
 
   const handleCursorModeChange = (mode: CursorMode) => {
     setCursorMode(mode);
@@ -79,16 +79,16 @@ const BottomToolbar: React.FC = () => {
   return (
     <ToolbarContainer>
       <ToolbarButton
-        active={cursorMode === 'pointer'}
+        active={effectiveCursorMode === 'pointer'}
         onClick={() => handleCursorModeChange('pointer')}
         title="Pointer Tool - Click and interact with designs"
       >
         <PointerIcon />
       </ToolbarButton>
       <ToolbarButton
-        active={cursorMode === 'hand'}
+        active={effectiveCursorMode === 'hand'}
         onClick={() => handleCursorModeChange('hand')}
-        title="Hand Tool - Drag to pan the canvas"
+        title={`Hand Tool - Drag to pan the canvas${isSpacebarPressed ? ' (Spacebar held)' : ' (or hold Spacebar)'}`}
       >
         <HandIcon />
       </ToolbarButton>
