@@ -980,7 +980,7 @@ const DesignCardContainer = styled.div`
 `;
 
 // Container for action buttons
-const ActionButtonsContainer = styled.div<{ scale: number }>`
+const ActionButtonsContainer = styled.div<{ scale: number; isVisible: boolean }>`
   position: absolute;
   top: -50px;
   left: 50%;
@@ -993,7 +993,7 @@ const ActionButtonsContainer = styled.div<{ scale: number }>`
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 20;
-  opacity: 0;
+  opacity: ${props => props.isVisible ? 1 : 0};
   transition: opacity 0.2s ease;
   justify-content: center;
 `;
@@ -1053,13 +1053,9 @@ const ActionButton = styled.button`
   }
 `;
 
-// New hover container with the action buttons
+// Container with the action buttons (removed hover behavior)
 const DesignWithActionsContainer = styled.div`
   position: relative;
-  
-  &:hover ${ActionButtonsContainer} {
-    opacity: 1;
-  }
 `;
 
 // Prompt Dialog for iterations
@@ -2620,8 +2616,8 @@ export const Canvas: React.FC = () => {
           )}
         </DesignCard>
         
-        {/* New action buttons component */}
-        <ActionButtonsContainer scale={scale}>
+        {/* Action buttons component - only visible when design is selected */}
+        <ActionButtonsContainer scale={scale} isVisible={isDesignSelected(design.id)}>
           <ActionButton className="secondary" onMouseDown={(e) => {
             e.stopPropagation();
             // Select the design if not already selected
@@ -2749,8 +2745,8 @@ export const Canvas: React.FC = () => {
             </IterationDesignCard>
           </div>
           
-          {/* New action buttons component */}
-          <ActionButtonsContainer scale={scale}>
+          {/* Action buttons component - only visible when iteration is selected */}
+          <ActionButtonsContainer scale={scale} isVisible={isDesignSelected(iteration.id)}>
             <ActionButton className="secondary" onMouseDown={(e) => {
               e.stopPropagation();
               // Select the design if not already selected
@@ -3304,7 +3300,7 @@ export const Canvas: React.FC = () => {
                 }}
               >
                 <DragHandleIcon />
-                Drag
+                {selectedDesignIds.length === 1 ? 'Drag' : `Drag (${selectedDesignIds.length})`}
               </ActionButton>
 
               <ActionButton
@@ -3355,7 +3351,7 @@ export const Canvas: React.FC = () => {
                 title={selectedDesignIds.length === 1 ? "View Analysis" : `View Analysis (${selectedDesignIds.length} selected, showing first)`}
               >
                 <ViewIcon />
-                View Analysis
+                {selectedDesignIds.length === 1 ? 'View Analysis' : `View Analysis (${selectedDesignIds.length})`}
               </ActionButton>
 
               <ActionButton
@@ -3365,10 +3361,10 @@ export const Canvas: React.FC = () => {
                   console.log('Retry action for selected designs:', selectedDesignIds);
                   // Add retry logic here when implemented
                 }}
-                title="Retry"
+                title={`Retry ${selectedDesignIds.length} design${selectedDesignIds.length > 1 ? 's' : ''}`}
               >
                 <RetryIcon />
-                Retry
+                {selectedDesignIds.length === 1 ? 'Retry' : `Retry ${selectedDesignIds.length}`}
               </ActionButton>
               
               <ActionButton
@@ -3380,10 +3376,10 @@ export const Canvas: React.FC = () => {
                     openPromptDialog(e, id);
                   });
                 }}
-                title="Iterate"
+                title={`Iterate ${selectedDesignIds.length} design${selectedDesignIds.length > 1 ? 's' : ''}`}
               >
                 <IterateIcon />
-                Iterate
+                {selectedDesignIds.length === 1 ? 'Iterate' : `Iterate ${selectedDesignIds.length}`}
               </ActionButton>
             </SharedActionButtons>
           ) : null;
